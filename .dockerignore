@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+
+# Python
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Editor / IDE
+.idea
+.vscode
+.DS_Store
+
+# Local data / artifacts that should never bake into the image
+mathdata
+*.tar
+*.zip
+
+# Logs / observability scratch
+.logfire
+
+# Tests aren't needed in the runtime image
+tests
+
+# Docs
+docs
+*.md
+!README.md
+
+# Env files — never bake secrets into the image
+.env
+.env.*
+!.env.example

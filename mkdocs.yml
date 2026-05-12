@@ -1,0 +1,119 @@
+site_name: Math AI Platform
+site_description: Architecture, ops, and onboarding docs for the FastAPI platform and the math_qa domain.
+site_url: ""
+repo_url: ""
+docs_dir: docs
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+# Explicit nav — controls order and avoids autonav surprises.
+# `docs/README.md` is the landing page (index).
+#
+# The "Project" section pulls in `AGENTS.md` / `FEATURES.md` /
+# `NEXT_BEST_STEPS.md` from the repo root via symlinks under
+# `docs/project/`. They're kept distinct from the Architecture /
+# Onboarding sections because they describe *how the team works*
+# and *where things are going*, not how the system already works.
+nav:
+  - Overview: README.md
+  - Architecture:
+      - Dev lifecycle: dev_lifecycle.md
+      - Jobs platform: jobs_spec.md
+      - Storage backends: storage_backends.md
+      - Compute backends: compute_backends.md
+      - Prompt registry: prompt_registry.md
+      - Live logs: live_logs.md
+  - Onboarding:
+      - Adding a job type: onboarding_new_job_type.md
+      - Math QA stabilization plan: math_qa_stabilization_plan.md
+  - Deployment:
+      - Hetzner single box: deployment_hetzner.md
+  - Reference: reference/  # auto-generated; see docs/gen_ref_pages.py
+  - Project:
+      - Overview: project/README.md
+      - Agent conventions: project/AGENTS.md
+      - Feature ambitions: project/FEATURES.md
+      - Backend backlog: project/NEXT_BEST_STEPS.md
+      - Frontend backlog: project/math-ui-NEXT_BEST_STEPS.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+  # `gen-files` runs `docs/gen_ref_pages.py` at build time, emitting
+  # one .md per module under `reference/` with a single `:::`
+  # mkdocstrings directive. `literate-nav` then reads the SUMMARY.md
+  # the script writes and folds it into the Reference sidebar
+  # entry, so the API tree mirrors the package layout without
+  # hand-maintaining a page per module.
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            members_order: source
+            show_signature_annotations: true
+            separate_signature: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            filters: ["!^_"]  # skip private members

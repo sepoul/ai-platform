@@ -1,0 +1,139 @@
+# Local-dev compose: API + worker as two long-running services backed by a
+# shared volume for the local job repo / artifacts. This is the canonical
+# way to run the stack for now — there is no production deployment story yet.
+#
+# Usage:
+#   docker compose up --build           # first run / after deps change
+#   docker compose up                   # subsequent runs
+#   docker compose logs -f worker       # tail one service
+#
+# The API is published at http://localhost:8000 so a Next.js dev server
+# running on the host can call it directly. The worker has no port — it
+# polls jobs off the shared `data` volume.
+#
+# Default backend is `local` (filesystem-backed). Other supported
+# backends — wire the required vars in `.env`, see `.env.example`:
+#   BACKEND=b2        → B2_KEY_ID / B2_APP_KEY / B2_BUCKET
+#   BACKEND=supabase  → SUPABASE_URL / SUPABASE_SECRET_KEY /
+#                       SUPABASE_BUCKET / SUPABASE_CONNECTION_STRING
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mathapp:local
+    command: >
+      python -u -m uvicorn mathapp.entrypoints.api:app
+      --host 0.0.0.0
+      --port 8000
+    environment:
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      # Compute selection + broker URL. Both no-ops when COMPUTE=poll
+      # (the default); read only by `CeleryComputeBackend.enqueue` when
+      # COMPUTE=celery.
+      COMPUTE: ${COMPUTE:-poll}
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - mathapp-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mathapp:local
+    command: >
+      python -u -m mathapp.entrypoints.worker
+      --interval ${WORKER_INTERVAL:-5}
+    environment:
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+    volumes:
+      - mathapp-data:/data
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Celery profile: redis broker + celery-worker container. Only started
+  # with `--profile celery`. See docs/deployment_hetzner.md §6 for the
+  # full migration recipe. When running this profile, also
+  # `docker compose stop worker` so the poll loop doesn't race the
+  # celery consumer.
+  redis:
+    image: redis:7-alpine
+    # AOF on so queued jobs survive a redis restart. fsync-every-sec is
+    # the sane default: durability lag bounded to ~1s, no I/O storm.
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    profiles: [celery]
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mathapp:local
+    command: >
+      celery -A mathapp.entrypoints.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-2}
+    environment:
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      - mathapp-data:/data
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    profiles: [celery]
+
+volumes:
+  # Named volume keeps job repo + math_qa artifacts across runs.
+  # To reuse the on-host `./mathdata` instead, replace with:
+  #   - ./mathdata:/data
+  # under each service and drop this `volumes:` block.
+  mathapp-data:
+  redis-data:
