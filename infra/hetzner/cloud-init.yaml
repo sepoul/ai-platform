@@ -1,0 +1,51 @@
+## template: jinja
+#cloud-config
+#
+# First-boot bootstrap. Mirrors docs/deployment_hetzner.md step 2 (apt +
+# docker) and step 3 (Tailscale install). When `tailscale_auth_key` is
+# provided via Terraform, the box joins the tailnet automatically; otherwise
+# you still need to `tailscale up --ssh` manually after the first SSH.
+#
+# Re-rendered by Terraform via `templatefile()`. Two variables are
+# substituted: TAILSCALE_AUTH_KEY and TAILSCALE_HOSTNAME.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose-plugin
+  - git
+  - curl
+  - ca-certificates
+
+runcmd:
+  # Docker — match the doc literally so the box looks like what
+  # someone provisioning manually would end up with.
+  - systemctl enable --now docker
+
+  # Tailscale — install the binary unconditionally. The `up` step only
+  # runs if an auth key was supplied; otherwise the operator does it
+  # by hand once via the auth URL.
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - |
+    if [ -n "${TAILSCALE_AUTH_KEY}" ]; then
+      tailscale up \
+        --ssh \
+        --authkey='${TAILSCALE_AUTH_KEY}' \
+        --hostname='${TAILSCALE_HOSTNAME}' \
+        --accept-routes
+      tailscale ip -4 > /var/log/tailscale-ip.txt
+    else
+      echo "No tailscale_auth_key supplied — run 'tailscale up --ssh' manually." \
+        > /var/log/tailscale-pending.txt
+    fi
+
+  # Marker so `cloud-init status --wait` users know we're done.
+  - touch /var/log/mathapp-bootstrap.done
+
+# Lock down: disable password SSH outright. Hetzner Ubuntu images already
+# ship with this, but be explicit so a base image change doesn't silently
+# flip it.
+ssh_pwauth: false
+disable_root: false

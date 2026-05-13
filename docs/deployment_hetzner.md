@@ -5,13 +5,17 @@ only from your laptop, with as little moving infrastructure as the
 problem allows. Single-tenant, single-developer. Not a multi-region
 zero-downtime story; that's a different document.
 
-> **Status (2026-05-12): step 1 done locally.** The compose stack has
-> been smoke-tested on the laptop against Supabase — `BACKEND=supabase
-> docker compose up` boots clean, `/health` returns 200, `/jobs` returns
-> the expected count, and the poll worker iterates without errors.
-> Step 6's Celery wiring is also implemented and locally smoke-tested
-> via `--profile celery`. The Hetzner box itself has not been
-> provisioned yet — steps 2–4 are still ahead.
+> **Status (2026-05-13): step 1 done locally, steps 2–3 codified as IaC.**
+> The compose stack has been smoke-tested on the laptop against
+> Supabase — `BACKEND=supabase docker compose up` boots clean, `/health`
+> returns 200, `/jobs` returns the expected count, and the poll worker
+> iterates without errors. Step 6's Celery wiring is also implemented
+> and locally smoke-tested via `--profile celery`. The manual
+> provisioning steps below are now the *reference* — the actual
+> day-to-day path is `cd infra/hetzner && tofu apply`. See
+> [infra/hetzner/README.md](../infra/hetzner/README.md). The Hetzner
+> box itself has not been provisioned yet — step 4 (app deploy) is
+> still manual.
 
 ---
 
@@ -91,7 +95,73 @@ named volume too.
 
 ---
 
+## Step 0 — Your laptop
+
+Tailscale on the laptop is a **host install**, not a docker container.
+The whole point of the tailnet is to give the host kernel a route to
+`100.x.y.z` addresses; a sidecar container can't do that for your
+browser.
+
+### macOS
+
+```bash
+brew install --cask tailscale       # GUI menubar app + bundled CLI
+open -a Tailscale                   # log in once; pick the same
+                                    # account you'll use for the box
+```
+
+Add the CLI to PATH (the cask installs it inside the app bundle):
+
+```bash
+# zshrc / bashrc
+export PATH="/Applications/Tailscale.app/Contents/MacOS:$PATH"
+```
+
+Sanity-check:
+
+```bash
+tailscale status                    # should list at least your laptop
+tailscale ip -4                     # your laptop's 100.x.y.z
+```
+
+### Linux / Windows
+
+Same idea — install the OS-native package
+([linux instructions](https://tailscale.com/download/linux),
+[windows](https://tailscale.com/download/windows)), log in,
+`tailscale status`. Rest of the doc is platform-agnostic.
+
+### What this gives you
+
+Once the box is on the tailnet (step 3):
+
+- `ssh root@<server_name>` works because Tailscale ships
+  MagicDNS — names auto-resolve inside the tailnet without a
+  `/etc/hosts` edit.
+- `http://<server_name>:8000/health` from the browser hits the API
+  without exposing it publicly.
+- `tailscale ssh root@<server_name>` skips the SSH key altogether —
+  Tailscale handles auth at the identity layer.
+
+If MagicDNS is off (Tailscale admin → DNS), substitute the
+`100.x.y.z` IP shown in `tailscale status`.
+
+### Helper
+
+```bash
+infra/hetzner/scripts/connect.sh    # prints SSH commands + URLs
+                                    # for the current tofu output
+```
+
+---
+
 ## Step 2 — Provision the box
+
+> **Automated path:** [infra/hetzner](../infra/hetzner) provisions the
+> server, SSH key, firewall, and cloud-init bootstrap (docker +
+> Tailscale) in a single `tofu apply`. The console steps below are the
+> reference for what the IaC produces; use them only if you want to
+> hand-roll one box once.
 
 Hetzner Cloud → Add Server:
 
@@ -120,6 +190,11 @@ systemctl enable --now docker
 ---
 
 ## Step 3 — Lock down with Tailscale + Hetzner Cloud Firewall
+
+> **Automated path:** the firewall and Tailscale install are both
+> handled by [infra/hetzner](../infra/hetzner). Supply
+> `tailscale_auth_key` in `terraform.tfvars` to skip the interactive
+> `tailscale up` and have the box join the tailnet on first boot.
 
 ### Tailscale on the box
 

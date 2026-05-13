@@ -1,0 +1,30 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   $EDITOR terraform.tfvars
+#
+# Required values are uncommented; everything else has a default in
+# variables.tf — override only when you mean to.
+
+# Hetzner Cloud API token. Console → Security → API Tokens (Read & Write).
+hcloud_token = "REPLACE_ME"
+
+# Your laptop's SSH public key. One-liner:
+#   ssh_public_key = file("~/.ssh/id_ed25519.pub")  # also valid Terraform
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+
+# Your laptop's current public IP /32 — for the bootstrap SSH rule.
+# Find it with `curl -s https://api.ipify.org`. Once Tailscale SSH is
+# verified, set this to [] to close public SSH entirely.
+allowed_ssh_cidrs = ["1.2.3.4/32"]
+
+# Optional — a one-time Tailscale auth key from the Tailscale admin
+# console (Settings → Keys → Generate auth key, "Reusable: no",
+# "Pre-approved: yes"). When set, the box joins the tailnet on first
+# boot with no manual step.
+# tailscale_auth_key = "tskey-auth-..."
+
+# Optional overrides — defaults in variables.tf are sensible.
+# server_name = "mathapp-prod"
+# server_type = "cx22"
+# location    = "fsn1"

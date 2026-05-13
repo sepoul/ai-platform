@@ -1,0 +1,12 @@
+# OpenTofu / Terraform local state + secrets. Never commit.
+#
+# `.terraform.lock.hcl` is intentionally NOT ignored — it pins provider
+# versions across machines (same role as package-lock.json) and should
+# be committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
