@@ -76,6 +76,7 @@ services:
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
     volumes:
       - mathapp-data:/data
     depends_on:

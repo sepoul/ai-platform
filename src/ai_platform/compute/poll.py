@@ -42,15 +42,20 @@ class PollingComputeBackend:
         interval_s: int | None = None,
         once: bool = False,
         should_stop: Callable[[], bool] = lambda: False,
+        max_job_age_s: float | None = None,
     ) -> None:
         interval = interval_s if interval_s is not None else self._default_interval_s
         logger.info(
-            "Worker %s starting (poll interval=%ds, once=%s)",
+            "Worker %s starting (poll interval=%ds, once=%s, max_job_age=%s)",
             worker_id, interval, once,
+            f"{max_job_age_s:.0f}s" if max_job_age_s is not None else "unlimited",
         )
 
         while not should_stop():
-            did_work = _run_one_job(self._executor, self._job_definitions, worker_id)
+            did_work = _run_one_job(
+                self._executor, self._job_definitions, worker_id,
+                max_job_age_s=max_job_age_s,
+            )
 
             if once:
                 if not did_work:

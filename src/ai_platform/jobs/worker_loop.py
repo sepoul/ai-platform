@@ -16,8 +16,10 @@ logger = logging.getLogger()
 
 
 def _run_one_job(executor: GraphJobExecutor, job_definitions: dict[str, JobDefinition],
-                 worker_id : str) -> bool:
-    record = executor.claim_next_pending(job_type=None, worker_id=worker_id)
+                 worker_id : str, max_job_age_s: float | None = None) -> bool:
+    record = executor.claim_next_pending(
+        job_type=None, worker_id=worker_id, max_age_s=max_job_age_s,
+    )
     if record is None:
         return False
 

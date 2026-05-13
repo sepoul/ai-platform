@@ -34,6 +34,7 @@ class ComputeBackend(Protocol):
         interval_s: int = 5,
         once: bool = False,
         should_stop: Callable[[], bool] = lambda: False,
+        max_job_age_s: float | None = None,
     ) -> None: ...
 
 

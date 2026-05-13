@@ -43,6 +43,16 @@ def main():
     parser = ArgumentParser(description="Job worker")
     parser.add_argument("--interval", type=int, default=10, help="Poll interval in seconds")
     parser.add_argument("--once", action="store_true", help="Run one job then exit")
+    parser.add_argument(
+        "--max-job-age",
+        type=float,
+        default=_env_float("WORKER_MAX_JOB_AGE_S"),
+        help=(
+            "Ignore PENDING jobs whose created_at is older than this many seconds. "
+            "Default: env WORKER_MAX_JOB_AGE_S, else unlimited. Poll backend only — "
+            "Celery/Thread deliver via broker so stale rows never reach the worker."
+        ),
+    )
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, _handle_signal)
@@ -58,7 +68,15 @@ def main():
         interval_s=args.interval,
         once=args.once,
         should_stop=lambda: _shutdown,
+        max_job_age_s=args.max_job_age,
     )
+
+
+def _env_float(name: str) -> float | None:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return None
+    return float(raw)
 
 
 if __name__ == "__main__":

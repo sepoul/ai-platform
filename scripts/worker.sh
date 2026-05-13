@@ -8,6 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 INTERVAL="${WORKER_INTERVAL:-5}"
+MAX_AGE="${WORKER_MAX_JOB_AGE_S:-}"
 
-echo "backend=$BACKEND data=${LOCAL_DATA_DIR:-<default>} interval=${INTERVAL}s"
+echo "backend=$BACKEND data=${LOCAL_DATA_DIR:-<default>} interval=${INTERVAL}s max_job_age=${MAX_AGE:-unlimited}"
 exec "$PY" -u -m mathapp.entrypoints.worker --interval "$INTERVAL" "$@"

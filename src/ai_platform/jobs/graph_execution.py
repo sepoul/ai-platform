@@ -1,4 +1,6 @@
 from __future__ import annotations
+import logging
+from datetime import datetime, timezone
 from typing import Any, Protocol, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
@@ -6,6 +8,8 @@ from pydantic_graph import BaseNode, End
 
 from ai_platform.workspace.storage.protocols import JobRepository
 from ai_platform.workspace.storage.structured.job_repository import JobRecord, JobStatus
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -156,16 +160,30 @@ class GraphJobExecutor:
         self,
         job_type: str | None = None,
         worker_id: str | None = None,
+        max_age_s: float | None = None,
     ) -> JobRecord | None:
         """
         Simple claim: find first PENDING job (optionally filtered by type),
         mark RUNNING and return it.
         Returns None if no jobs available.
+
+        If `max_age_s` is set, jobs whose `created_at` is older than that
+        threshold are ignored. The repo list is ordered newest-first, so
+        a single sample is sufficient: if the newest pending is stale,
+        every other pending is too.
         """
         jobs = self.repo.list(status=JobStatus.PENDING, job_type=job_type, limit=1)
         if not jobs:
             return None
         record = jobs[0]
+        if max_age_s is not None:
+            age_s = (datetime.now(timezone.utc) - record.created_at).total_seconds()
+            if age_s > max_age_s:
+                logger.info(
+                    "Skipping stale pending job %s (age=%.0fs > max=%.0fs)",
+                    record.spec.job_id, age_s, max_age_s,
+                )
+                return None
         record.mark_running(worker_id=worker_id)
         self.repo.put(record)
         return record
