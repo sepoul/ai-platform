@@ -6,6 +6,34 @@ surface will be replaced by Celery, no point hardening the polling loop.
 
 ---
 
+## 0. Deploy pipeline — CI image build → GHCR → box pull 📝 open
+
+**Priority — do this next.** The redeploy story today
+([deployment_hetzner.md](docs/deployment_hetzner.md) "Day-2
+operations") is `git pull && docker compose up -d --build` on the
+box. That means the CX23 carries the source tree *and* a build
+toolchain, eats downtime on every rebuild, and "what version is
+running" is a fuzzy git-ref-plus-build. Move the build off the box:
+
+- GitHub Actions builds the image on push to `main` (and on release
+  tags) and pushes it to GHCR (`ghcr.io/sepoul/ai-platform`, free for
+  public repos).
+- Split [docker-compose.yml](docker-compose.yml) into a local `build:`
+  flavor and a box `image:` flavor (a `docker-compose.prod.yml`
+  override, or a dedicated box compose file).
+- Box redeploy collapses to `docker compose pull && docker compose up
+  -d` — fast, no build tools on the box, exact-tag provenance,
+  near-zero downtime.
+
+Once this lands, the `infra/hetzner` app-deploy step (step 4 of the
+deploy doc, still manual) is a trivial two-command script — no need
+for heavier config-management tooling just for the app layer.
+
+Open question: whether `infra/` graduates to its own repo. `mathapp`
+and `math-ui` are siblings; a top-level infra/packaging repo that
+builds and ships both is the natural home once the deploy story grows
+past one service. Not now — noted.
+
 ## 1. TypeScript codegen pipeline ✅ done
 
 Implemented in [scripts/dump-openapi.sh](scripts/dump-openapi.sh) +
