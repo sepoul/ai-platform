@@ -235,6 +235,9 @@ company_documents/
 local_data/
 .orgai_workspace_cache.json
 
+# local scratch — walkthroughs, notes, anything not meant for the repo
+local/
+
 # test ouptuts
 src/orgai/integration_tests/test_output/
 

@@ -123,8 +123,8 @@ to revision instead of advancing.
 
 The same shape (generate → critique → revise → human gate) is
 exactly what
-[Zukunft Music's `FigureRefinementGate`](#zukunft-music) sketched
-for visual artifacts in general. It also fits LaTeX correctness
+[the reusable figure stack's `FigureRefinementGate`](#reusable-figure-stack)
+sketches for visual artifacts in general. It also fits LaTeX correctness
 escalation — when the structural validator passes but the typeset
 output is mathematically wrong, a critique loop catches it. This is
 the generic "iterative artifact refinement" pattern; the figure
@@ -183,12 +183,12 @@ renderer.
 
 ---
 
-## Zukunft Music
+## Reusable figure stack
 
 Once the topology agent works end-to-end, the same pieces should plug
 into other math-learning workflows where figures aid understanding —
 Math Q&A, step-by-step explainers, lessons, etc. Sketching the agentic
-architecture so future-me knows what to reuse vs. rebuild.
+architecture so it's clear what to reuse vs. rebuild.
 
 ### Reusable platform pieces
 
@@ -399,6 +399,6 @@ Platform pieces it leans on, no new infra:
 ### Doesn't fit yet (parking)
 
 - Rendered figures via MathBox — `MathAnswerArtifact` can carry a
-  `figure_ref: UUID` field once the Zukunft figure stack is real.
+  `figure_ref: UUID` field once the reusable figure stack is real.
 - Per-user mastery / progress tracking — separate read-side, not a
   Math Q&A artifact.

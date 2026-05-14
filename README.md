@@ -2,10 +2,27 @@
 
 FastAPI + worker for math-AI jobs.
 
+## What it is
+
+The backend for a math-learning AI tool aimed at self-directed
+learners — people doing math daily as research or a serious hobby,
+not inside a course. The product bet is *personalized guidance over
+an all-in-one wizard*: decompose a concept, map how theorems and
+propositions connect, turn a spoken or written theorem into LaTeX,
+and keep a thinking/log space for exercises and progress. Lean
+theorem-prover support — coupled math/Lean learning, Lean as a
+navigable knowledge base — is the longer-term direction.
+
+This repo is the platform: the FastAPI surface, the job/graph
+runner, the workers, and the storage/compute backends. The Next.js
+frontend lives in the companion
+[`ai-platform-ui`](https://github.com/sepoul/ai-platform-ui) repo.
+
 ## Run locally
 
-Docker Compose is the only supported run path right now — there is no
-production deployment story yet.
+Docker Compose is the canonical local run path. For deploying to a
+single box, see [`docs/deployment_hetzner.md`](docs/deployment_hetzner.md)
+and the OpenTofu config in [`infra/hetzner/`](infra/hetzner/).
 
 ```bash
 cp .env.example .env       # set ANTHROPIC_API_KEY

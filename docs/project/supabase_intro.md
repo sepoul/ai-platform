@@ -36,10 +36,10 @@ Concretely this means:
   Protocol if they want. The Supabase Postgres backend uses one row
   per record. Callers cannot tell the difference.
 
-The user's framing was decisive here: "the truth lives in the
-repository, not in the implementation detail. We don't need to
-bring the store pattern for local or B2 — that's their concern. But
-we need to fake it at least for now." This is the contract.
+The guiding principle: the truth lives in the repository contract,
+not in any one backend's implementation detail. Local and B2 don't
+need to push their store pattern through the public surface — that's
+their private concern. This is the contract.
 
 ## Decisions made
 

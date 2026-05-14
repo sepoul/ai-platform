@@ -2,7 +2,7 @@
 
 ## Overview
 
-The job system is fully generic. Adding a new job type means writing **one file** (the job definition) — the handler, API, worker, and workflow spec all pick it up automatically.
+The job system is fully generic. Adding a new job type means writing the job definition and registering its domain — the handler, API, worker, and workflow spec all pick it up automatically.
 
 ---
 
@@ -60,67 +60,32 @@ class MyReview(BaseModel):
 
 ### 4. Create the `JobDefinition`
 
-```python
-from ai_platform.jobs.execution_policy import (
-    ExecutionPolicy, NodeGate, JobDefinition, JobParam
-)
+The `JobDefinition` is the single source of truth for a job type — it
+bundles the graph, state type, node registry, deps factory, the
+`ExecutionPolicy` (which carries the `NodeGate`s), persistence
+callbacks, and the typed submit-input / result shapes. The API,
+worker, and workflow-spec endpoint all read from it.
 
-my_graph = Graph(nodes=(ProcessNode,), state_type=MyState)
+Build it inside your domain module. The canonical, current example is
+`build_math_qa_job_definition` in
+[`src/mathai/math_qa/workflow.py`](../src/mathai/math_qa/workflow.py) —
+copy its shape rather than a snippet here, since the constructor
+evolves and the live code never goes stale. `policy.validate(graph)`
+raises at startup if a gate names a node that isn't in the graph.
 
-my_policy = ExecutionPolicy(gates=[
-    NodeGate(
-        node_name="ProcessNode",  # fires after ProcessNode runs
-        review_type=MyReview,
-        resume_params=[
-            JobParam("approved", "boolean", required=True),
-            JobParam("notes", "string", required=False),
-        ],
-        parse_review=lambda p: MyReview(**p),
-    )
-])
+### 5. Register the domain
 
-my_job_def = JobDefinition(
-    name="my_job",  # key used everywhere
-    graph_ref="my_graph",
-    graph=my_graph,
-    state_type=MyState,
-    start_node_key="ProcessNode",
-    node_registry={"ProcessNode": ProcessNode},
-    deps_factory=lambda payload, client: MyDeps(**payload),
-    policy=my_policy,
-    submit_params=[
-        JobParam("input_text", "string", required=True),
-    ],
-    extract_result=lambda s: {"result": s.result, "review": s.node_reviews.get("ProcessNode")},
-)
-```
+Job types are picked up through their **domain**, not wired
+file-by-file. Your domain module exposes a `register(ctx) -> Domain`
+function returning a `Domain` that lists its job definitions (and
+artifact types) — see [`src/mathai/domain.py`](../src/mathai/domain.py)
+for the pattern. Then add that `register` to the `DOMAINS` list in
+[`src/mathapp/composition_root.py`](../src/mathapp/composition_root.py).
 
-Validate at startup (raises if a gate names a node not in the graph):
-```python
-my_policy.validate(my_graph)
-```
-
-### 5. Register in two places
-
-**`src/routers/job_runs.py`** — for the API:
-```python
-from mymodule import my_job_def
-_JOBS[my_job_def.name] = my_job_def
-```
-
-**`src/worker.py`** — for the worker:
-```python
-from mymodule import my_job_def
-_JOB_DEFINITIONS[my_job_def.name] = my_job_def
-```
-
-**`src/routers/workflows.py`** — for the workflow spec endpoint:
-```python
-_JOBS[my_job_def.name] = my_job_def
-_EDGES["my_job"] = [EdgeResponse(source="ProcessNode", target="End")]
-```
-
-That's it. The generic handler, submit endpoint, review endpoint, and `GET /workflows/my_job` all work automatically.
+That's the only wiring. The API and worker bootstraps both iterate
+`DOMAINS`, so the generic submit endpoint, review endpoint, worker
+loop, and `GET /workflows/{job_type}` pick up the new job type
+automatically.
 
 ---
 

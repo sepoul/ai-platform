@@ -42,10 +42,6 @@ def _prompt(domain: str, name: str, description: str) -> Prompt:
 # ============================================================================
 
 PROMPT_DEFINITIONS: List[Prompt] = [
-    # --- concept (1) ---
-    _prompt("concept", "math_concept",
-            "Explain a math concept step by step with examples."),
-
     # --- math_qa (3) ---
     _prompt("math_qa", "answer",
             "Solve a math question with a step-by-step plain-prose explanation."),

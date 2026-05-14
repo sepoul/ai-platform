@@ -13,8 +13,8 @@ class Prompt(BaseModel):
     data at execution time.
     """
     id: str = Field(default_factory=lambda: uuid4().hex)
-    name: str                       # unique key, e.g. "concept.math_concept"
-    domain: str                     # grouping key, e.g. "concept"
+    name: str                       # unique key, e.g. "math_qa.answer"
+    domain: str                     # grouping key, e.g. "math_qa"
     description: str
     instructions: str               # instruction text (editable via API)
     version: str = "0.1.0"
