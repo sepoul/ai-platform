@@ -17,9 +17,9 @@ variable "server_name" {
 }
 
 variable "server_type" {
-  description = "Hetzner server type. CX22 = 2 vCPU / 4 GB / 40 GB SSD ~€4.50/mo, matches docs/deployment_hetzner.md."
+  description = "Hetzner server type. cx23 = 2 vCPU / 4 GB / 40 GB SSD, shared x86 (~€4/mo). Hetzner renamed the CX line, so the box the deploy doc calls 'CX22' is the cx23 slug today."
   type        = string
-  default     = "cx22"
+  default     = "cx23"
 }
 
 variable "location" {

@@ -183,7 +183,7 @@ ssh root@<server-ip>
 
 # Inside the box.
 apt update && apt upgrade -y
-apt install -y docker.io docker-compose-plugin git
+apt install -y docker.io docker-compose-v2 git
 systemctl enable --now docker
 ```
 
