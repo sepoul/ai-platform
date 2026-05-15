@@ -1,13 +1,14 @@
 # `infra/hetzner` — OpenTofu config for the deployment box
 
 Automates steps 2–3 of [docs/deployment_hetzner.md](../../docs/deployment_hetzner.md):
-provision a CX22 in Falkenstein, register the laptop SSH key, attach a
+provision a CX23 in Falkenstein, register the laptop SSH key, attach a
 default-deny Hetzner Cloud Firewall, and run a cloud-init script that
 installs docker + Tailscale on first boot.
 
-App deploy (step 4 — `git clone`, `scp .env`, `docker compose up`) is
-**not** in this stack. That stays a manual scp loop until there's a
-reason to invest in CD; see the deployment doc for the procedure.
+App deploy (step 4) is GHA-built + GHCR-pulled — see
+[`scripts/redeploy.sh`](scripts/redeploy.sh). The only manual piece
+left is the initial `git clone` + `scp .env` to the box; everything
+after that is `redeploy.sh`.
 
 ---
 
@@ -81,8 +82,9 @@ within ~30s of the SSH succeeding; check from the laptop:
 tailscale status | grep <server_name>
 ```
 
-Then continue with step 4 of the deployment doc (clone the repo on the
-box, `scp .env`, `docker compose up -d`).
+Then continue with step 4 of the deployment doc: clone the repo on the
+box, `scp .env` from the laptop, run
+[`scripts/redeploy.sh`](scripts/redeploy.sh).
 
 ---
 
@@ -119,11 +121,12 @@ the box is stateless by design.
 | [variables.tf](variables.tf) | All input variables, documented |
 | [ssh.tf](ssh.tf) | `hcloud_ssh_key` resource |
 | [firewall.tf](firewall.tf) | `hcloud_firewall` — SSH from laptop + ICMP |
-| [server.tf](server.tf) | `hcloud_server` — the CX22 itself |
+| [server.tf](server.tf) | `hcloud_server` — the CX23 itself |
 | [cloud-init.yaml](cloud-init.yaml) | First-boot bootstrap script |
 | [outputs.tf](outputs.tf) | What to copy-paste after apply |
 | [terraform.tfvars.example](terraform.tfvars.example) | Template for tfvars |
 | [scripts/connect.sh](scripts/connect.sh) | Prints SSH / URL cheatsheet from tofu output |
+| [scripts/redeploy.sh](scripts/redeploy.sh) | Pulls the latest GHCR image and rolls compose on the box |
 
 ---
 
@@ -131,7 +134,8 @@ the box is stateless by design.
 
 Same scope as step 1–3 of the deployment doc. Not covered here:
 
-- App deploy (step 4) — `scp .env`, `docker compose up`. Manual.
+- Initial `scp .env` to the box. Manual by design — the laptop's `.env`
+  is the source of truth; pushing it is a deliberate one-liner.
 - TLS / Caddy / public exposure (step 5 path B). Defer until needed.
 - Auth on the API. Reachability is the auth while the tailnet is the
   only route in.

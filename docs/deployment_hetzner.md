@@ -5,17 +5,17 @@ only from your laptop, with as little moving infrastructure as the
 problem allows. Single-tenant, single-developer. Not a multi-region
 zero-downtime story; that's a different document.
 
-> **Status (2026-05-13): step 1 done locally, steps 2–3 codified as IaC.**
-> The compose stack has been smoke-tested on the laptop against
-> Supabase — `BACKEND=supabase docker compose up` boots clean, `/health`
-> returns 200, `/jobs` returns the expected count, and the poll worker
-> iterates without errors. Step 6's Celery wiring is also implemented
-> and locally smoke-tested via `--profile celery`. The manual
-> provisioning steps below are now the *reference* — the actual
-> day-to-day path is `cd infra/hetzner && tofu apply`. See
-> [infra/hetzner/README.md](../infra/hetzner/README.md). The Hetzner
-> box itself has not been provisioned yet — step 4 (app deploy) is
-> still manual.
+> **Status (2026-05-15): steps 1–4 live end-to-end.** Box
+> `mathapp-prod` (CX23, Falkenstein) is provisioned via
+> `cd infra/hetzner && terraform apply`. App deploy runs from a
+> GHCR-built image — GitHub Actions builds on push to `main` and
+> publishes `ghcr.io/sepoul/mathapp:latest`; the box pulls it via
+> [`infra/hetzner/scripts/redeploy.sh`](../infra/hetzner/scripts/redeploy.sh).
+> Step 6's Celery wiring is implemented and locally smoke-tested via
+> `--profile celery`; not yet exercised on the box. The manual
+> provisioning steps below are now the *reference* — the day-to-day
+> path is `terraform apply` then `redeploy.sh`. See
+> [infra/hetzner/README.md](../infra/hetzner/README.md).
 
 ---
 
@@ -230,17 +230,27 @@ rule too — `tailscale ssh` handles everything from there.
 
 ## Step 4 — Ship the app
 
+The image is built off-box by CI
+([`.github/workflows/build-image.yml`](../.github/workflows/build-image.yml))
+and published to GHCR. The box's job is: clone the repo (for the
+compose files + redeploy script), drop a `.env`, run `redeploy.sh`.
+
 ```bash
 # On the box, after docker + tailscale.
+ssh root@mathapp-prod
 cd /srv
-git clone https://github.com/<you>/mathapp.git
+git clone https://github.com/sepoul/ai-platform.git mathapp
 cd mathapp
-
-# Copy .env from laptop. Don't paste secrets into ssh prompts; use scp:
-#   from laptop:  scp .env root@<tailnet-ip>:/srv/mathapp/.env
 ```
 
-Make sure `.env` on the box has:
+From the laptop, scp the `.env`:
+
+```bash
+scp .env root@mathapp-prod:/srv/mathapp/.env
+ssh root@mathapp-prod 'chmod 600 /srv/mathapp/.env'
+```
+
+The `.env` must include:
 
 - `BACKEND=supabase`
 - `ANTHROPIC_API_KEY=…`
@@ -253,19 +263,24 @@ Make sure `.env` on the box has:
 Boot the stack:
 
 ```bash
-docker compose up -d --build
-docker compose ps
-docker compose logs -f
+ssh root@mathapp-prod 'cd /srv/mathapp && infra/hetzner/scripts/redeploy.sh'
 ```
+
+`redeploy.sh` runs `docker compose -f docker-compose.yml -f
+docker-compose.prod.yml pull && up -d`, then prunes dangling images.
+The compose override pins each service to `ghcr.io/sepoul/mathapp:latest`
+(or `${IMAGE_TAG}` if exported) — no build happens on the box.
 
 From the laptop on the tailnet:
 
 ```bash
-curl -fsS http://<box-tailnet-ip>:8000/health
-curl -s   http://<box-tailnet-ip>:8000/jobs | jq length
+curl -fsS http://mathapp-prod:8000/health
+curl -s   http://mathapp-prod:8000/jobs | jq length
 ```
 
-Should match your local dev's view of the cleaned Supabase data.
+Should match your local dev's view of the Supabase data. Secret
+rotation, `.env` updates, and the threat model live in the gitignored
+`local/security.md` on each operator's laptop.
 
 ---
 
@@ -423,12 +438,16 @@ keeps using the poll worker (current behavior). When you're ready:
 COMPUTE=celery
 CELERY_CONCURRENCY=2   # bump to taste
 
-# Bring up everything, including the new services.
-docker compose --profile celery up -d --build
+# Bring up everything, including the new services. The override file
+# points the celery-worker image at GHCR; no build on the box.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --profile celery pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --profile celery up -d
 
 # Stop the old poll worker — its job is now redis + celery-worker's.
-docker compose stop worker
-docker compose rm -f worker
+docker compose -f docker-compose.yml -f docker-compose.prod.yml stop worker
+docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f worker
 ```
 
 To roll back: unset `COMPUTE`, `docker compose up -d worker`, take
@@ -488,17 +507,22 @@ both backends see the same Supabase rows.
 
 ### Deploying a new version
 
+After `git push origin main`, the GHA workflow builds and publishes a
+new image (~1–2 min with the buildx layer cache). Then:
+
 ```bash
-ssh root@<box-tailnet-ip>
-cd /srv/mathapp
-git pull
-docker compose up -d --build      # rebuild + recreate changed services
-docker compose logs -f --tail=50  # confirm clean boot
+ssh root@mathapp-prod 'cd /srv/mathapp && git pull && infra/hetzner/scripts/redeploy.sh'
+ssh root@mathapp-prod 'cd /srv/mathapp && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=50'
 ```
 
-If you want zero-downtime someday, push images to GHCR and `docker
-compose pull && docker compose up -d` — but for single-developer
-single-tenant, the rebuild-on-the-box loop is fine.
+`git pull` only refreshes the compose files + scripts on the box —
+the actual app code arrives via the `docker compose pull` inside
+`redeploy.sh`. To pin a specific build (e.g. a known-good SHA after a
+bad `:latest` push):
+
+```bash
+ssh root@mathapp-prod 'cd /srv/mathapp && IMAGE_TAG=sha-62d3672 infra/hetzner/scripts/redeploy.sh'
+```
 
 ### Tailing logs
 
