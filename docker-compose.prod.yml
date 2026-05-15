@@ -1,0 +1,22 @@
+# Production override: pull pre-built images from GHCR instead of
+# rebuilding on the box. Merge on top of docker-compose.yml.
+#
+# Usage on the Hetzner box (or any deploy target):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Pin to a specific build by exporting IMAGE_TAG (defaults to :latest):
+#   IMAGE_TAG=sha-abc1234 docker compose -f ... -f ... up -d
+#
+# `build:` from the base file is merged in but ignored by `pull` — only
+# `image:` is fetched, and `up -d` finds the pulled tag locally.
+
+services:
+  api:
+    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+
+  worker:
+    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+
+  celery-worker:
+    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
