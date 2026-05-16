@@ -58,9 +58,9 @@ simplicity.
 | [`runtime/log_bus.py`](../src/ai_platform/runtime/log_bus.py) | API-side fan-out — `LogBus.publish` / `subscribe`, `LogEntry` model. **Not** a worker abstraction. |
 | [`runtime/worker_log.py`](../src/ai_platform/runtime/worker_log.py) | `WorkerLogger` — what nodes call. Always HTTP-POSTs (works in-process or remote). `NullLogger` for tests. |
 | [`api/routers/job_logs.py`](../src/ai_platform/api/routers/job_logs.py) | `POST /jobs/{id}/logs` (worker → API) and `GET /jobs/{id}/logs/stream` (SSE). |
-| [`math-ui/app/api/jobs/[jobId]/logs/stream/route.ts`](../../math-ui/app/api/jobs/[jobId]/logs/stream/route.ts) | Next.js BFF — streams the upstream SSE body straight through; cancels upstream when client disconnects. |
-| [`math-ui/lib/platform/hooks/use-job-logs.ts`](../../math-ui/lib/platform/hooks/use-job-logs.ts) | `useJobLogs(jobId, enabled)` — `EventSource` subscription with auto-reconnect. |
-| [`math-ui/components/jobs/job-logs.tsx`](../../math-ui/components/jobs/job-logs.tsx) | `<JobLogs>` panel — lives next to `<WorkflowJobRunner>` on job pages. |
+| [`math-ui/app/api/jobs/[jobId]/logs/stream/route.ts`](../math-ui/app/api/jobs/[jobId]/logs/stream/route.ts) | Next.js BFF — streams the upstream SSE body straight through; cancels upstream when client disconnects. |
+| [`math-ui/lib/platform/hooks/use-job-logs.ts`](../math-ui/lib/platform/hooks/use-job-logs.ts) | `useJobLogs(jobId, enabled)` — `EventSource` subscription with auto-reconnect. |
+| [`math-ui/components/jobs/job-logs.tsx`](../math-ui/components/jobs/job-logs.tsx) | `<JobLogs>` panel — lives next to `<WorkflowJobRunner>` on job pages. |
 
 ---
 

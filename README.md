@@ -13,10 +13,16 @@ and keep a thinking/log space for exercises and progress. Lean
 theorem-prover support — coupled math/Lean learning, Lean as a
 navigable knowledge base — is the longer-term direction.
 
-This repo is the platform: the FastAPI surface, the job/graph
-runner, the workers, and the storage/compute backends. The Next.js
-frontend lives in the companion
-[`ai-platform-ui`](https://github.com/sepoul/ai-platform-ui) repo.
+This repo holds both halves of the stack:
+
+- Top-level `src/` + `scripts/` + `instructions/` — the FastAPI
+  surface, the job/graph runner, the workers, and the storage/compute
+  backends.
+- [`math-ui/`](math-ui/) — the Next.js 16 frontend. It was a separate
+  GitHub repo (`ai-platform-ui`) until 2026-05-16, when it merged in.
+  See [`math-ui/README.md`](math-ui/README.md) for its own run
+  instructions; the OpenAPI-driven typing pipeline that connects the
+  two is in [`docs/dev_lifecycle.md`](docs/dev_lifecycle.md).
 
 ## Run locally
 

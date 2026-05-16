@@ -34,13 +34,13 @@ once the deploy story grows past one service. Not now — noted.
 ## 1. TypeScript codegen pipeline ✅ done
 
 Implemented in [scripts/dump-openapi.sh](scripts/dump-openapi.sh) +
-[math-ui/scripts/gen-api.sh](../math-ui/scripts/gen-api.sh). See
+[math-ui/scripts/gen-api.sh](math-ui/scripts/gen-api.sh). See
 [docs/dev_lifecycle.md](docs/dev_lifecycle.md) for the loop.
 
 ## 1b. `GET /workflows` listing endpoint ✅ done
 
 Implemented in [api/routers/workflows.py](src/ai_platform/api/routers/workflows.py)
-and wired up in [math-ui/app/workflows/page.tsx](../math-ui/app/workflows/page.tsx);
+and wired up in [math-ui/app/workflows/page.tsx](math-ui/app/workflows/page.tsx);
 the `WORKFLOW_JOB_TYPES` constant has been dropped on the frontend.
 
 ## 1o. Math QA figures end-to-end ✅ done
@@ -156,13 +156,13 @@ New platform plumbing for live worker logs:
 
 Frontend:
 
-- [`/api/jobs/[jobId]/logs/stream`](../math-ui/app/api/jobs/[jobId]/logs/stream/route.ts)
+- [`/api/jobs/[jobId]/logs/stream`](math-ui/app/api/jobs/[jobId]/logs/stream/route.ts)
   is a streaming Next.js BFF route that pipes the upstream SSE body
   straight to the browser.
-- [`useJobLogs`](../math-ui/lib/platform/hooks/use-job-logs.ts)
+- [`useJobLogs`](math-ui/lib/platform/hooks/use-job-logs.ts)
   subscribes via `EventSource`, with an `enabled` flag so terminal
   jobs stop holding the connection open.
-- [`<JobLogs>`](../math-ui/components/jobs/job-logs.tsx) renders next
+- [`<JobLogs>`](math-ui/components/jobs/job-logs.tsx) renders next
   to the workflow runner on the math_qa job page — auto-scrolls when
   the user is near the bottom, badges for live / reconnecting / idle,
   level + stage tags per row.
@@ -187,13 +187,13 @@ LaTeX delimiters) straight to KaTeX, which choked on the prose.
 Rather than constrain the agent to bare LaTeX, the validation route
 now splits on `\(...\)` / `\[...\]` and validates each math segment
 independently. New `mode="document"` (default) on
-[/api/tools/validate-latex](../math-ui/app/api/tools/validate-latex/route.ts);
+[/api/tools/validate-latex](math-ui/app/api/tools/validate-latex/route.ts);
 old `inline` / `block` modes still work for bare-expression callers.
 On failure the response includes `segment` + `segment_index` so the
 agent can locate the exact bad snippet. Prompt
 [`math_qa.latex_render`](instructions/math_qa/latex_render.md) bumped
 to v0.1.1 to describe the new behavior. The frontend
-[`/latex` playground](../math-ui/app/latex/page.tsx) now uses the same
+[`/latex` playground](math-ui/app/latex/page.tsx) now uses the same
 mode and surfaces the failing segment.
 
 When `RichContentArtifact` lands per
@@ -234,7 +234,7 @@ with `throwOnError: true`) — and loops until the tool reports
 to `GenerateLatexStep` so the user sees text + typeset together.
 
 Frontend: KaTeX rendering via a new
-[components/library/latex.tsx](../math-ui/components/library/latex.tsx)
+[components/library/latex.tsx](math-ui/components/library/latex.tsx)
 that splits `\(...\)` / `\[...\]` segments. Used by `ArtifactCard`
 (latex_answer case), `ResultDisplay` (typeset answer section), and
 `ReviewForm`.
@@ -252,7 +252,7 @@ lands.
 
 `JobStatusResponse` gained `job_type` and `created_at` so the UI can
 render a domain-agnostic job list. The math-ui
-[/jobs](../math-ui/app/jobs/page.tsx) page consumes
+[/jobs](math-ui/app/jobs/page.tsx) page consumes
 `GET /jobs` directly and groups runs by status. No additional backend
 endpoint needed — `/jobs` already supported the filter/limit/offset
 shape.
@@ -267,7 +267,7 @@ where `fields` is the pydantic schema converted via the new shared
 helper (also reused by the workflows router for submit/resume params).
 `DomainsBootstrap` now tracks `artifact_owners: dict[str, str]` so the
 registry can attribute each type to its declaring domain. The
-math-ui [/artifact-types](../math-ui/app/artifact-types/page.tsx) page
+math-ui [/artifact-types](math-ui/app/artifact-types/page.tsx) page
 renders the registry as first-class platform metadata, parallel to
 `/workflows`.
 
@@ -276,7 +276,7 @@ renders the registry as first-class platform metadata, parallel to
 `WorkflowSpecResponse.gates: list[GateSpec]` now flattens
 [ExecutionPolicy](src/ai_platform/jobs/execution_policy.py) onto the
 spec endpoint — each entry carries `{node_name, review_type, params}`.
-The math-ui [WorkflowSpecView](../math-ui/components/workflow/workflow-spec-view.tsx)
+The math-ui [WorkflowSpecView](math-ui/components/workflow/workflow-spec-view.tsx)
 renders gates as a first-class section; the frontend's old
 `waiting_for` string heuristic in `resolveWorkflowStepStates` was
 dropped in favour of policy-derived `stage.is_human_step`.
@@ -293,7 +293,7 @@ registered domain's `BaseArtifact` subclasses, built at startup from
 routers via `runtime/registry.get_artifact_service`. List endpoint
 gained `job_id` / `artifact_type` / `limit` filters and returns
 lightweight `ArtifactSummary` rows. Frontend viewer at
-[math-ui/app/artifacts](../math-ui/app/artifacts/page.tsx).
+[math-ui/app/artifacts](math-ui/app/artifacts/page.tsx).
 
 ## 2. Honor `idempotency_key` on submission
 

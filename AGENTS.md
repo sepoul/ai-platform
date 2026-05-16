@@ -1,18 +1,18 @@
 # Notes for coding agents
 
-If you're an AI assistant editing this repo (or its sibling
-`../math-ui`), read this first. It's a short list of red flags that
-have actually happened and the right way to do the thing instead.
+If you're an AI assistant editing this repo (including the in-tree
+`math-ui/` frontend), read this first. It's a short list of red flags
+that have actually happened and the right way to do the thing instead.
 The detailed docs are linked at the end.
 
 ---
 
-## Repos
+## Layout
 
-| Repo | Role |
+| Path | Role |
 |---|---|
-| `mathapp` (this repo) | FastAPI backend, Python workers, job/graph definitions |
-| `../math-ui` | Next.js 16 frontend |
+| `src/`, `instructions/`, `scripts/` | FastAPI backend, Python workers, job/graph definitions |
+| `math-ui/` | Next.js 16 frontend (was a sibling repo until 2026-05-16; merged in) |
 
 The contract between them is the **OpenAPI schema** that FastAPI
 emits. See [`docs/dev_lifecycle.md`](docs/dev_lifecycle.md) for the
@@ -132,8 +132,8 @@ broadcasts to every subscriber on
 [`GET /jobs/{id}/logs/stream`](src/ai_platform/api/routers/job_logs.py)
 (SSE, not WebSockets — logs are one-way and SSE is just HTTP). Browser
 subscribes via
-[`useJobLogs`](../math-ui/lib/platform/hooks/use-job-logs.ts) →
-[`<JobLogs>`](../math-ui/components/jobs/job-logs.tsx).
+[`useJobLogs`](math-ui/lib/platform/hooks/use-job-logs.ts) →
+[`<JobLogs>`](math-ui/components/jobs/job-logs.tsx).
 
 ### Forgetting to register a new artifact type
 
@@ -189,7 +189,7 @@ the affected route. The lint pre-existing errors are tracked in
 
 - [`NEXT_BEST_STEPS.md`](NEXT_BEST_STEPS.md) — backend backlog, with
   ✅-done entries for completed work.
-- [`../math-ui/NEXT_BEST_STEPS.md`](../math-ui/NEXT_BEST_STEPS.md) —
+- [`math-ui/NEXT_BEST_STEPS.md`](math-ui/NEXT_BEST_STEPS.md) —
   frontend equivalent.
 - [`FEATURES.md`](FEATURES.md) — directional ideas, not committed
   designs.
