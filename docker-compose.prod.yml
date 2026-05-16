@@ -10,6 +10,11 @@
 #
 # `build:` from the base file is merged in but ignored by `pull` — only
 # `image:` is fetched, and `up -d` finds the pulled tag locally.
+#
+# The math-ui service is gated behind the `ui` compose profile so the
+# default `redeploy.sh` keeps shipping just api + worker (current
+# Hetzner posture). Bring the UI up with `--profile ui`; see
+# `infra/hetzner/scripts/redeploy.sh` and the deploy doc Step 5.
 
 services:
   api:
@@ -20,3 +25,16 @@ services:
 
   celery-worker:
     image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+
+  math-ui:
+    image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}
+    profiles: [ui]
+    environment:
+      # BFF routes proxy to the API over the compose network.
+      MATH_API_URL: http://api:8000
+    ports:
+      - "3000:7860"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

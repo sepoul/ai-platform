@@ -4,6 +4,10 @@ Ideas to push the platform forward, ordered by leverage. Anything worker-
 internal (concurrency, retries, reapers) is intentionally absent — that
 surface will be replaced by Celery, no point hardening the polling loop.
 
+Backend items use plain numbering (§1, §2, …). Frontend items live
+under the "Frontend (`math-ui/`)" section at the bottom and are
+referenced as "Frontend §N" to disambiguate from backend numbering.
+
 ---
 
 ## 0. Deploy pipeline — CI image build → GHCR → box pull ✅ done
@@ -467,3 +471,152 @@ Every `put_canonical_file` now does two POSTs (file + sidecar). Native
 Supabase Storage object metadata works for simple cases; if we end up
 storing metadata-heavy artifacts we should switch to native metadata
 and drop the sidecars. Decision deferred until a real perf signal.
+
+---
+
+## Frontend (`math-ui/`)
+
+The platform/domain split exists on the backend (`ai_platform.*` vs
+domain packages). The frontend is gradually mirroring it. This
+section tracks the coherence gaps in [`math-ui/lib/platform/`](math-ui/lib/platform/index.ts)
+and the workflow-driven UI. Merged in from the standalone
+`math-ui/NEXT_BEST_STEPS.md` on 2026-05-16 when the two repos became
+one.
+
+### Frontend §1. `GET /workflows` registry consumed ✅ done
+
+The [/workflows](math-ui/app/workflows/page.tsx) index now fetches
+from `GET /workflows`; `WORKFLOW_JOB_TYPES` was removed.
+`WorkflowJobType` is a plain `string` — type discipline comes from
+"did you fetch this from the backend?" rather than a compile-time
+literal.
+
+### Frontend §2. `math-types.ts` split into platform vs domain ✅ done
+
+`math-ui/lib/` now physically separates platform from domain:
+
+- [math-ui/lib/platform/](math-ui/lib/platform/) — job lifecycle
+  types ([job-types.ts](math-ui/lib/platform/job-types.ts)), workflow
+  types, artifact types, jobs/workflows/artifacts clients,
+  active-jobs-store, BFF proxy, hooks, workflow-graph layout. Public
+  barrel at [index.ts](math-ui/lib/platform/index.ts).
+- [math-ui/lib/domains/math-qa/](math-ui/lib/domains/math-qa/) —
+  `MathQAResult` + artifact shapes
+  ([types.ts](math-ui/lib/domains/math-qa/types.ts)),
+  `mathClient.submitQuestion`
+  ([client.ts](math-ui/lib/domains/math-qa/client.ts)), domain
+  progress copy
+  ([progress-copy.ts](math-ui/lib/domains/math-qa/progress-copy.ts)).
+
+The platform stays domain-agnostic: `JobStatusResponse.result: unknown`
+and the math_qa job page narrows at the boundary
+(`res.result as MathQAResult | null`). Domain-typed result handling
+will be replaced by Frontend §3 (discriminated union) when it lands.
+
+React components stayed in `math-ui/components/{math,artifacts,workflow,...}`
+— they're not lib code. A future tidy could move them under
+`math-ui/components/domains/math-qa/` and `math-ui/components/platform/`
+to match.
+
+### Frontend §3. Make `JobResult` a discriminated union over `job_type` 📝 open
+
+[`JobStatusResponse.result`](math-ui/lib/math-types.ts) is hard-coded
+to `MathQAResult | null`. The backend response *is* a discriminated
+union (see `result.job_type`), but with a single domain registered the
+schema collapses it to a concrete shape.
+
+When a second domain ships, this will break silently in the codegen.
+Plan now:
+
+- At the platform level, type `result` as a discriminated union over
+  every domain's result variant — generated from the OpenAPI `oneOf` /
+  `discriminator`.
+- Domain code narrows by `result.job_type` before reading domain
+  fields.
+- Hooks like [useJobPolling](math-ui/lib/hooks/use-job-polling.ts)
+  stay domain-agnostic; they just expose the typed `result` and let
+  consumers narrow.
+
+### Frontend §4. Surface `ExecutionPolicy` in `WorkflowSpecResponse` ✅ done
+
+`WorkflowSpecResponse.gates: list[GateSpec]` is now on the wire, with
+each entry carrying `{node_name, review_type, params}` derived from
+the backend's `ExecutionPolicy`. The
+[WorkflowSpecView](math-ui/components/workflow/workflow-spec-view.tsx)
+renders a dedicated **Execution policy** section, and the human-wait
+detection in
+[workflow-graph.ts](math-ui/lib/platform/workflow-graph.ts) now
+relies on `stage.is_human_step` (which is policy-derived server-side)
+instead of the old `waiting_for` string heuristic.
+
+### Frontend §5. Generic submit form from `submit_params` 📝 open
+
+[QuestionForm](math-ui/components/math/question-form.tsx) is bespoke
+math_qa. The same shape is already on the wire as
+`WorkflowSpecResponse.submit_params` — the platform should be able to
+auto-render a basic submit form (string / number / select inputs) for
+any registered job type, with domains optionally overriding via a
+registry of custom form components.
+
+This is the natural complement to Frontend §1 (`GET /workflows`
+index): once the registry is server-driven, the platform can host
+`/workflows/[jobType]/run` as a generic submit page.
+
+### Frontend §6. Platform-level `/jobs` index ✅ done
+
+[/jobs](math-ui/app/jobs/page.tsx) lists every workflow run (history
+view). Backend `JobStatusResponse` gained `job_type` and `created_at`
+for this use; rows group by status via shadcn `Tabs` (RUNNING /
+WAITING_INPUT / SUCCEEDED / FAILED / etc.) with counts, color-coded
+status badges, and click-through to domain detail pages
+(`/math-qa/[jobId]` for math_qa). Unknown job types stay
+informational until a domain registers a route in `JOB_TYPE_ROUTES`.
+
+### Frontend §7a. Artifact viewer ✅ done
+
+Implemented at [/artifacts](math-ui/app/artifacts/page.tsx) +
+[/artifacts/[id]](math-ui/app/artifacts/[artifactId]/page.tsx).
+Backend artifacts router was migrated from the math domain into
+`ai_platform.api.routers.artifacts`; the GET endpoint now returns a
+discriminated union over every registered domain's `BaseArtifact`
+subclasses (driven by a runtime registry built from each
+`Domain.artifact_types`), and the list endpoint returns lightweight
+summaries with `job_id` / `artifact_type` / `limit` filters.
+
+### Frontend §7d. Artifact-type registry view ✅ done
+
+[/artifact-types](math-ui/app/artifact-types/page.tsx) reflects every
+registered `BaseArtifact` subclass — class name, owning domain, and
+the field list derived from its pydantic schema. Backend at
+`GET /artifacts/types`. Useful for documenting what each domain
+contributes to the platform.
+
+### Frontend §7b. Domain-renderer registry for artifacts 📝 open
+
+[ArtifactCard](math-ui/components/artifacts/artifact-card.tsx)
+currently has a hard-coded switch over the three math_qa artifact
+types, with a JSON fallback for anything else. Domains should
+register their own renderer components keyed by `artifact_type` —
+same pattern as the planned generic submit form (Frontend §5). Until
+then, every new domain artifact lands in the JSON fallback.
+
+### Frontend §7c. Prompts UI 📝 open
+
+Backend exposes `/prompts`, `/prompts/{name}`, `/prompt-executions`
+— no UI yet. Same platform-page pattern as `/workflows` and
+`/artifacts`: a list + detail view rendered straight from the
+OpenAPI shapes. See
+[prompt_registry.md](docs/prompt_registry.md) for the backend
+model.
+
+### Frontend §8. Audit `math-ui/components/workflow/` for hidden math_qa coupling 📝 open
+
+The workflow components were named generically before the platform
+split was introduced. Verify
+[WorkflowJobRunner](math-ui/components/workflow/workflow-job-runner.tsx),
+[WorkflowGraphView](math-ui/components/workflow/workflow-graph-view.tsx),
+and
+[WorkflowStepperView](math-ui/components/workflow/workflow-stepper-view.tsx)
+truly have no domain assumptions, and move them under
+`math-ui/components/platform/workflow/` once the directory split
+lands.

@@ -9,8 +9,8 @@ import { Figure, Latex, Markdown, type FigureSpec } from "@/components/library";
 /**
  * Renders a hydrated artifact, narrowed by `artifact_type`. New domain
  * artifacts fall through to a generic JSON dump until a dedicated
- * renderer is added — see math-ui/NEXT_BEST_STEPS.md for the registry
- * idea.
+ * renderer is added — see the root NEXT_BEST_STEPS.md "Frontend §7b"
+ * for the registry idea.
  */
 export function ArtifactCard({ artifact }: { artifact: Artifact }) {
   return (

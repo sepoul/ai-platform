@@ -187,10 +187,9 @@ the affected route. The lint pre-existing errors are tracked in
 
 ## Tracking files
 
-- [`NEXT_BEST_STEPS.md`](NEXT_BEST_STEPS.md) — backend backlog, with
-  ✅-done entries for completed work.
-- [`math-ui/NEXT_BEST_STEPS.md`](math-ui/NEXT_BEST_STEPS.md) —
-  frontend equivalent.
+- [`NEXT_BEST_STEPS.md`](NEXT_BEST_STEPS.md) — single backlog,
+  backend items first then a `Frontend (math-ui/)` section. ✅-done
+  entries stay (with a one-paragraph "what landed" note).
 - [`FEATURES.md`](FEATURES.md) — directional ideas, not committed
   designs.
 

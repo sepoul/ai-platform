@@ -1,12 +1,15 @@
-name: Build & push image
+name: Build & push images
 
-# Builds the mathapp container and pushes it to GHCR.
+# Builds both monorepo images (mathapp backend + math-ui frontend)
+# and pushes them to GHCR.
 #
 # Triggers:
 #   - push to main          → tags :latest and :sha-<short>
 #   - manual workflow run   → same tags, lets you rebuild without a commit
 #
-# Pull on the box with:
+# Both images share the same short-SHA tag for every run, so a single
+# IMAGE_TAG env var can pin both back-end and front-end to the same
+# commit when redeploying. Pull on the box with:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 # See infra/hetzner/scripts/redeploy.sh.
 
@@ -22,6 +25,16 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mathapp
+            context: .
+            image: ghcr.io/sepoul/mathapp
+          - name: math-ui
+            context: math-ui
+            image: ghcr.io/sepoul/math-ui
     steps:
       - uses: actions/checkout@v4
 
@@ -39,10 +52,10 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           push: true
           tags: |
-            ghcr.io/sepoul/mathapp:latest
-            ghcr.io/sepoul/mathapp:sha-${{ steps.sha.outputs.short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ matrix.image }}:latest
+            ${{ matrix.image }}:sha-${{ steps.sha.outputs.short }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
