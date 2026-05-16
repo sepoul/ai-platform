@@ -77,6 +77,13 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
+      # Worker → API live-log POST target. Compose-internal DNS;
+      # falls back to the in-process default for non-compose dev.
+      PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
+      # Worker → math-ui validate-latex tool. Resolves to the math-ui
+      # container when the `ui` profile is up; otherwise the validator
+      # call fails — fine, validate-latex is best-effort.
+      UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
     volumes:
       - mathapp-data:/data
     depends_on:
@@ -123,6 +130,8 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       CELERY_BROKER_URL: redis://redis:6379/0
+      PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
+      UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
     volumes:
       - mathapp-data:/data
     depends_on:
