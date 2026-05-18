@@ -402,3 +402,16 @@ Platform pieces it leans on, no new infra:
   `figure_ref: UUID` field once the reusable figure stack is real.
 - Per-user mastery / progress tracking — separate read-side, not a
   Math Q&A artifact.
+
+---
+
+## Math conversation (multi-agent brainstorm)
+
+A sibling `JobDefinition` to `math_qa` that runs a small panel of
+role-specialized agents — intuitive/visual, rigorous/symbolic,
+synthesizing — over either a completed `math_qa` job or a fresh
+question. Produces a chat-style transcript artifact that a learner
+can read like a study group's whiteboard.
+
+Full design proposal:
+[`docs/math_conversation.md`](docs/math_conversation.md).
