@@ -240,7 +240,7 @@ pattern is the only genuinely new component and lives under
 
 For v1 the implementation lives entirely under
 `src/mathai/math_conversation/` — a sibling domain to
-`mathai.math_qa`. Cross-cutting helpers (the LLM adapter, the
+`mathai.math_qa`. Cross-cutting helpers (the
 agent-build machinery, the callback bridge) are flagged as
 candidates for extraction to `ai_platform.ai.crew.*` once a second
 domain wants this style of multi-agent work. Until then,
@@ -255,28 +255,45 @@ platform primitives live in `ai_platform.*`, domain logic in
 
 ## Dependency strategy
 
-The CrewAI framework is the proposed multi-agent runtime. CrewAI's
-default LLM transport is LiteLLM, which adds non-trivial
-dependency surface. Two paths are tracked:
+CrewAI is the proposed multi-agent runtime. The earlier assumption
+that CrewAI *mandates* LiteLLM is **wrong for our case** — verified
+against the CrewAI 1.14.5 source:
 
-1. **Plan A — custom LLM adapter.** CrewAI accepts a `BaseLLM`
-   subclass via the `llm=` parameter on `Agent`. A small adapter
-   in `mathai.math_conversation.llm` delegates to the existing
-   Anthropic-backed `basic_agent` in
-   [`ai_platform.ai.providers`](../src/ai_platform/ai/providers/),
-   bypassing LiteLLM at runtime. Worker image only — the API
-   process does not import this module.
+- `litellm` is an *optional* dependency (`crewai[litellm]`), imported
+  lazily inside a `try/except`; it is never imported at module load.
+- CrewAI's `LLM` factory inspects the model's provider prefix and
+  routes the native set (`openai`, `anthropic`/`claude`, `azure`,
+  `bedrock`, `gemini`, …) to a native SDK client. Only non-native
+  providers (Ollama, Groq, OpenRouter, Perplexity, …) fall back to
+  LiteLLM.
+- The native Anthropic path
+  (`crewai.llms.providers.anthropic.AnthropicCompletion`) calls the
+  official `anthropic` SDK directly (`Anthropic` / `AsyncAnthropic`).
 
-2. **Plan B — LiteLLM as the router.** If the bridging adapter
-   proves impractical, fall back to LiteLLM under the hood,
-   restricted to the worker image. The API image stays slim
-   because it never imports the conversation domain.
+Since the panel runs Anthropic models exclusively, CrewAI uses the
+native `anthropic` SDK and **LiteLLM never enters the picture**. We
+install `crewai[anthropic]` and hand each agent a
+`crewai.LLM(model="anthropic/<model>")`. No custom `BaseLLM` adapter,
+no LiteLLM router, no OpenAI-compatible proxy.
 
-A **Day-0 burn-in pre-task** (see
-[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)) validates the
-LiteLLM dependency in isolation, behind an `LLM_ROUTER` env-var
-gate, *before* any CrewAI integration begins. This converts an
-in-flight risk into a measurable up-front step.
+**Observability.** The native path hits the `anthropic` SDK, so
+`logfire.instrument_anthropic()` captures every agent's LLM call at
+the SDK layer — into the same Logfire project the rest of the stack
+already reports to. (This is the same reason the discarded "route a
+node through in-process LiteLLM" experiment went dark: bypassing the
+instrumented SDK loses the spans. The native path avoids that.)
+
+**The real Day-0 risk is an `anthropic` SDK version clash, not
+LiteLLM.** Our stack pulls `anthropic 0.103.1` via
+`pydantic-ai-slim[anthropic]`; CrewAI 1.14.5's `[anthropic]` extra
+pins `anthropic~=0.73.0` (= `>=0.73.0,<0.74.0`). Those ranges are
+mutually exclusive. The Day-0 pre-task (see
+[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)) is to determine whether
+`crewai[anthropic]` can coexist with `pydantic-ai-slim[anthropic]` —
+by finding a CrewAI release whose anthropic pin overlaps ours, by
+loosening one side, or by isolating CrewAI in the worker image and
+accepting a divergent anthropic version there. If the two cannot be
+reconciled, *that* — not LiteLLM — is what reroutes the plan.
 
 CrewAI memory features (long-term, entity, contextual) are **off**
 for v1 (`Crew(memory=False)`). Each conversation is hermetic. This
@@ -328,9 +345,10 @@ completes; runaway cost is gated by `max_turns` alone.
 - Persona/skill loaders extending the prompt registry with a
   `kind` discriminator.
 - Three personae with real prompts; skill bodies as stubs.
-- LLM adapter (Plan A) and `conclude` tool.
+- Native CrewAI Anthropic LLM wiring and `conclude` tool.
 - math-ui chat renderer + submit/CTA entry points.
-- Day-0 LiteLLM burn-in pre-task completed and measured.
+- Day-0 anthropic-SDK coexistence pre-task resolved
+  (`crewai[anthropic]` ↔ `pydantic-ai-slim[anthropic]`).
 
 What does **not** ship in v1:
 
