@@ -297,3 +297,73 @@ def test_crew_chat_logger_retags_source():
     tagged = crew_chat_logger(base)
     assert tagged.source == CREW_CHAT_SOURCE
     assert tagged.job_id == "abc"
+
+
+# ---------------------------------------------------------------------------
+# T3 — persona / skill registry
+# ---------------------------------------------------------------------------
+
+def test_load_persona_algebraist():
+    from mathai.math_conversation.registry import load_persona
+    persona = load_persona("algebraist")
+    assert persona.role == "Algebraist"
+    assert persona.display_name == "🧮 Algebraist"
+    assert persona.model == "gpt-4o"
+    assert persona.skills == ["symbolic-manipulation", "proof-checking"]
+    assert persona.goal
+    assert "rigor" in persona.body.lower()
+
+
+def test_load_skill_symbolic_manipulation():
+    from mathai.math_conversation.registry import load_skill
+    skill = load_skill("symbolic-manipulation")
+    assert skill.description.startswith("Algebraic manipulation")
+    assert skill.tool_allowlist == ["validate_latex"]
+    assert skill.body  # one-line stub body
+
+
+def test_all_three_personae_load_with_resolvable_skills():
+    from mathai.math_conversation.registry import load_persona, load_skill
+    for name in ("algebraist", "visualist", "synthesist"):
+        persona = load_persona(name)
+        assert 1 <= len(persona.skills) <= 2
+        # Every declared skill resolves to a real skill file.
+        for skill_name in persona.skills:
+            skill = load_skill(skill_name)
+            assert skill.name == skill_name
+            assert skill.tool_allowlist  # stubs still declare a tool allowlist
+
+
+def test_parse_frontmatter_handles_no_frontmatter():
+    from ai_platform.ai.prompts.registry import parse_frontmatter
+    meta, body = parse_frontmatter("just a body, no front-matter")
+    assert meta == {}
+    assert body == "just a body, no front-matter"
+
+
+def test_parse_persona_rejects_wrong_kind():
+    from mathai.math_conversation.registry import parse_persona
+    with pytest.raises(ValueError, match="kind: persona"):
+        parse_persona("---\nkind: skill\nrole: X\n---\nbody", "x")
+
+
+def test_prompt_definitions_include_personae_and_skills():
+    from ai_platform.ai.prompts.registry import PROMPT_DEFINITIONS
+    names = {p.name: p for p in PROMPT_DEFINITIONS}
+    assert "math_conversation.persona.algebraist" in names
+    assert "math_conversation.skill.symbolic-manipulation" in names
+    persona_entry = names["math_conversation.persona.algebraist"]
+    assert persona_entry.kind == "persona"
+    # The stored instructions carry the full Markdown incl. front-matter,
+    # so a /prompts round-trip re-parses to the same spec.
+    from mathai.math_conversation.registry import parse_persona
+    reparsed = parse_persona(persona_entry.instructions, "algebraist")
+    assert reparsed.skills == ["symbolic-manipulation", "proof-checking"]
+    assert reparsed.model == "gpt-4o"
+
+
+def test_discovered_skills_have_skill_kind():
+    from ai_platform.ai.prompts.registry import PROMPT_DEFINITIONS
+    skills = [p for p in PROMPT_DEFINITIONS if p.name.startswith("math_conversation.skill.")]
+    assert len(skills) >= 5
+    assert all(p.kind == "skill" for p in skills)

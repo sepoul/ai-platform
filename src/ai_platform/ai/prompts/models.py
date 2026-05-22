@@ -1,8 +1,16 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# A registry entry is one of: a plain instruction prompt, a CrewAI
+# persona, or a CrewAI skill. Personae and skills store their full
+# Markdown (YAML front-matter + body) in `instructions`; the
+# math_conversation registry helpers parse them into PersonaSpec /
+# SkillSpec. Plain prompts have no front-matter.
+PromptKind = Literal["prompt", "persona", "skill"]
 
 
 class Prompt(BaseModel):
@@ -17,6 +25,7 @@ class Prompt(BaseModel):
     domain: str                     # grouping key, e.g. "math_qa"
     description: str
     instructions: str               # instruction text (editable via API)
+    kind: PromptKind = "prompt"     # discriminates plain prompts from personae / skills
     version: str = "0.1.0"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -35,6 +44,7 @@ class Prompt(BaseModel):
             domain=self.domain,
             description=self.description,
             instructions=new_instructions,
+            kind=self.kind,
             version=self.bump_version(),
         )
 
