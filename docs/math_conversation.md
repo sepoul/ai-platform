@@ -117,7 +117,7 @@ kind: persona
 role: Algebraist
 goal: Drive the conversation toward formal, symbolic clarity.
 display_name: "Algebraist"
-model: claude-opus-4-7
+model: gpt-4o
 skills: [symbolic-manipulation, proof-checking]
 ---
 
@@ -255,45 +255,44 @@ platform primitives live in `ai_platform.*`, domain logic in
 
 ## Dependency strategy
 
-CrewAI is the proposed multi-agent runtime. The earlier assumption
-that CrewAI *mandates* LiteLLM is **wrong for our case** — verified
-against the CrewAI 1.14.5 source:
+CrewAI is the multi-agent runtime. The conversation panel runs on
+**OpenAI models via CrewAI's native OpenAI provider** — deliberately a
+different provider from `math_qa` (Anthropic via pydantic_ai). This
+sidesteps the dependency tangle that two earlier drafts chased:
 
-- `litellm` is an *optional* dependency (`crewai[litellm]`), imported
-  lazily inside a `try/except`; it is never imported at module load.
-- CrewAI's `LLM` factory inspects the model's provider prefix and
-  routes the native set (`openai`, `anthropic`/`claude`, `azure`,
-  `bedrock`, `gemini`, …) to a native SDK client. Only non-native
-  providers (Ollama, Groq, OpenRouter, Perplexity, …) fall back to
-  LiteLLM.
-- The native Anthropic path
-  (`crewai.llms.providers.anthropic.AnthropicCompletion`) calls the
-  official `anthropic` SDK directly (`Anthropic` / `AsyncAnthropic`).
+- **No LiteLLM.** Verified against the CrewAI 1.14.5 source: `litellm`
+  is an *optional* extra, imported lazily; CrewAI's `LLM` factory
+  routes the native providers (`openai`, `anthropic`, `azure`,
+  `bedrock`, `gemini`, …) to a native SDK and only falls back to
+  LiteLLM for non-native ones (Ollama, Groq, …). We never touch the
+  fallback.
+- **No `anthropic` SDK version clash.** CrewAI's *core* dependency is
+  `openai>=2.30` — already a transitive dep of our stack. CrewAI's
+  `[anthropic]` extra would have pinned `anthropic~=0.73.0`, clashing
+  with the `anthropic>=0.97` our `pydantic-ai-slim` pulls. Choosing
+  the **OpenAI** provider for the crew means we install plain `crewai`
+  (no extra) and there is **no shared SDK version constraint** between
+  the two domains. `math_qa` keeps its Anthropic stack untouched; the
+  crew gets its own OpenAI client.
 
-Since the panel runs Anthropic models exclusively, CrewAI uses the
-native `anthropic` SDK and **LiteLLM never enters the picture**. We
-install `crewai[anthropic]` and hand each agent a
-`crewai.LLM(model="anthropic/<model>")`. No custom `BaseLLM` adapter,
-no LiteLLM router, no OpenAI-compatible proxy.
+So: install `crewai`, hand each agent a `crewai.LLM(model="<openai-model>")`.
+No custom `BaseLLM` adapter, no LiteLLM router, no proxy, no version
+pin reconciliation. Requires `OPENAI_API_KEY` in the worker env
+(the API process never imports the conversation domain).
 
-**Observability.** The native path hits the `anthropic` SDK, so
-`logfire.instrument_anthropic()` captures every agent's LLM call at
+**Observability.** CrewAI's native OpenAI path hits the `openai` SDK,
+so `logfire.instrument_openai()` captures every agent's LLM call at
 the SDK layer — into the same Logfire project the rest of the stack
-already reports to. (This is the same reason the discarded "route a
-node through in-process LiteLLM" experiment went dark: bypassing the
-instrumented SDK loses the spans. The native path avoids that.)
+already reports to. (A discarded experiment routed a node through
+in-process LiteLLM and went dark in Logfire precisely because it
+bypassed an instrumented SDK; the native path avoids that.)
 
-**The real Day-0 risk is an `anthropic` SDK version clash, not
-LiteLLM.** Our stack pulls `anthropic 0.103.1` via
-`pydantic-ai-slim[anthropic]`; CrewAI 1.14.5's `[anthropic]` extra
-pins `anthropic~=0.73.0` (= `>=0.73.0,<0.74.0`). Those ranges are
-mutually exclusive. The Day-0 pre-task (see
-[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)) is to determine whether
-`crewai[anthropic]` can coexist with `pydantic-ai-slim[anthropic]` —
-by finding a CrewAI release whose anthropic pin overlaps ours, by
-loosening one side, or by isolating CrewAI in the worker image and
-accepting a divergent anthropic version there. If the two cannot be
-reconciled, *that* — not LiteLLM — is what reroutes the plan.
+**Day-0 burn-in** (see [`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)):
+confirm `crewai` installs cleanly alongside the current
+`requirements.txt`, that `pytest tests/` stays green, and that a
+trivial native-OpenAI CrewAI agent completes one call visible in
+Logfire. With OpenAI chosen there is no version clash to resolve — the
+burn-in is now just install-hygiene + an observability smoke test.
 
 CrewAI memory features (long-term, entity, contextual) are **off**
 for v1 (`Crew(memory=False)`). Each conversation is hermetic. This
@@ -345,10 +344,9 @@ completes; runaway cost is gated by `max_turns` alone.
 - Persona/skill loaders extending the prompt registry with a
   `kind` discriminator.
 - Three personae with real prompts; skill bodies as stubs.
-- Native CrewAI Anthropic LLM wiring and `conclude` tool.
+- Native CrewAI OpenAI LLM wiring and `conclude` tool.
 - math-ui chat renderer + submit/CTA entry points.
-- Day-0 anthropic-SDK coexistence pre-task resolved
-  (`crewai[anthropic]` ↔ `pydantic-ai-slim[anthropic]`).
+- Day-0 CrewAI install + OpenAI-observability burn-in done.
 
 What does **not** ship in v1:
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from ai_platform.jobs.domain import DomainRegister
 from mathai.domain import register as math_qa_register
+from mathai.math_conversation.domain import register as math_conversation_register
 
 
-DOMAINS: list[DomainRegister] = [math_qa_register]
+DOMAINS: list[DomainRegister] = [math_qa_register, math_conversation_register]
