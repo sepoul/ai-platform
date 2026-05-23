@@ -17,8 +17,12 @@ logger = logging.getLogger()
 
 def _run_one_job(executor: GraphJobExecutor, job_definitions: dict[str, JobDefinition],
                  worker_id : str, max_job_age_s: float | None = None) -> bool:
+    # Claim only the job types this worker serves. The worker is handed a
+    # runtime-scoped `job_definitions` (see worker.py / WORKER_RUNTIME), so
+    # jobs for other runtimes stay PENDING for the pool that can run them.
     record = executor.claim_next_pending(
-        job_type=None, worker_id=worker_id, max_age_s=max_job_age_s,
+        job_types=list(job_definitions.keys()), worker_id=worker_id,
+        max_age_s=max_job_age_s,
     )
     if record is None:
         return False

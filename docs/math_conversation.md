@@ -276,23 +276,55 @@ sidesteps the dependency tangle that two earlier drafts chased:
   crew gets its own OpenAI client.
 
 So: install `crewai`, hand each agent a `crewai.LLM(model="<openai-model>")`.
-No custom `BaseLLM` adapter, no LiteLLM router, no proxy, no version
-pin reconciliation. Requires `OPENAI_API_KEY` in the worker env
-(the API process never imports the conversation domain).
+No custom `BaseLLM` adapter, no LiteLLM router, no proxy. Requires
+`OPENAI_API_KEY` in the worker env.
 
-**Observability.** CrewAI's native OpenAI path hits the `openai` SDK,
-so `logfire.instrument_openai()` captures every agent's LLM call at
-the SDK layer — into the same Logfire project the rest of the stack
-already reports to. (A discarded experiment routed a node through
-in-process LiteLLM and went dark in Logfire precisely because it
-bypassed an instrumented SDK; the native path avoids that.)
+### The unavoidable clash: CrewAI vs. Logfire over OpenTelemetry
+
+Choosing OpenAI dodges the *anthropic* SDK clash, but there is a second
+one that no provider choice avoids: **CrewAI 1.14.5 pins
+`opentelemetry-sdk <1.35`, while Logfire** (pulled by
+`pydantic-ai-slim[logfire]`) **needs `>=1.39`.** No CrewAI release
+(stable or pre-release) loosens it. The two **cannot coexist in one
+Python interpreter**, and we want both — CrewAI for the panel, Logfire
+for observability.
+
+Resolution: **per-runtime worker pools** (see
+[`ai_platform/jobs/runtimes.py`](../src/ai_platform/jobs/runtimes.py)).
+A *runtime* is an isolated dependency environment. Each `JobDefinition`
+declares the `runtime` it executes on; a worker serves one runtime
+(`WORKER_RUNTIME`) and only claims jobs whose runtime matches.
+
+| Runtime | Requirements | Stack | Job types |
+|---|---|---|---|
+| `default` | `requirements.txt` | pydantic_ai + **logfire** (otel ≥1.39) | `math_qa`, API process |
+| `crewai` | `requirements-crewai.txt` | **crewai** (otel <1.35), no logfire | `math_conversation` |
+
+`math_conversation`'s `JobDefinition` sets `runtime="crewai"`, so a
+`default` worker leaves those jobs `PENDING` and the `crewai` worker
+pool picks them up. The two stacks never share an interpreter.
+
+**The load-bearing rule** that makes this work: building a
+`JobDefinition` must be importable from *any* runtime. The composition
+root imports domains lazily, per runtime, so the `crewai` worker never
+imports `math_qa` (→ `basic_agent` → `logfire`). Heavy crew imports
+(`crewai`) live **inside `RunCrewStep`**, not at module load, so the API
+and `default` worker register the conversation job without `crewai`
+installed.
+
+**Observability per runtime.** On the `crewai` pool, the native OpenAI
+path hits the `openai` SDK, captured by `logfire.instrument_openai()` —
+*if* that pool runs its own logfire-compatible tracing. Since the
+`crewai` runtime can't carry our logfire (otel pin), v1 surfaces crew
+progress through the structured `CrewChatEvent` log stream (below) and
+treats deep Logfire tracing of crew calls as a follow-up (it needs a
+logfire build whose otel range overlaps crewai's, or OTLP export to a
+collector).
 
 **Day-0 burn-in** (see [`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)):
-confirm `crewai` installs cleanly alongside the current
-`requirements.txt`, that `pytest tests/` stays green, and that a
-trivial native-OpenAI CrewAI agent completes one call visible in
-Logfire. With OpenAI chosen there is no version clash to resolve — the
-burn-in is now just install-hygiene + an observability smoke test.
+`pip install -r requirements-crewai.txt` resolves (verified: 206
+packages, otel-sdk 1.34.1); `pytest tests/` stays green on the default
+stack; a trivial native-OpenAI CrewAI agent completes one call.
 
 CrewAI memory features (long-term, entity, contextual) are **off**
 for v1 (`Crew(memory=False)`). Each conversation is hermetic. This

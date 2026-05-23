@@ -18,8 +18,9 @@ from argparse import ArgumentParser
 
 from ai_platform.compute.bootstrap import bootstrap_compute
 from ai_platform.jobs.bootstrap import register_domains
+from ai_platform.jobs.runtimes import current_worker_runtime, select_for_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import DOMAINS
+from mathapp.composition_root import domains_for_runtime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,8 +60,20 @@ def main():
     signal.signal(signal.SIGTERM, _handle_signal)
 
     ws = bootstrap_workspace()
-    domains = register_domains(DOMAINS, ws)
-    compute = bootstrap_compute(ws.executor, domains.job_definitions)
+
+    # Scope this worker to its runtime: import + register only this
+    # runtime's domains (so a slim env without the other runtime's deps
+    # still boots), then claim only those job types. Jobs for other
+    # runtimes stay PENDING for the pool provisioned with that stack.
+    runtime = current_worker_runtime()
+    domains = register_domains(domains_for_runtime(runtime), ws)
+    served = select_for_runtime(domains.job_definitions, runtime)
+    logger.info(
+        "Worker %s runtime=%s serving job types: %s",
+        WORKER_ID, runtime, sorted(served.keys()) or "(none)",
+    )
+
+    compute = bootstrap_compute(ws.executor, served)
     logger.info("Worker %s using compute=%s", WORKER_ID, compute.name)
 
     compute.start_worker(

@@ -161,17 +161,35 @@ class GraphJobExecutor:
         job_type: str | None = None,
         worker_id: str | None = None,
         max_age_s: float | None = None,
+        job_types: list[str] | None = None,
     ) -> JobRecord | None:
         """
         Simple claim: find first PENDING job (optionally filtered by type),
         mark RUNNING and return it.
         Returns None if no jobs available.
 
+        `job_types` is a runtime allowlist: when set, only jobs whose type
+        is in it are claimable (each served type is probed newest-first).
+        This is how a worker stays scoped to its `WORKER_RUNTIME` — jobs
+        for other runtimes are left PENDING for the pool that can run them.
+        Mutually exclusive with `job_type`; if both are given, `job_types`
+        wins.
+
         If `max_age_s` is set, jobs whose `created_at` is older than that
         threshold are ignored. The repo list is ordered newest-first, so
         a single sample is sufficient: if the newest pending is stale,
         every other pending is too.
         """
+        if job_types is not None:
+            # Probe each served type; claim the first that has a pending job.
+            for candidate in job_types:
+                record = self.claim_next_pending(
+                    job_type=candidate, worker_id=worker_id, max_age_s=max_age_s,
+                )
+                if record is not None:
+                    return record
+            return None
+
         jobs = self.repo.list(status=JobStatus.PENDING, job_type=job_type, limit=1)
         if not jobs:
             return None

@@ -16,10 +16,11 @@ from ai_platform.api.app import build_api
 from ai_platform.compute.bootstrap import bootstrap_compute
 from ai_platform.jobs.bootstrap import register_domains
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import DOMAINS
+from mathapp.composition_root import all_domains
 
 _workspace = bootstrap_workspace()
-_domains = register_domains(DOMAINS, _workspace)
+# API serves submission/result for every job type, across all runtimes.
+_domains = register_domains(all_domains(), _workspace)
 _compute = bootstrap_compute(_workspace.executor, _domains.job_definitions)
 
 app = build_api(workspace=_workspace, domains=_domains, compute=_compute)

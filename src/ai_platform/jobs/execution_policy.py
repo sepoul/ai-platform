@@ -91,3 +91,9 @@ class JobDefinition:
     # in-record `result_payload`, which then acts as a cheap status preview.
     # Domains close over their workspace client when building the callback.
     fetch_result: Callable[[Any], BaseJobResult] | None = None
+    # Which worker runtime executes this job. A worker only claims jobs
+    # whose runtime matches its WORKER_RUNTIME; jobs for other runtimes
+    # are left for the pool that can run them. See ai_platform.jobs.runtimes.
+    # Domains needing a conflicting dependency stack (e.g. crewai vs the
+    # default logfire stack) set this to route onto an isolated pool.
+    runtime: str = "default"

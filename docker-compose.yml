@@ -90,6 +90,45 @@ services:
       - api
     restart: unless-stopped
 
+  # crewai runtime worker pool. Built from requirements-crewai.txt (crewai,
+  # no logfire — the otel-sdk pins conflict). Only claims jobs whose
+  # JobDefinition.runtime == "crewai" (math_conversation). Opt-in via
+  # `--profile crewai`; default `docker compose up` doesn't build/run it.
+  # See ai_platform/jobs/runtimes.py and docs/math_conversation.md.
+  worker-crewai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements-crewai.txt
+    image: mathapp-crewai:local
+    command: >
+      python -u -m mathapp.entrypoints.worker
+      --interval ${WORKER_INTERVAL:-5}
+    environment:
+      WORKER_RUNTIME: crewai
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      # Crew runs on OpenAI (CrewAI's native provider); no LOGFIRE_TOKEN
+      # here — this runtime has no logfire.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
+      PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
+      UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
+    volumes:
+      - mathapp-data:/data
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles: [crewai]
+
   # Celery profile: redis broker + celery-worker container. Only started
   # with `--profile celery`. See docs/deployment_hetzner.md §6 for the
   # full migration recipe. When running this profile, also
