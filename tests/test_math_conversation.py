@@ -367,3 +367,99 @@ def test_discovered_skills_have_skill_kind():
     skills = [p for p in PROMPT_DEFINITIONS if p.name.startswith("math_conversation.skill.")]
     assert len(skills) >= 5
     assert all(p.kind == "skill" for p in skills)
+
+
+# ---------------------------------------------------------------------------
+# T7 — submission through the real platform job-runs endpoint
+#
+# The generic router builds its request body from the discriminated union
+# of every registered submit_input_type, so registering the domain (T1) is
+# what makes math_conversation submittable. These tests prove the real
+# MathConversationInput routes correctly and the exactly-one-source
+# validator is enforced at the HTTP boundary.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def conversation_client(tmp_path: Path):
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from ai_platform.runtime import registry as deps_mod
+    from ai_platform.api.routers.job_runs import make_job_runs_router
+    from ai_platform.workspace.storage.structured.job_repository import JobRecord
+
+    repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
+    store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
+    job_def = build_math_conversation_job_definition(_Workspace(store))
+
+    fake_executor = MagicMock()
+    fake_compute = MagicMock()
+    fake_executor.submit_graph_job.return_value = JobRecord.create(
+        job_type=job_def.name, graph_ref=job_def.graph_ref
+    )
+
+    deps_mod._job_definitions.clear()
+    deps_mod._job_definitions[job_def.name] = job_def
+
+    app = FastAPI()
+    app.include_router(make_job_runs_router(deps_mod._job_definitions))
+    app.dependency_overrides[deps_mod.get_executor] = lambda: fake_executor
+    app.dependency_overrides[deps_mod.get_compute] = lambda: fake_compute
+    app.dependency_overrides[deps_mod.get_job_definitions] = lambda: deps_mod._job_definitions
+    return TestClient(app), fake_executor
+
+
+def test_submit_question_text_form_returns_job_id(conversation_client):
+    client, executor = conversation_client
+    resp = client.post(
+        "/jobs/runs/submit",
+        json={"job_type": "math_conversation", "question_text": "What is a sheaf?", "max_turns": 8},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "job_id" in resp.json()
+    kwargs = executor.submit_graph_job.call_args.kwargs
+    assert kwargs["job_type"] == "math_conversation"
+    assert kwargs["deps_payload"]["question_text"] == "What is a sheaf?"
+    assert kwargs["deps_payload"]["max_turns"] == 8
+
+
+def test_submit_source_job_id_form_returns_job_id(conversation_client):
+    client, executor = conversation_client
+    jid = str(uuid4())
+    resp = client.post(
+        "/jobs/runs/submit",
+        json={"job_type": "math_conversation", "source_job_id": jid},
+    )
+    assert resp.status_code == 200, resp.text
+    kwargs = executor.submit_graph_job.call_args.kwargs
+    # The endpoint dumps with model_dump() (not JSON mode), so the UUID
+    # stays a UUID object in the payload; the deps_factory normalizes it.
+    assert str(kwargs["deps_payload"]["source_job_id"]) == jid
+
+
+def test_submit_rejects_both_sources_at_http_boundary(conversation_client):
+    client, _ = conversation_client
+    resp = client.post(
+        "/jobs/runs/submit",
+        json={"job_type": "math_conversation", "question_text": "x", "source_job_id": str(uuid4())},
+    )
+    assert resp.status_code == 422
+    assert "exactly one" in resp.text
+
+
+def test_submit_rejects_neither_source_at_http_boundary(conversation_client):
+    client, _ = conversation_client
+    resp = client.post("/jobs/runs/submit", json={"job_type": "math_conversation"})
+    assert resp.status_code == 422
+    assert "exactly one" in resp.text
+
+
+def test_submit_rejects_unknown_field(conversation_client):
+    client, _ = conversation_client
+    resp = client.post(
+        "/jobs/runs/submit",
+        json={"job_type": "math_conversation", "question_text": "x", "bogus": 1},
+    )
+    assert resp.status_code == 422
+    assert "bogus" in resp.text
