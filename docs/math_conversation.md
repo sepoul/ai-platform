@@ -291,18 +291,25 @@ for observability.
 
 Resolution: **per-runtime worker pools** (see
 [`ai_platform/jobs/runtimes.py`](../src/ai_platform/jobs/runtimes.py)).
-A *runtime* is an isolated dependency environment. Each `JobDefinition`
-declares the `runtime` it executes on; a worker serves one runtime
-(`WORKER_RUNTIME`) and only claims jobs whose runtime matches.
+A *runtime* is an isolated dependency environment. Runtime is scoped at
+the **domain** level: the import manifest in
+[`composition_root.py`](../src/mathapp/composition_root.py)
+(`runtime → domain modules`) is the single source of truth. There is no
+per-job runtime field — you can't read one without importing the module
+that may crash on a slim env. A worker serves one runtime
+(`WORKER_RUNTIME`), imports only that runtime's domains, and so claims
+only its own jobs.
 
 | Runtime | Requirements | Stack | Job types |
 |---|---|---|---|
 | `default` | `requirements.txt` | pydantic_ai + **logfire** (otel ≥1.39) | `math_qa`, API process |
 | `crewai` | `requirements-crewai.txt` | **crewai** (otel <1.35), no logfire | `math_conversation` |
 
-`math_conversation`'s `JobDefinition` sets `runtime="crewai"`, so a
-`default` worker leaves those jobs `PENDING` and the `crewai` worker
-pool picks them up. The two stacks never share an interpreter.
+The manifest assigns `mathai.math_conversation.domain` to `crewai`, so a
+`default` worker never imports it (leaving those jobs `PENDING`) and the
+`crewai` worker pool picks them up. The two stacks never share an
+interpreter. A domain that needs to span runtimes is split into one
+domain per runtime.
 
 **The load-bearing rule** that makes this work: building a
 `JobDefinition` must be importable from *any* runtime. The composition
@@ -310,7 +317,9 @@ root imports domains lazily, per runtime, so the `crewai` worker never
 imports `math_qa` (→ `basic_agent` → `logfire`). Heavy crew imports
 (`crewai`) live **inside `RunCrewStep`**, not at module load, so the API
 and `default` worker register the conversation job without `crewai`
-installed.
+installed. (The API importing *all* domains is what forces this rule; it
+only needs each job's schemas, not its execution code, so decoupling the
+API from runtime is flagged as future cleanup.)
 
 **Observability per runtime.** On the `crewai` pool, the native OpenAI
 path hits the `openai` SDK, captured by `logfire.instrument_openai()` —

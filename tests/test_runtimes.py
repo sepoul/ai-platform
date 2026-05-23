@@ -1,22 +1,18 @@
 """Tests for per-runtime worker isolation.
 
-A worker serves one runtime (WORKER_RUNTIME) and only claims jobs whose
-JobDefinition.runtime matches; jobs for other runtimes stay PENDING for
-the pool that can run them. This is what lets CrewAI (otel-sdk <1.35) and
-Logfire (otel-sdk >=1.39) live in separate worker environments.
+Runtime is scoped at the domain level (mathapp.composition_root): a
+worker serves one runtime (WORKER_RUNTIME), imports only that runtime's
+domains, and so its registered job set already contains only its jobs —
+which it claims, leaving other runtimes' jobs PENDING for their pool.
+This is what lets CrewAI (otel-sdk <1.35) and Logfire (otel-sdk >=1.39)
+live in separate worker environments.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from ai_platform.jobs.graph_execution import GraphJobExecutor
-from ai_platform.jobs.runtimes import (
-    DEFAULT_RUNTIME,
-    current_worker_runtime,
-    select_for_runtime,
-)
+from ai_platform.jobs.runtimes import DEFAULT_RUNTIME, current_worker_runtime
 from ai_platform.workspace.storage.structured.job_repository import (
     JobStatus,
     LocalJobRepository,
@@ -80,37 +76,8 @@ def test_single_type_claim_still_works(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# select_for_runtime + JobDefinition.runtime declarations
+# runtime constant + WORKER_RUNTIME env
 # ---------------------------------------------------------------------------
-
-def test_select_for_runtime_partitions_job_defs():
-    from dataclasses import dataclass
-
-    @dataclass
-    class _JD:
-        runtime: str
-
-    defs = {"a": _JD(runtime="default"), "b": _JD(runtime="crewai"), "c": _JD(runtime="default")}
-    assert set(select_for_runtime(defs, "default")) == {"a", "c"}
-    assert set(select_for_runtime(defs, "crewai")) == {"b"}
-    assert select_for_runtime(defs, "nope") == {}
-
-
-def test_math_conversation_declares_crewai_runtime(tmp_path: Path):
-    from ai_platform.jobs.artifact_service import ArtifactService
-    from ai_platform.workspace.storage.structured.artifact_repository import LocalArtifactRepository
-    from mathai.math_conversation.artifacts import MATH_CONVERSATION_ARTIFACTS
-    from mathai.math_conversation.workflow import build_math_conversation_job_definition
-
-    repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
-    store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
-
-    class _WS:
-        artifact_store = store
-
-    jd = build_math_conversation_job_definition(_WS())
-    assert jd.runtime == "crewai"
-
 
 def test_default_runtime_constant_and_env():
     import os

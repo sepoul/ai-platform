@@ -48,17 +48,33 @@ d632828 feat(math_conversation): persona/skill registry extension (T3)
 
 ## The runtime model (how isolation works)
 
-- `JobDefinition.runtime` declares the pool a job runs on. `math_qa` →
-  `default`; `math_conversation` → `crewai`.
-- A worker serves one runtime via `WORKER_RUNTIME` and only claims those
-  job types (`claim_next_pending(job_types=...)`). Other runtimes' jobs
-  stay `PENDING` for their pool.
-- `composition_root` imports domains **lazily, per runtime**, so the
-  `crewai` worker never imports `math_qa` → `basic_agent` → `logfire`.
+Runtime is scoped at the **domain** level. The single source of truth is
+the import manifest in [`composition_root.py`](../src/mathapp/composition_root.py)
+(`runtime → domain modules`); there is no per-job runtime field, because
+you can't read one without importing the module that may crash on a slim
+env. That one map does double duty:
+
+- **Import isolation.** A worker imports only its runtime's domains, so a
+  slim env (no other runtime's deps) still boots — the `crewai` worker
+  never imports `math_qa` → `basic_agent` → `logfire`.
+- **Job routing.** Having imported only its own domains, the worker's
+  registered job set already contains *only* its jobs; it claims those
+  (`claim_next_pending(job_types=...)`). Other runtimes' jobs stay
+  `PENDING` for their pool. (No `select_for_runtime` — it was redundant
+  and is gone.)
+
+A domain spanning runtimes is split into one domain per runtime. Runtime
+owns the dep stack; a domain just declares JobDefinitions.
+
 - **Load-bearing rule:** building a `JobDefinition` must stay importable
   from any runtime. Heavy crew imports (`crewai`) go **inside
   `RunCrewStep`**, never at module top — otherwise the API and `default`
   worker (no crewai installed) can't register the conversation job.
+- **Flagged for later (`api-runtime-decoupling`):** the API importing
+  *all* domains is the only thing forcing that load-bearing rule. The API
+  only needs each job's schemas, not its execution code, so it shouldn't
+  have to care about runtime at all. Future cleanup; see the TODO in
+  `composition_root.py`.
 
 | Runtime | Requirements | Stack | Jobs |
 |---|---|---|---|

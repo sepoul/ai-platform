@@ -18,7 +18,7 @@ from argparse import ArgumentParser
 
 from ai_platform.compute.bootstrap import bootstrap_compute
 from ai_platform.jobs.bootstrap import register_domains
-from ai_platform.jobs.runtimes import current_worker_runtime, select_for_runtime
+from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
 from mathapp.composition_root import domains_for_runtime
 
@@ -63,11 +63,12 @@ def main():
 
     # Scope this worker to its runtime: import + register only this
     # runtime's domains (so a slim env without the other runtime's deps
-    # still boots), then claim only those job types. Jobs for other
-    # runtimes stay PENDING for the pool provisioned with that stack.
+    # still boots). The registered set is therefore already only this
+    # runtime's jobs — the worker claims exactly those, leaving other
+    # runtimes' jobs PENDING for the pool provisioned with that stack.
     runtime = current_worker_runtime()
     domains = register_domains(domains_for_runtime(runtime), ws)
-    served = select_for_runtime(domains.job_definitions, runtime)
+    served = domains.job_definitions
     logger.info(
         "Worker %s runtime=%s serving job types: %s",
         WORKER_ID, runtime, sorted(served.keys()) or "(none)",

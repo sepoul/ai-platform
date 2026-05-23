@@ -9,15 +9,23 @@ stack run on a separate worker pool.
 
 How it fits together:
 
-- Each `JobDefinition` declares the `runtime` it must execute on
-  (default: ``"default"``).
+- Runtime is scoped at the **domain** level via a single import manifest
+  (`mathapp.composition_root`): runtime -> the domain modules importable
+  there. That manifest is the source of truth — there is no per-job
+  runtime field, because you can't read one without importing the very
+  module that may crash on a slim env.
 - A worker process serves exactly one runtime, chosen by the
-  ``WORKER_RUNTIME`` env var. It only *claims* jobs whose runtime
-  matches; jobs for other runtimes are left ``PENDING`` for the pool
-  that can run them. (See `ai_platform.jobs.worker_loop`.)
+  ``WORKER_RUNTIME`` env var. It imports/registers only that runtime's
+  domains, so its job-definition set already contains *only* its jobs;
+  it claims exactly those (see `ai_platform.jobs.worker_loop`). Jobs for
+  other runtimes stay ``PENDING`` for the pool that can run them.
 - Deployment provisions one worker pool per runtime, each from its own
   requirements file (`requirements.txt` for ``default``,
   `requirements-crewai.txt` for ``crewai``).
+
+A domain that needs jobs on more than one runtime is split into one
+domain per runtime — runtime owns the dependency stack and integration
+surface; a domain just declares JobDefinitions and is assigned to a pool.
 
 **Registration vs. execution — the load-bearing rule.** Building a
 `JobDefinition` (and registering its domain) must stay importable from
@@ -31,17 +39,13 @@ crew engine, and only when `RunCrewStep` actually runs.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ai_platform.jobs.execution_policy import JobDefinition
 
 DEFAULT_RUNTIME = "default"
 WORKER_RUNTIME_ENV = "WORKER_RUNTIME"
 
 # runtime name -> human description (and which requirements file
-# provisions it). Informational: the functional contract is just the
-# string match between JobDefinition.runtime and WORKER_RUNTIME.
+# provisions it). Informational: the functional contract is the import
+# manifest in composition_root + the WORKER_RUNTIME this worker serves.
 RUNTIMES: dict[str, str] = {
     "default": "pydantic_ai + logfire (requirements.txt) — math_qa, API process",
     "crewai": "CrewAI panel (requirements-crewai.txt) — math_conversation; no logfire (otel-sdk <1.35)",
@@ -51,14 +55,3 @@ RUNTIMES: dict[str, str] = {
 def current_worker_runtime() -> str:
     """The runtime this worker process serves (``WORKER_RUNTIME``, default 'default')."""
     return os.getenv(WORKER_RUNTIME_ENV, DEFAULT_RUNTIME).strip() or DEFAULT_RUNTIME
-
-
-def select_for_runtime(
-    job_definitions: dict[str, "JobDefinition"], runtime: str
-) -> dict[str, "JobDefinition"]:
-    """Subset of `job_definitions` whose declared runtime matches `runtime`."""
-    return {
-        name: jd
-        for name, jd in job_definitions.items()
-        if getattr(jd, "runtime", DEFAULT_RUNTIME) == runtime
-    }

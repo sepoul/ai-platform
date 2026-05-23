@@ -219,12 +219,10 @@ def build_math_conversation_job_definition(workspace_client) -> JobDefinition:
         extract_result=_extract_math_conversation_result,
         fetch_result=_fetch_result,
         submit_input_type=MathConversationInput,
-        # Runs on the isolated `crewai` worker pool — CrewAI's
-        # opentelemetry pin conflicts with the default logfire stack, so
-        # this job type is only claimed by a worker with WORKER_RUNTIME=crewai
-        # (provisioned from requirements-crewai.txt). See
-        # ai_platform.jobs.runtimes.
-        runtime="crewai",
+        # Runtime assignment is declared once in mathapp.composition_root
+        # (`crewai` pool — CrewAI's opentelemetry pin conflicts with the
+        # default logfire stack). This domain is only imported/claimed by a
+        # worker with WORKER_RUNTIME=crewai. See ai_platform.jobs.runtimes.
         edges=[
             EdgeSpec("SeedStep", "RunCrewStep", "Seed resolved"),
             EdgeSpec("RunCrewStep", "FinalizeStep", "Conversation done"),
