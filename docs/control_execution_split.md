@@ -1,6 +1,11 @@
 # Control plane / execution plane split
 
-_Status: Phase 0 landed (`fb96cc4`). Phases 1–2 planned. Last updated 2026-05-24._
+_Status: Phase 0 (`fb96cc4`) + review-as-data (`d30c40b`) landed. Last updated 2026-05-24._
+
+> **Naming:** the control-plane type is `JobControl` (not `JobSpec`) — the
+> platform already has a `JobSpec` (per-run job identity in
+> `job_repository.py`). `JobControl` ↔ `JobExecution` are the two planes.
+> (Phase 0 shipped it as `JobSpec`; the split commit renames it.)
 
 ## The problem
 
@@ -57,21 +62,28 @@ The two views are realized as `JobSpec` and `JobExecution` in
 Reading every router, the API consumes only the control subset — with
 exactly two leaks into execution:
 
-1. **Topology metadata off node classes.**
+1. **Topology read off the graph at request time.**
    [`workflows.py`](../src/ai_platform/api/routers/workflows.py) reads
-   `node_registry` to pull `stage_label`/`stage_description` *class
-   attributes*. **Fix:** carry the stages (id, label, description) as
-   plain data on `JobSpec`, declared by the domain's control module.
+   `node_registry` (the engine) to render stages. **Fix (agreed): the
+   worker generates a JSON workflow descriptor; the API just serves it.**
+   The API introspecting `pydantic_graph` per request was premature
+   coupling — the topology is static per-deploy. A **manual admin
+   command** runs in an engine context (default runtime; building a
+   JobDefinition doesn't import `crewai` per the load-bearing rule),
+   introspects each graph + policy + edges + submit schema, and writes a
+   runtime-agnostic JSON descriptor (exactly today's `WorkflowSpecResponse`
+   shape) to the backend-agnostic **blob store** (`PlatformClient.file_repo`,
+   key `workflows/<job_type>.json`). The API reads + serves it; **optional**
+   — absent ⇒ empty/404. No engine import.
 
-2. **Review-merge runs in the API.**
-   [`job_runs.py`](../src/ai_platform/api/routers/job_runs.py) (review
-   endpoint) rebuilds `state_type` and calls `state.set_review(...)` —
-   execution logic inside the API. **Fix (agreed): review-as-data on the
-   job record.** The API validates the review body against the gate
-   schema and writes the raw payload + gated node onto the `JobRecord`,
-   flips it to `PENDING`, enqueues. The **worker** merges it into state
-   on resume. (Chosen over a review *artifact* + id indirection: a review
-   is small, ephemeral execution input, not a durable output.)
+2. **Review-merge runs in the API. ✅ DONE (`d30c40b`).**
+   The review endpoint used to rebuild `state_type` and call
+   `state.set_review(...)`. Now the API validates the body against the
+   gate schema and parks the raw payload on `JobState.pending_review`
+   (→ `PENDING`); the **worker** merges it into state on resume
+   ([`job_runner.py`](../src/ai_platform/jobs/job_runner.py)) and clears
+   it. (Chosen over a review *artifact* + id indirection: a review is
+   small, ephemeral execution input, not a durable output.)
 
 ## Packaging strategy
 
@@ -92,17 +104,21 @@ We do the logical split first.
 
 ## Phases
 
-- **Phase 0 — seam (done, `fb96cc4`).** `JobSpec`/`JobExecution` as views
-  over `JobDefinition`. Zero behavior change; boundary locked + tested.
-- **Phase 1 — invert ownership.** Domains build `JobSpec` + `JobExecution`
-  directly, in separate `control.py` / `execution.py` modules. The API
-  registry holds only `JobSpec` (imports no engine); workers hold
-  `JobExecution` for their runtime. Retire `JobDefinition`. composition
-  root loads control (all domains) for the API, execution-per-runtime for
-  workers.
-- **Phase 2 — cut the leaks.** Move topology onto `JobSpec`; move review
-  to a worker-side merge of a payload on the job record. Delete the
-  load-bearing rule.
+Phase 1 is landed as green increments (the leak fixes come first, while
+`JobDefinition` still exists, so the final split is trivial):
+
+- **Phase 0 — seam (done, `fb96cc4`).** `JobControl`/`JobExecution` as
+  views over `JobDefinition`. Zero behavior change; boundary tested.
+- **Phase 1a — review-as-data (done, `d30c40b`).** Leak #2 fixed; API no
+  longer touches the state model.
+- **Phase 1b — workflow descriptor.** Worker generates JSON; API serves
+  it from the blob store. Leak #1 fixed; API stops reading `pydantic_graph`.
+- **Phase 1c — invert ownership.** Domains build `JobControl` +
+  `JobExecution` directly in separate `control.py` / `execution.py`
+  modules. The API registry holds only `JobControl` (imports no engine);
+  workers hold `JobExecution` for their runtime. Retire `JobDefinition`.
+  composition_root loads control (all domains) for the API,
+  execution-per-runtime for workers. Delete the load-bearing rule.
 - **Phase 3 — physical packaging (optional).**
 
 ## Shared library
