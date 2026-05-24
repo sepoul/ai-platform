@@ -66,12 +66,62 @@ class EdgeSpec:
     label: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# Control plane vs. execution plane
+#
+# A job has two audiences with disjoint needs:
+#
+#   - the **control plane** (the API process) accepts submissions, renders
+#     the workflow, and returns typed results. It needs *schemas* only —
+#     never the graph engine — so it can run without any runtime-specific
+#     dependency (pydantic_graph, crewai, …).
+#   - the **execution plane** (a worker) runs the graph to completion. It
+#     needs the graph, nodes, deps factory, and persistence hooks.
+#
+# `JobSpec` and `JobExecution` are those two views. Today they are derived
+# from `JobDefinition` (below) so nothing downstream changes; the next step
+# inverts this — domains build the two directly and `JobDefinition` is
+# retired. See docs/control_execution_split.md.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class JobSpec:
+    """Control-plane view: everything the API needs, nothing from the engine."""
+    name: str                                       # key used in API and worker
+    label: str                                      # human label (was graph_ref)
+    submit_input_type: type[BaseJobInput]           # submit request body schema
+    result_type: type[BaseJobResult]                # typed result schema
+    gates: list[NodeGate]                           # human-review schemas (node → review_type)
+    edges: list[EdgeSpec] = field(default_factory=list)  # topology for rendering
+    # Optional: pulls the canonical typed result from the workspace given a
+    # JobRecord. The result endpoint prefers this over the in-record
+    # `result_payload`. Touches only the shared workspace lib, never the engine.
+    fetch_result: Callable[[Any], BaseJobResult] | None = None
+
+
+@dataclass(frozen=True)
+class JobExecution:
+    """Execution-plane view: everything a worker needs to run the graph."""
+    name: str                                       # key used in API and worker
+    graph: Any                                      # pydantic_graph Graph instance
+    state_type: type                                # BaseJobState subclass
+    start_node_key: str                             # class name of the entry node
+    node_registry: dict[str, type]                  # class name → node class (ordered)
+    deps_factory: Callable[[dict[str, Any]], Any]   # (deps_payload,) → deps
+    extract_result: Callable[[Any], BaseJobResult]  # (state,) → typed result
+    policy: ExecutionPolicy                          # executable human-gating
+    persistence: PersistencePolicy = field(default_factory=PersistencePolicy)
+
+
 @dataclass
 class JobDefinition:
-    """Single source of truth for a registered job type.
+    """A registered job type as the union of its control + execution planes.
 
-    Fully self-contained: the executor calls deps_factory and persistence
-    callbacks without knowing anything about domain clients.
+    Transitional: domains still build this flat object, but consumers
+    should read through the `.spec` (control) and `.execution` (execution)
+    views rather than the flat fields. Phase 1 inverts ownership — domains
+    build `JobSpec`/`JobExecution` directly and this class is retired.
     """
     name: str                         # key used in API and worker ("math_qa")
     graph_ref: str                    # human label ("math_qa_graph")
@@ -91,3 +141,31 @@ class JobDefinition:
     # in-record `result_payload`, which then acts as a cheap status preview.
     # Domains close over their workspace client when building the callback.
     fetch_result: Callable[[Any], BaseJobResult] | None = None
+
+    @property
+    def spec(self) -> JobSpec:
+        """Control-plane view — what the API consumes (see `JobSpec`)."""
+        return JobSpec(
+            name=self.name,
+            label=self.graph_ref,
+            submit_input_type=self.submit_input_type,
+            result_type=self.result_type,
+            gates=self.policy.gates,
+            edges=self.edges,
+            fetch_result=self.fetch_result,
+        )
+
+    @property
+    def execution(self) -> JobExecution:
+        """Execution-plane view — what a worker consumes (see `JobExecution`)."""
+        return JobExecution(
+            name=self.name,
+            graph=self.graph,
+            state_type=self.state_type,
+            start_node_key=self.start_node_key,
+            node_registry=self.node_registry,
+            deps_factory=self.deps_factory,
+            extract_result=self.extract_result,
+            policy=self.policy,
+            persistence=self.persistence,
+        )
