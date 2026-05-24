@@ -71,6 +71,11 @@ class JobState(BaseModel):
     # waiting for human input
     waiting_for: str | None = None  # e.g. "human_review_signals"
     resume_token: str | None = None
+    # A human review submitted via the API but not yet applied to graph
+    # state. The API only validates + stores the raw payload here (it has
+    # no business deserializing the execution state model); the worker
+    # merges it into state on resume and clears this. See job_runner.
+    pending_review: dict[str, Any] | None = None
 
     cancel_requested: bool = False
 

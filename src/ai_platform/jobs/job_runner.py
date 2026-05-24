@@ -28,6 +28,20 @@ async def run_graph_job(
     if checkpoint:
         state = job_def.state_type.model_validate(checkpoint.state_data)
 
+        # Apply any human review the API stored on the record (review-as-data).
+        # The API only validated + parked the raw payload; merging it into the
+        # execution state model is the worker's job. Clear it once applied so a
+        # later gate can't re-consume a stale review.
+        pending = record.state.pending_review
+        if pending and checkpoint.gated_node:
+            gate = job_def.policy.gate_for(checkpoint.gated_node)
+            if gate:
+                review = gate.review_type.model_validate(pending)
+                state.set_review(checkpoint.gated_node, review)
+                record.state.pending_review = None
+                record._bump()
+                executor.repo.put(record)
+
         if checkpoint.next_node_key == SENTINEL_DONE:
             _run_persist(job_def.persistence.on_complete, job_id, state)
             result = job_def.extract_result(state)

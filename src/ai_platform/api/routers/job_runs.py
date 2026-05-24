@@ -19,7 +19,7 @@ from ai_platform.api.schemas.jobs import (
 )
 from ai_platform.compute.base import ComputeBackend
 from ai_platform.jobs.execution_policy import JobDefinition
-from ai_platform.jobs.graph_execution import GraphCheckpoint, GraphJobExecutor
+from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobStatus
 
 
@@ -99,16 +99,11 @@ def make_job_runs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
                 ),
             )
 
-        state = job_def.state_type.model_validate(checkpoint.state_data)
-        state.set_review(gated_node, review)
-
-        updated_ckpt = GraphCheckpoint(
-            state_data=state.model_dump(),
-            next_node_key=checkpoint.next_node_key,
-            gated_node=None,
-            attempt=checkpoint.attempt,
-        )
-        record.state.resume_token = updated_ckpt.model_dump_json()
+        # Review-as-data: the API validates the body against the gate's
+        # schema and stores the raw payload on the record. It does NOT
+        # deserialize/merge the execution state model — the worker does
+        # that on resume (see job_runner). Keeps the API engine-free.
+        record.state.pending_review = review.model_dump(mode="json")
         record.state.status = JobStatus.PENDING
         record.state.waiting_for = None
         record._bump()

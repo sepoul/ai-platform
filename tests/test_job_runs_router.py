@@ -243,12 +243,12 @@ def test_review_typed_body_resumes_job():
         json={"approved": True, "notes": "looks good"},
     )
     assert resp.status_code == 200, resp.text
-    # Resume token written, status flipped to PENDING.
+    # Review-as-data: raw payload parked on the record, status → PENDING.
+    # The API does NOT merge it into the checkpoint (that's the worker's job).
     executor.repo.put.assert_called_once()
     updated = executor.repo.put.call_args.args[0]
     assert updated.state.status == JobStatus.PENDING
-    assert updated.state.resume_token  # non-empty checkpoint json
-    assert "looks good" in updated.state.resume_token
+    assert updated.state.pending_review == {"approved": True, "notes": "looks good"}
 
 
 def test_review_rejects_missing_required_field():

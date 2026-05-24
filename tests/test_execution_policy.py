@@ -369,6 +369,36 @@ async def test_handler_resume_with_review_completes():
 
 
 @pytest.mark.anyio
+async def test_handler_applies_pending_review_on_resume():
+    """Review-as-data: the API parked a raw review payload on the record; the
+    worker merges it into state on resume, clears it, persists, and completes."""
+    policy = ExecutionPolicy(gates=[NodeGate("SummarizeNode", SummarizeReview)])
+    job_def = _make_job_def(policy)
+
+    # State after the first run — SummarizeNode ran, but NO review in state yet
+    # and the checkpoint is still gated on it (unlike the pre-merged case above).
+    state_after_run = DummyState(computed_value=42, summary="Value is 42")
+    checkpoint = GraphCheckpoint(
+        state_data=state_after_run.model_dump(),
+        next_node_key=SENTINEL_DONE,
+        gated_node="SummarizeNode",
+    )
+    executor = MockExecutor(checkpoint=checkpoint)
+    executor.repo = MagicMock()
+
+    record = _make_record()
+    record.state.pending_review = {"approved": True, "notes": "accepted"}
+
+    await run_graph_job(record, executor, job_def)
+
+    assert executor.completed is True
+    assert executor.completed_result["review"]["approved"] is True
+    # The worker cleared the parked review and persisted the record.
+    assert record.state.pending_review is None
+    executor.repo.put.assert_called_once_with(record)
+
+
+@pytest.mark.anyio
 async def test_handler_resume_from_mid_graph_gate():
     """Resume from ComputeNode gate: SummarizeNode runs, then job completes (no gate on it)."""
     policy = ExecutionPolicy(gates=[
