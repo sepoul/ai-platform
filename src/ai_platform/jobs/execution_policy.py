@@ -78,22 +78,24 @@ class EdgeSpec:
 #   - the **execution plane** (a worker) runs the graph to completion. It
 #     needs the graph, nodes, deps factory, and persistence hooks.
 #
-# `JobSpec` and `JobExecution` are those two views. Today they are derived
-# from `JobDefinition` (below) so nothing downstream changes; the next step
-# inverts this — domains build the two directly and `JobDefinition` is
-# retired. See docs/control_execution_split.md.
+# `JobControl` and `JobExecution` are those two planes. Today they are
+# derived from `JobDefinition` (below) so nothing downstream changes; the
+# next step inverts this — domains build the two directly and `JobDefinition`
+# is retired. (Named `JobControl`, not `JobSpec`: the platform already has a
+# per-run `JobSpec` — job identity — in job_repository.) Topology (edges)
+# lives on the execution plane; the API serves it via the generated workflow
+# descriptor, not these types. See docs/control_execution_split.md.
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class JobSpec:
+class JobControl:
     """Control-plane view: everything the API needs, nothing from the engine."""
     name: str                                       # key used in API and worker
     label: str                                      # human label (was graph_ref)
     submit_input_type: type[BaseJobInput]           # submit request body schema
     result_type: type[BaseJobResult]                # typed result schema
     gates: list[NodeGate]                           # human-review schemas (node → review_type)
-    edges: list[EdgeSpec] = field(default_factory=list)  # topology for rendering
     # Optional: pulls the canonical typed result from the workspace given a
     # JobRecord. The result endpoint prefers this over the in-record
     # `result_payload`. Touches only the shared workspace lib, never the engine.
@@ -112,6 +114,7 @@ class JobExecution:
     extract_result: Callable[[Any], BaseJobResult]  # (state,) → typed result
     policy: ExecutionPolicy                          # executable human-gating
     persistence: PersistencePolicy = field(default_factory=PersistencePolicy)
+    edges: list[EdgeSpec] = field(default_factory=list)  # graph topology (for the descriptor)
 
 
 @dataclass
@@ -119,9 +122,9 @@ class JobDefinition:
     """A registered job type as the union of its control + execution planes.
 
     Transitional: domains still build this flat object, but consumers
-    should read through the `.spec` (control) and `.execution` (execution)
-    views rather than the flat fields. Phase 1 inverts ownership — domains
-    build `JobSpec`/`JobExecution` directly and this class is retired.
+    should read through the `.control` and `.execution` views rather than
+    the flat fields. Phase 1c inverts ownership — domains build
+    `JobControl`/`JobExecution` directly and this class is retired.
     """
     name: str                         # key used in API and worker ("math_qa")
     graph_ref: str                    # human label ("math_qa_graph")
@@ -143,15 +146,14 @@ class JobDefinition:
     fetch_result: Callable[[Any], BaseJobResult] | None = None
 
     @property
-    def spec(self) -> JobSpec:
-        """Control-plane view — what the API consumes (see `JobSpec`)."""
-        return JobSpec(
+    def control(self) -> JobControl:
+        """Control-plane view — what the API consumes (see `JobControl`)."""
+        return JobControl(
             name=self.name,
             label=self.graph_ref,
             submit_input_type=self.submit_input_type,
             result_type=self.result_type,
             gates=self.policy.gates,
-            edges=self.edges,
             fetch_result=self.fetch_result,
         )
 
@@ -168,4 +170,5 @@ class JobDefinition:
             extract_result=self.extract_result,
             policy=self.policy,
             persistence=self.persistence,
+            edges=self.edges,
         )
