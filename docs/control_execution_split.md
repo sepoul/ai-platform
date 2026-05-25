@@ -155,9 +155,54 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   worker loop inside `start_worker`/`_tick`, so the `enqueue` path the API
   uses is engine-free. Verified by `tests/test_import_guard.py` (incl. a
   subprocess that boots the real API entrypoint under the guard).
-- **Phase 3b — physical packaging (still optional, not done).** Separate
-  installable packages with per-image deps. The guard makes this less
-  urgent: the boundary is now enforced at runtime, not just by layout.
+- **Phase 3b — physical packaging (IN PROGRESS).** Decision: **true source
+  split** as a **`uv` workspace** of three packages. Import paths stay the
+  same via PEP-420 namespace packages (no `.py` edits) — only file locations,
+  `__init__.py` removal at split roots, and pyproject/Docker change. Boundary
+  is the `JobRecord`; shared core both ways.
+
+  **Workspace layout**
+  ```
+  pyproject.toml                      # [tool.uv.workspace] members=["packages/*"] + pytest
+  packages/core/pyproject.toml        # name mathapp-core; shared deps only
+  packages/core/src/...
+  packages/api/pyproject.toml         # deps: mathapp-core + fastapi + uvicorn
+  packages/api/src/...
+  packages/worker/pyproject.toml      # deps: mathapp-core + pydantic_graph + pydantic_ai
+  packages/worker/src/...             #   + optional-deps: crewai (the crewai runtime)
+  ```
+
+  **Module partition** (cross-cutters resolved):
+  - **core** — `ai_platform/{workspace,compute,runtime,ai/prompts}`,
+    `ai_platform/jobs/*` EXCEPT `job_runner.py`+`worker_loop.py`
+    (`graph_execution` is already engine-free via TYPE_CHECKING),
+    `mathai/<d>/{models,artifacts,state,registry,crew,tools*}`,
+    `mathai/workspace`, `mathai/api/dependencies`, `mathapp/composition_root`.
+    Also move here (pydantic-only, needed by both api router + worker's gen):
+    `ai_platform/api/{pydantic_fields,workflow_descriptor,schemas/workflows}`
+    → relocate to `ai_platform/jobs/` to avoid an `ai_platform.api` namespace split.
+    deps: pydantic, storage (b2sdk, supabase), redis/celery, httpx, pyyaml.
+  - **api (control)** — `ai_platform/api/{app,routers,schemas(except workflows)}`,
+    `mathai/<d>/control.py`, `mathapp/entrypoints/api.py`. deps: core + fastapi + uvicorn.
+  - **worker (execution)** — `mathai/<d>/{workflow,execution}`,
+    `ai_platform/jobs/{job_runner,worker_loop}`, `ai_platform/ai/providers`,
+    `mathapp/entrypoints/{worker,celery_app,gen_workflows}`. deps: core +
+    pydantic_graph + pydantic_ai + logfire; `[crewai]` extra: + crewai (no logfire).
+
+  **Namespace packages** (delete `__init__.py` at these split roots; keep on
+  leaves): `ai_platform`, `ai_platform.jobs`, `ai_platform.ai`, `mathai`,
+  `mathai.<domain>`, `mathapp`, `mathapp.entrypoints`.
+
+  **Pre-step:** verify `mathai/<d>/tools.py` and `mathai/<d>/crew/*` import
+  footprint — if they pull `pydantic_ai`/`crewai`, they belong in worker, not core.
+
+  **Tests:** `[tool.pytest.ini_options] pythonpath` = the three `packages/*/src`
+  roots (or `uv sync` editable). Target: 100 still green.
+
+  **Docker:** `Dockerfile.api` → `uv pip install packages/api`;
+  `Dockerfile.worker` → `uv pip install packages/worker` (`[crewai]` for that pool).
+  Result: the api image has no `pydantic_graph` (engine import = ModuleNotFound),
+  the crewai worker image has no `logfire` — physical isolation + the import guard.
 
 ## Shared library
 
