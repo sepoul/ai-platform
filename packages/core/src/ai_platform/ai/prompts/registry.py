@@ -17,10 +17,10 @@ from typing import List, Tuple
 import yaml
 
 from ai_platform.ai.prompts.models import Prompt
+from ai_platform.utilities.paths import find_ancestor_containing
 
-# Resolve the instructions root relative to the repo root.
-
-_INSTRUCTIONS_DIR = Path(__file__).resolve().parents[4] / "instructions"
+# Walk up to the dir containing instructions/ (robust to package depth).
+_INSTRUCTIONS_DIR = find_ancestor_containing("instructions") / "instructions"
 
 
 def _load(domain: str, name: str) -> str:

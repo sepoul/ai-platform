@@ -1,3 +1,20 @@
+# uv workspace root for the control/execution-plane split (docs/control_execution_split.md).
+# Three member packages share import namespaces (PEP-420) but ship as distinct
+# installable distributions with disjoint dependency closures:
+#   packages/core    (mathapp-core)             — shared: JobRecord, storage, compute
+#   packages/api     (mathapp-control-plane)    — core + fastapi, NO engine
+#   packages/worker  (mathapp-execution-plane)  — core + pydantic_graph/pydantic_ai (+[crewai])
+#
+# Tests run against the source via pythonpath (no install needed); deploys use
+# `uv` to install one member per image.
+
+[tool.uv.workspace]
+members = ["packages/core", "packages/api", "packages/worker"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [
+    "packages/core/src",
+    "packages/api/src",
+    "packages/worker/src",
+]

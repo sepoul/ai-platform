@@ -7,6 +7,7 @@ control plane and *blocks* the engine, in a guaranteed-fresh interpreter
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,14 +19,21 @@ from ai_platform.jobs.import_guard import (
     _DenyFinder,
 )
 
-_SRC = Path(__file__).resolve().parents[1] / "src"
+_ROOT = Path(__file__).resolve().parents[1]
+# The three workspace src roots (PEP-420 namespace packages span them).
+_PYTHONPATH = os.pathsep.join(
+    str(_ROOT / "packages" / p / "src") for p in ("core", "api", "worker")
+)
 
 
-def _run(code: str) -> subprocess.CompletedProcess:
+def _run(code: str, extra_env: dict | None = None) -> subprocess.CompletedProcess:
+    env = {"PYTHONPATH": _PYTHONPATH, "PATH": os.environ.get("PATH", "")}
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "-c", code],
-        cwd=str(_SRC.parent),
-        env={"PYTHONPATH": str(_SRC), "PATH": __import__("os").environ.get("PATH", "")},
+        cwd=str(_ROOT),
+        env=env,
         capture_output=True,
         text=True,
     )
@@ -94,17 +102,6 @@ def test_api_entrypoint_boots_under_the_guard(tmp_path: Path):
         "assert api.app is not None\n"
         "print('API_OK')\n"
     )
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=str(_SRC.parent),
-        env={
-            "PYTHONPATH": str(_SRC),
-            "PATH": __import__("os").environ.get("PATH", ""),
-            "BACKEND": "local",
-            "LOCAL_DATA_DIR": str(tmp_path),
-        },
-        capture_output=True,
-        text=True,
-    )
+    proc = _run(code, extra_env={"BACKEND": "local", "LOCAL_DATA_DIR": str(tmp_path)})
     assert proc.returncode == 0, proc.stderr
     assert "API_OK" in proc.stdout

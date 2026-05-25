@@ -17,9 +17,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_platform.ai.prompts.registry import parse_frontmatter
+from ai_platform.utilities.paths import find_ancestor_containing
 from mathai.math_conversation.models import PersonaSpec, SkillSpec
 
-_INSTRUCTIONS_DIR = Path(__file__).resolve().parents[3] / "instructions"
+_INSTRUCTIONS_DIR = find_ancestor_containing("instructions") / "instructions"
 _DOMAIN = "math_conversation"
 
 

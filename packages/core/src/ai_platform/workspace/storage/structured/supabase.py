@@ -92,7 +92,9 @@ def make_pool(
 # schema is supplied (default `public`).
 # ---------------------------------------------------------------------------
 
-_MIGRATIONS_DIR = Path(__file__).resolve().parents[5] / "supabase" / "migrations"
+from ai_platform.utilities.paths import find_ancestor_containing
+
+_MIGRATIONS_DIR = find_ancestor_containing("supabase") / "supabase" / "migrations"
 
 _TRACKING_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS _schema_migrations (
