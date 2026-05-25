@@ -1,6 +1,8 @@
 # Control plane / execution plane split
 
-_Status: Phase 0 (`fb96cc4`) + review-as-data (`d30c40b`) landed. Last updated 2026-05-24._
+_Status: **complete** — Phases 0–1 landed (1c-iv `bcc8a14`). The API imports
+no engine; `JobDefinition` is retired. Phase 3 (physical packaging) remains
+optional. Last updated 2026-05-25._
 
 > **Naming:** the control-plane type is `JobControl` (not `JobSpec`) — the
 > platform already has a `JobSpec` (per-run job identity in
@@ -128,12 +130,17 @@ Phase 1 is landed as green increments (the leak fixes come first, while
     stores `jd.control`; routers consume `JobControl`; `get_job_controls`.
     (API still *imports* the engine at bootstrap — domains build
     `JobDefinition`; removed in 1c-iv.)
-  - **1c-iv (the big one, next).** Domains build `JobControl` + `JobExecution`
+  - **1c-iv (done, `bcc8a14`).** Domains build `JobControl` + `JobExecution`
     directly in `control.py` / `execution.py` (`register_control` /
-    `register_execution`); composition_root loads control (all domains)
-    for the API, execution-per-runtime for workers; `build_workflow_descriptor`
-    takes `(control, execution)`. Retire `JobDefinition` + the views.
-    Delete the load-bearing rule.
+    `register_execution`); composition_root loads control (all domains) for
+    the API, execution-per-runtime for workers; `build_workflow_descriptor`
+    takes `(control, execution)`. `JobDefinition` + the views are gone.
+    `GraphCheckpoint` extracted to `ai_platform.jobs.checkpoint` (pure
+    pydantic) — it was the last engine leak (`result_fetcher` →
+    `fetch_result` → API pulled it from `graph_execution`). **Verified: the
+    API imports neither `pydantic_graph` nor `crewai`.** The load-bearing
+    rule is narrowed, not deleted — it now guards the two all-execution
+    consumers (the descriptor generator + single-pool celery), not the API.
 - **Phase 3 — physical packaging (optional).**
 
 ## Shared library
