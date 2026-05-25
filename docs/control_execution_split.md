@@ -155,11 +155,14 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   worker loop inside `start_worker`/`_tick`, so the `enqueue` path the API
   uses is engine-free. Verified by `tests/test_import_guard.py` (incl. a
   subprocess that boots the real API entrypoint under the guard).
-- **Phase 3b — physical packaging (IN PROGRESS).** Decision: **true source
-  split** as a **`uv` workspace** of three packages. Import paths stay the
-  same via PEP-420 namespace packages (no `.py` edits) — only file locations,
-  `__init__.py` removal at split roots, and pyproject/Docker change. Boundary
-  is the `JobRecord`; shared core both ways.
+- **Phase 3b — physical packaging (DONE).** True source split into three
+  installable packages under `packages/{core,api,worker}`, import paths
+  unchanged via PEP-420 namespace packages. Per-service Dockerfiles install
+  ONE package from core + itself (path source) → the api image has no engine
+  or worker source; the worker image has no api source. Verified: a standalone
+  `uv pip install -e packages/api` imports the control plane with
+  pydantic_graph/pydantic_ai/crewai/logfire all absent. Notes below describe
+  the plan as executed.
 
   **Workspace layout**
   ```
