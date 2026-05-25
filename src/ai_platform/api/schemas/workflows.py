@@ -39,6 +39,7 @@ class GateSpec(BaseModel):
 
 class WorkflowSpecResponse(BaseModel):
     job_type: str
+    label: str = ""             # human label (was JobDefinition.graph_ref)
     submit_params: List[ParamSpec] = []
     stages: List[StageResponse]
     edges: List[EdgeResponse]

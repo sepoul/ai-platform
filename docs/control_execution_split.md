@@ -111,8 +111,12 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   views over `JobDefinition`. Zero behavior change; boundary tested.
 - **Phase 1a — review-as-data (done, `d30c40b`).** Leak #2 fixed; API no
   longer touches the state model.
-- **Phase 1b — workflow descriptor.** Worker generates JSON; API serves
-  it from the blob store. Leak #1 fixed; API stops reading `pydantic_graph`.
+- **Phase 1b — workflow descriptor (done).** `mathapp.entrypoints.gen_workflows`
+  introspects each graph and parks `{job_type: descriptor}` as `workflows.json`
+  in the blob store; the workflows router serves it (optional — empty until
+  generated). Leak #1 fixed; the API no longer imports `pydantic_graph`.
+  **Deploy step:** run `python -m mathapp.entrypoints.gen_workflows` (engine
+  context) after deploy / graph changes.
 - **Phase 1c — invert ownership.** Domains build `JobControl` +
   `JobExecution` directly in separate `control.py` / `execution.py`
   modules. The API registry holds only `JobControl` (imports no engine);

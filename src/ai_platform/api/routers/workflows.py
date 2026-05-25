@@ -1,36 +1,47 @@
-"""Platform workflows router — exposes registered job definitions as graph specs.
+"""Platform workflows router — serves the static workflow descriptors.
 
-Param specs (submit + resume) are derived from the typed pydantic models
-(`submit_input_type`, `gate.review_type`) via their JSON schemas — those
-models are the single source of truth.
+The descriptors are generated offline by an admin command running in an
+engine context (`mathapp.entrypoints.gen_workflows`) and parked in the
+blob store as a single `workflows.json`. This router only reads + serves
+them, so the API never imports `pydantic_graph`. The endpoints are
+**optional**: if the blob hasn't been generated yet, `/workflows` is empty
+and `/workflows/{job_type}` 404s.
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 
-from ai_platform.api.pydantic_fields import params_from_model
-from ai_platform.runtime.registry import get_job_definitions
 from ai_platform.api.schemas.workflows import (
-    EdgeResponse,
-    GateSpec,
-    StageResponse,
     WorkflowListItem,
     WorkflowListResponse,
     WorkflowSpecResponse,
 )
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.api.workflow_descriptor import WORKFLOWS_BLOB
+from ai_platform.runtime.registry import get_platform_client
+from ai_platform.workspace.client import PlatformClient
+from ai_platform.workspace.storage.exceptions import ObjectNotFound
 
 router = APIRouter()
 
 
+def _load_descriptors(client: PlatformClient) -> dict[str, dict]:
+    """`{job_type: descriptor}` from the blob store, or empty if ungenerated."""
+    try:
+        raw = client.file_repo.get_canonical_file_bytes(WORKFLOWS_BLOB)
+    except ObjectNotFound:
+        return {}
+    return json.loads(raw)
+
+
 @router.get("/workflows", response_model=WorkflowListResponse)
-def list_workflows(
-    jobs: dict[str, JobDefinition] = Depends(get_job_definitions),
-):
+def list_workflows(client: PlatformClient = Depends(get_platform_client)):
+    descriptors = _load_descriptors(client)
     return WorkflowListResponse(
         workflows=[
-            WorkflowListItem(job_type=name, label=job_def.graph_ref)
-            for name, job_def in jobs.items()
+            WorkflowListItem(job_type=job_type, label=d.get("label", job_type))
+            for job_type, d in descriptors.items()
         ]
     )
 
@@ -38,39 +49,9 @@ def list_workflows(
 @router.get("/workflows/{job_type}", response_model=WorkflowSpecResponse)
 def get_workflow_spec(
     job_type: str,
-    jobs: dict[str, JobDefinition] = Depends(get_job_definitions),
+    client: PlatformClient = Depends(get_platform_client),
 ):
-    job_def = jobs.get(job_type)
-    if job_def is None:
+    descriptor = _load_descriptors(client).get(job_type)
+    if descriptor is None:
         raise HTTPException(status_code=404, detail=f"Unknown job type: {job_type}")
-
-    stages = []
-    for name, node_cls in job_def.node_registry.items():
-        gate = job_def.policy.gate_for(name)
-        stages.append(StageResponse(
-            id=name,
-            label=getattr(node_cls, "stage_label", name),
-            description=getattr(node_cls, "stage_description", None),
-            is_human_step=gate is not None,
-            resume_params=params_from_model(gate.review_type, skip_fields=("job_type",)) if gate else [],
-        ))
-
-    gates = [
-        GateSpec(
-            node_name=g.node_name,
-            review_type=g.review_type.__name__,
-            params=params_from_model(g.review_type, skip_fields=("job_type",)),
-        )
-        for g in job_def.policy.gates
-    ]
-
-    return WorkflowSpecResponse(
-        job_type=job_type,
-        submit_params=params_from_model(job_def.submit_input_type, skip_fields=("job_type",)),
-        stages=stages,
-        edges=[
-            EdgeResponse(source=e.source, target=e.target, label=e.label)
-            for e in job_def.edges
-        ],
-        gates=gates,
-    )
+    return WorkflowSpecResponse.model_validate(descriptor)
