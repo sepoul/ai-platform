@@ -26,4 +26,5 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-mathapp-core = { workspace = true }
+# Path (not workspace) so the worker image installs from just core + itself.
+mathapp-core = { path = "../core", editable = true }

@@ -1,0 +1,28 @@
+# Execution-plane image (mathapp-execution-plane): the job implementation —
+# pydantic_graph + pydantic_ai engine. Installs ONLY core + worker (no api
+# code). EXTRA selects the runtime:
+#   EXTRA=logfire  default runtime (Logfire tracing, otel >=1.39)
+#   EXTRA=crewai   crewai runtime (multi-agent, otel <1.35; no logfire)
+# The two are mutually exclusive, so each runs as its own image.
+# See docs/control_execution_split.md and ai_platform/jobs/runtimes.py.
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Only the execution plane's source + shared core + repo-root data. (No api
+# source — true per-image isolation.)
+COPY packages/core   /app/packages/core
+COPY packages/worker /app/packages/worker
+COPY instructions    /app/instructions
+COPY supabase        /app/supabase
+
+ARG EXTRA=logfire
+RUN uv pip install --system --no-cache -e "packages/worker[${EXTRA}]"

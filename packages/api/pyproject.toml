@@ -19,4 +19,7 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-mathapp-core = { workspace = true }
+# Path (not workspace) so a service installs standalone from just core + itself
+# — the api image never needs the worker package present. Still resolves inside
+# the workspace for dev `uv sync`.
+mathapp-core = { path = "../core", editable = true }

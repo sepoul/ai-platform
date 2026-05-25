@@ -21,8 +21,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.api   # control plane: core + FastAPI, NO engine
+    image: mathapp-api:local
     command: >
       python -u -m uvicorn mathapp.entrypoints.api:app
       --host 0.0.0.0
@@ -30,8 +30,6 @@ services:
     environment:
       BACKEND: ${BACKEND:-local}
       LOCAL_DATA_DIR: /data
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APP_KEY: ${B2_APP_KEY:-}
       B2_BUCKET: ${B2_BUCKET:-app-data}
@@ -59,8 +57,10 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.worker
+      args:
+        EXTRA: logfire   # default execution runtime: engine + Logfire (otel >=1.39)
+    image: mathapp-worker:local
     command: >
       python -u -m mathapp.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -90,18 +90,18 @@ services:
       - api
     restart: unless-stopped
 
-  # crewai runtime worker pool. Built from requirements-crewai.txt (crewai,
-  # no logfire — the otel-sdk pins conflict). Only claims jobs whose
-  # JobDefinition.runtime == "crewai" (math_conversation). Opt-in via
-  # `--profile crewai`; default `docker compose up` doesn't build/run it.
+  # crewai runtime worker pool. Built from packages/worker[crewai] (crewai,
+  # no logfire — the otel-sdk pins conflict). Only serves the math_conversation
+  # domain (runtime=crewai). Opt-in via `--profile crewai`; default
+  # `docker compose up` doesn't build/run it.
   # See ai_platform/jobs/runtimes.py and docs/math_conversation.md.
   worker-crewai:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.worker
       args:
-        REQUIREMENTS: requirements-crewai.txt
-    image: mathapp-crewai:local
+        EXTRA: crewai
+    image: mathapp-worker-crewai:local
     command: >
       python -u -m mathapp.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -150,8 +150,10 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.worker
+      args:
+        EXTRA: logfire   # celery worker is an execution context → engine package
+    image: mathapp-worker:local
     command: >
       celery -A mathapp.entrypoints.celery_app worker
       --loglevel=info
