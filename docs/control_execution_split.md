@@ -121,11 +121,14 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   `.control` / `.execution` views as a bridge (each side migrates while
   domains still build `JobDefinition`; the god-object is retired last):
   - **1c-i (done).** `JobSpec`→`JobControl`; `edges`→execution plane.
-  - **1c-ii.** Execution side → `JobExecution`: worker/compute/job_runner
-    take `JobExecution` (entrypoints pass `jd.execution` views).
-  - **1c-iii.** Control side → `JobControl`: API registry stores
-    `jd.control` views; routers consume `JobControl`; `get_job_controls`.
-  - **1c-iv (the big one).** Domains build `JobControl` + `JobExecution`
+  - **1c-ii (done, `a742893`).** Execution side → `JobExecution`:
+    worker/compute/job_runner take `JobExecution` (entrypoints pass
+    `jd.execution` views).
+  - **1c-iii (done, `6959f58`).** Control side → `JobControl`: registry
+    stores `jd.control`; routers consume `JobControl`; `get_job_controls`.
+    (API still *imports* the engine at bootstrap — domains build
+    `JobDefinition`; removed in 1c-iv.)
+  - **1c-iv (the big one, next).** Domains build `JobControl` + `JobExecution`
     directly in `control.py` / `execution.py` (`register_control` /
     `register_execution`); composition_root loads control (all domains)
     for the API, execution-per-runtime for workers; `build_workflow_descriptor`
