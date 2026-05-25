@@ -117,12 +117,20 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   generated). Leak #1 fixed; the API no longer imports `pydantic_graph`.
   **Deploy step:** run `python -m mathapp.entrypoints.gen_workflows` (engine
   context) after deploy / graph changes.
-- **Phase 1c — invert ownership.** Domains build `JobControl` +
-  `JobExecution` directly in separate `control.py` / `execution.py`
-  modules. The API registry holds only `JobControl` (imports no engine);
-  workers hold `JobExecution` for their runtime. Retire `JobDefinition`.
-  composition_root loads control (all domains) for the API,
-  execution-per-runtime for workers. Delete the load-bearing rule.
+- **Phase 1c — invert ownership.** Done as green sub-steps using the
+  `.control` / `.execution` views as a bridge (each side migrates while
+  domains still build `JobDefinition`; the god-object is retired last):
+  - **1c-i (done).** `JobSpec`→`JobControl`; `edges`→execution plane.
+  - **1c-ii.** Execution side → `JobExecution`: worker/compute/job_runner
+    take `JobExecution` (entrypoints pass `jd.execution` views).
+  - **1c-iii.** Control side → `JobControl`: API registry stores
+    `jd.control` views; routers consume `JobControl`; `get_job_controls`.
+  - **1c-iv (the big one).** Domains build `JobControl` + `JobExecution`
+    directly in `control.py` / `execution.py` (`register_control` /
+    `register_execution`); composition_root loads control (all domains)
+    for the API, execution-per-runtime for workers; `build_workflow_descriptor`
+    takes `(control, execution)`. Retire `JobDefinition` + the views.
+    Delete the load-bearing rule.
 - **Phase 3 — physical packaging (optional).**
 
 ## Shared library
