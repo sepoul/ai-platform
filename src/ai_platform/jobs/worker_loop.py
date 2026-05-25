@@ -4,7 +4,7 @@ import asyncio
 import logging
 import traceback
 
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.job_runner import run_graph_job
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 
@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 
-def _run_one_job(executor: GraphJobExecutor, job_definitions: dict[str, JobDefinition],
+def _run_one_job(executor: GraphJobExecutor, job_definitions: dict[str, JobExecution],
                  worker_id : str, max_job_age_s: float | None = None) -> bool:
     # Claim only the job types this worker serves. The worker is handed a
     # runtime-scoped `job_definitions` (see worker.py / WORKER_RUNTIME), so

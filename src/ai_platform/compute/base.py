@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Callable, Protocol
 
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 
 
@@ -39,4 +39,4 @@ class ComputeBackend(Protocol):
 
 
 # Type alias for callers that need the wired pieces, mostly internal.
-WiredCompute = tuple[GraphJobExecutor, dict[str, JobDefinition]]
+WiredCompute = tuple[GraphJobExecutor, dict[str, JobExecution]]

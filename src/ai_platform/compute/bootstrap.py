@@ -4,13 +4,13 @@ from __future__ import annotations
 import os
 
 from ai_platform.compute.base import ComputeBackend
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 
 
 def bootstrap_compute(
     executor: GraphJobExecutor,
-    job_definitions: dict[str, JobDefinition],
+    job_definitions: dict[str, JobExecution],
 ) -> ComputeBackend:
     name = os.getenv("COMPUTE", "poll").lower()
 

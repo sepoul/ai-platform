@@ -11,7 +11,7 @@ and require `CELERY_BROKER_URL` even when `COMPUTE=poll`.
 """
 from __future__ import annotations
 
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 
 
@@ -21,7 +21,7 @@ class CeleryComputeBackend:
     def __init__(
         self,
         executor: GraphJobExecutor,
-        job_definitions: dict[str, JobDefinition],
+        job_definitions: dict[str, JobExecution],
     ):
         self._executor = executor
         self._job_definitions = job_definitions

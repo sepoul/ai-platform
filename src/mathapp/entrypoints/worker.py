@@ -68,7 +68,7 @@ def main():
     # runtimes' jobs PENDING for the pool provisioned with that stack.
     runtime = current_worker_runtime()
     domains = register_domains(domains_for_runtime(runtime), ws)
-    served = domains.job_definitions
+    served = {name: jd.execution for name, jd in domains.job_definitions.items()}
     logger.info(
         "Worker %s runtime=%s serving job types: %s",
         WORKER_ID, runtime, sorted(served.keys()) or "(none)",

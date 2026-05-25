@@ -1,11 +1,11 @@
-"""Generic graph job handler — drives any JobDefinition through its graph."""
+"""Generic graph job handler — drives any JobExecution through its graph."""
 from __future__ import annotations
 
 import logging
 
 from pydantic_graph import End
 
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobRecord
 
@@ -19,7 +19,7 @@ SENTINEL_DONE = "__done__"
 async def run_graph_job(
     record: JobRecord,
     executor: GraphJobExecutor,
-    job_def: JobDefinition,
+    job_def: JobExecution,
 ) -> None:
     job_id = str(record.spec.job_id)
     deps_payload = (record.spec.input_payload or {}).get("deps", {})

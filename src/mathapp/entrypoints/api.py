@@ -21,6 +21,10 @@ from mathapp.composition_root import all_domains
 _workspace = bootstrap_workspace()
 # API serves submission/result for every job type, across all runtimes.
 _domains = register_domains(all_domains(), _workspace)
-_compute = bootstrap_compute(_workspace.executor, _domains.job_definitions)
+# Compute runs the execution plane; hand it JobExecution views. (In poll/
+# celery mode the API doesn't run jobs, but thread mode does — so it needs
+# the engine views regardless.)
+_executions = {name: jd.execution for name, jd in _domains.job_definitions.items()}
+_compute = bootstrap_compute(_workspace.executor, _executions)
 
 app = build_api(workspace=_workspace, domains=_domains, compute=_compute)

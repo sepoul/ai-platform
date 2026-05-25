@@ -62,7 +62,7 @@ def run_job(job_id: str) -> None:
         "Celery worker not bootstrapped — worker_process_init never fired"
     )
     executor = _workspace.executor
-    job_def_map = _domains.job_definitions
+    job_def_map = {name: jd.execution for name, jd in _domains.job_definitions.items()}
 
     try:
         record = executor.mark_running(job_id, worker_id=WORKER_ID)

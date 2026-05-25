@@ -23,7 +23,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.jobs.worker_loop import _run_one_job
 
@@ -36,7 +36,7 @@ class ThreadComputeBackend:
     def __init__(
         self,
         executor: GraphJobExecutor,
-        job_definitions: dict[str, JobDefinition],
+        job_definitions: dict[str, JobExecution],
         max_workers: int = 4,
     ):
         self._executor = executor
