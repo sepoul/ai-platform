@@ -6,23 +6,13 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic_graph import BaseNode, End
 
+from ai_platform.jobs.checkpoint import GraphCheckpoint  # re-exported for callers
 from ai_platform.workspace.storage.protocols import JobRepository
 from ai_platform.workspace.storage.structured.job_repository import JobRecord, JobStatus
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Generic graph checkpoint container
-# ---------------------------------------------------------------------------
-
-class GraphCheckpoint(BaseModel):
-    """Checkpoint for resuming a pydantic_graph run."""
-
-    state_data: dict[str, Any]
-    next_node_key: str       # node class name to start from, or "__done__" when graph is finished
-    gated_node: str | None = None   # class name of the node whose output is pending review
-    attempt: int = 0
+__all__ = ["GraphCheckpoint", "GraphJobExecutor"]
 
 
 # ---------------------------------------------------------------------------

@@ -95,11 +95,18 @@ def test_default_runtime_constant_and_env():
 # ---------------------------------------------------------------------------
 
 def test_composition_root_partitions_domains_by_runtime():
-    from mathapp.composition_root import all_domains, domains_for_runtime
-    default_mods = {m.__module__ for m in domains_for_runtime("default")}
-    crewai_mods = {m.__module__ for m in domains_for_runtime("crewai")}
-    assert default_mods == {"mathai.domain"}
-    assert crewai_mods == {"mathai.math_conversation.domain"}
-    # The crewai runtime must NOT pull math_qa (which imports logfire).
-    assert "mathai.domain" not in crewai_mods
-    assert len(all_domains()) == 2
+    from mathapp.composition_root import (
+        control_registers,
+        execution_registers_all,
+        execution_registers_for_runtime,
+    )
+    # The API loads every domain's control plane (engine-free).
+    assert len(control_registers()) == 2
+    # A worker loads only its runtime's execution modules.
+    default_mods = {r.__module__ for r in execution_registers_for_runtime("default")}
+    crewai_mods = {r.__module__ for r in execution_registers_for_runtime("crewai")}
+    assert default_mods == {"mathai.math_qa.execution"}
+    assert crewai_mods == {"mathai.math_conversation.execution"}
+    # The crewai runtime must NOT pull math_qa's execution (logfire stack).
+    assert "mathai.math_qa.execution" not in crewai_mods
+    assert len(execution_registers_all()) == 2

@@ -18,7 +18,8 @@ from ai_platform.api.workflow_descriptor import build_workflow_descriptor
 from ai_platform.jobs.execution_policy import (
     EdgeSpec,
     ExecutionPolicy,
-    JobDefinition,
+    JobControl,
+    JobExecution,
     NodeGate,
 )
 from ai_platform.jobs.input import BaseJobInput
@@ -49,23 +50,31 @@ class _NodeB:
     stage_label = "Step B"  # no description → None
 
 
-def _job_def(**overrides) -> JobDefinition:
-    base = dict(
+_GATES = [NodeGate("B", _Review)]
+
+
+def _control() -> JobControl:
+    return JobControl(
         name="demo",
-        graph_ref="demo_graph",
+        label="demo_graph",
+        submit_input_type=_Input,
+        result_type=_Result,
+        gates=_GATES,
+    )
+
+
+def _execution() -> JobExecution:
+    return JobExecution(
+        name="demo",
         graph=None,
         state_type=object,
         start_node_key="A",
         node_registry={"A": _NodeA, "B": _NodeB},
         deps_factory=lambda payload: None,
-        policy=ExecutionPolicy(gates=[NodeGate("B", _Review)]),
-        result_type=_Result,
         extract_result=lambda state: _Result(),
-        submit_input_type=_Input,
+        policy=ExecutionPolicy(gates=_GATES),
         edges=[EdgeSpec("A", "B", "to b")],
     )
-    base.update(overrides)
-    return JobDefinition(**base)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +82,7 @@ def _job_def(**overrides) -> JobDefinition:
 # ---------------------------------------------------------------------------
 
 def test_descriptor_projects_graph_into_spec():
-    d = build_workflow_descriptor(_job_def())
+    d = build_workflow_descriptor(_control(), _execution())
 
     assert d.job_type == "demo"
     assert d.label == "demo_graph"
@@ -109,7 +118,7 @@ def _client(blob: bytes | None) -> TestClient:
 
 
 def _blob() -> bytes:
-    d = build_workflow_descriptor(_job_def())
+    d = build_workflow_descriptor(_control(), _execution())
     return json.dumps({"demo": d.model_dump(mode="json")}).encode("utf-8")
 
 

@@ -16,7 +16,7 @@ from typing import Callable, Optional, TYPE_CHECKING
 
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.artifact_service import ArtifactService
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobControl, JobExecution
 from ai_platform.workspace.client import PlatformClient
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class BootstrapContext:
-    """What every domain's `register()` receives at startup.
+    """What every domain's `register_*()` receives at startup.
 
     Carries enough information for the domain to build its workspace
     client without knowing where the bootstrap was invoked from.
@@ -33,27 +33,40 @@ class BootstrapContext:
 
     platform_client: PlatformClient
     backend: str                      # "local" or "b2"
-    artifact_service: ArtifactService  # shared platform service; domains contribute types via `Domain.artifact_types`
+    artifact_service: ArtifactService  # shared platform service; domains contribute types
     root_dir: Optional[str] = None    # only meaningful when backend == "local"
 
 
 @dataclass
-class Domain:
-    """What a domain returns from `register()`.
+class ControlDomain:
+    """What a domain returns from `register_control()` — the API-facing plane.
 
-    `routers` is empty for worker bootstraps that only care about jobs.
-    `artifact_types` is the set of `BaseArtifact` subclasses this domain
-    produces — the platform aggregates them to type the artifact viewer
-    endpoint.
-    Domains are responsible for any side-effecting dependency wiring
-    (FastAPI Depends singletons, etc.) inside their `register()` body
-    before returning the `Domain` value.
+    `job_controls` carry only schemas (no graph engine); `routers` is the
+    domain's optional API surface; `artifact_types` are the `BaseArtifact`
+    subclasses it produces (the platform aggregates them to type the
+    artifact viewer). Building this must not import the execution engine,
+    so the API process stays engine-free.
     """
 
     name: str
-    job_definitions: list[JobDefinition]
+    job_controls: list[JobControl]
     routers: list["APIRouter"] = field(default_factory=list)
     artifact_types: list[type[BaseArtifact]] = field(default_factory=list)
 
 
-DomainRegister = Callable[[BootstrapContext], Domain]
+@dataclass
+class ExecutionDomain:
+    """What a domain returns from `register_execution()` — the worker plane.
+
+    `job_executions` carry the graph engine. `artifact_types` are repeated
+    here (not a control-only concern) because the worker's artifact service
+    must know them to (de)serialize artifacts it mints/reads at run time.
+    """
+
+    name: str
+    job_executions: list[JobExecution]
+    artifact_types: list[type[BaseArtifact]] = field(default_factory=list)
+
+
+ControlRegister = Callable[[BootstrapContext], ControlDomain]
+ExecutionRegister = Callable[[BootstrapContext], ExecutionDomain]

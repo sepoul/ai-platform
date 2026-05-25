@@ -1,7 +1,7 @@
 """Typed job results.
 
 Each domain registers a concrete subclass of `BaseJobResult` on its
-`JobDefinition`. The platform jobs router exposes the union of all
+`JobControl`. The platform jobs router exposes the union of all
 registered result types as a Pydantic discriminated union keyed on
 `job_type`, so a TypeScript client can narrow on `job_type` to get the
 right shape.
@@ -17,7 +17,7 @@ class BaseJobResult(BaseModel):
     """Base class for typed job results.
 
     Subclasses MUST declare a `job_type: Literal["<name>"] = "<name>"`
-    field whose value matches the `JobDefinition.name`. That field is
+    field whose value matches the `JobControl.name`. That field is
     the discriminator across the API's result union.
 
     `artifact_refs` is the list of artifact IDs the job produced. Clients

@@ -31,7 +31,7 @@ class RunSubmitResponse(BaseModel):
 #
 # The platform exposes results as a Pydantic discriminated union over
 # `job_type`. The set of variants is the `result_type` of every registered
-# `JobDefinition`, so it must be assembled at composition time (after the
+# `JobControl`, so it must be assembled at composition time (after the
 # domain has registered its jobs).
 # ---------------------------------------------------------------------------
 

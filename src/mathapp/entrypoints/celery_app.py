@@ -23,10 +23,10 @@ import traceback
 from celery import Celery
 from celery.signals import worker_process_init
 
-from ai_platform.jobs.bootstrap import register_domains
+from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.job_runner import run_graph_job
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import all_domains
+from mathapp.composition_root import execution_registers_all
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +51,7 @@ def _init_worker(**_kwargs) -> None:
     # Single Celery pool registers all domains today. Per-runtime Celery
     # routing (a queue + worker pool per runtime) is future work — until
     # then this pool must run on an env that satisfies every runtime.
-    _domains = register_domains(all_domains(), _workspace)
+    _domains = register_execution_domains(execution_registers_all(), _workspace)
     WORKER_ID = f"celery-{os.getpid()}"
     logger.info("Celery worker process %s bootstrapped", WORKER_ID)
 
@@ -62,7 +62,7 @@ def run_job(job_id: str) -> None:
         "Celery worker not bootstrapped — worker_process_init never fired"
     )
     executor = _workspace.executor
-    job_def_map = {name: jd.execution for name, jd in _domains.job_definitions.items()}
+    job_def_map = _domains.job_executions
 
     try:
         record = executor.mark_running(job_id, worker_id=WORKER_ID)

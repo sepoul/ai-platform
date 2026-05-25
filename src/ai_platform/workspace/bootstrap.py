@@ -23,7 +23,7 @@ class WorkspaceBootstrap:
     backend: str                      # "local" or "b2"
     platform_client: PlatformClient
     executor: GraphJobExecutor
-    artifact_service: ArtifactService  # shared across domains; types added by `register_domains`
+    artifact_service: ArtifactService  # shared across domains; types added by register_*_domains
     root_dir: Optional[str]           # only meaningful when backend == "local"
 
 

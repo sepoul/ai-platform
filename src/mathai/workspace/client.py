@@ -46,7 +46,7 @@ class MathWorkspaceClient:
     ) -> "MathWorkspaceClient":
         """Wraps the shared platform `ArtifactService` plus the platform
         file repo into a math facade. Domains register their artifact
-        types on the shared service (see `register_domains`), so the
+        types on the shared service (see `register_control_domains`), so the
         math hydrator finds them when looking up `MATH_QA_ARTIFACTS`
         types by id.
         """

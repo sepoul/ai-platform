@@ -19,10 +19,13 @@ import json
 import logging
 
 from ai_platform.api.workflow_descriptor import WORKFLOWS_BLOB, build_workflow_descriptor
-from ai_platform.jobs.bootstrap import register_domains
+from ai_platform.jobs.bootstrap import (
+    register_control_domains,
+    register_execution_domains,
+)
 from ai_platform.workspace.bootstrap import bootstrap_workspace
 from ai_platform.workspace.storage.blobs.base import PutFilePayload
-from mathapp.composition_root import all_domains
+from mathapp.composition_root import control_registers, execution_registers_all
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,11 +33,13 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     ws = bootstrap_workspace()
-    domains = register_domains(all_domains(), ws)
+    # Both planes (engine context): schemas from control, topology from execution.
+    controls = register_control_domains(control_registers(), ws).job_controls
+    executions = register_execution_domains(execution_registers_all(), ws).job_executions
 
     descriptors = {
-        name: build_workflow_descriptor(job_def).model_dump(mode="json")
-        for name, job_def in domains.job_definitions.items()
+        name: build_workflow_descriptor(controls[name], executions[name]).model_dump(mode="json")
+        for name in controls
     }
     payload = json.dumps(descriptors, indent=2, sort_keys=True).encode("utf-8")
 

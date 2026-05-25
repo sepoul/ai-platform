@@ -19,31 +19,35 @@ from ai_platform.api.schemas.workflows import (
     StageResponse,
     WorkflowSpecResponse,
 )
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobControl, JobExecution
 
 # logical_name of the single blob holding {job_type: descriptor}.
 WORKFLOWS_BLOB = "workflows.json"
 
 
-def build_workflow_descriptor(job_def: JobDefinition) -> WorkflowSpecResponse:
-    """Project a registered job's graph into the static workflow descriptor.
+def build_workflow_descriptor(
+    control: JobControl, execution: JobExecution
+) -> WorkflowSpecResponse:
+    """Project a job's two planes into the static workflow descriptor.
 
-    Reads the engine objects (node_registry, policy, edges) — which is why
-    this runs at generation time in an engine context, never in the API.
+    Needs both: schemas come from the control plane (submit/review params),
+    topology from the execution plane (node_registry, policy, edges). That's
+    why this runs at generation time in an engine context, never in the API.
     """
+    policy = execution.policy
     stages = [
         StageResponse(
             id=name,
             label=getattr(node_cls, "stage_label", name),
             description=getattr(node_cls, "stage_description", None),
-            is_human_step=job_def.policy.gate_for(name) is not None,
+            is_human_step=policy.gate_for(name) is not None,
             resume_params=(
                 params_from_model(gate.review_type, skip_fields=("job_type",))
-                if (gate := job_def.policy.gate_for(name))
+                if (gate := policy.gate_for(name))
                 else []
             ),
         )
-        for name, node_cls in job_def.node_registry.items()
+        for name, node_cls in execution.node_registry.items()
     ]
     gates = [
         GateSpec(
@@ -51,13 +55,13 @@ def build_workflow_descriptor(job_def: JobDefinition) -> WorkflowSpecResponse:
             review_type=g.review_type.__name__,
             params=params_from_model(g.review_type, skip_fields=("job_type",)),
         )
-        for g in job_def.policy.gates
+        for g in policy.gates
     ]
     return WorkflowSpecResponse(
-        job_type=job_def.name,
-        label=job_def.graph_ref,
-        submit_params=params_from_model(job_def.submit_input_type, skip_fields=("job_type",)),
+        job_type=control.name,
+        label=control.label,
+        submit_params=params_from_model(control.submit_input_type, skip_fields=("job_type",)),
         stages=stages,
-        edges=[EdgeResponse(source=e.source, target=e.target, label=e.label) for e in job_def.edges],
+        edges=[EdgeResponse(source=e.source, target=e.target, label=e.label) for e in execution.edges],
         gates=gates,
     )

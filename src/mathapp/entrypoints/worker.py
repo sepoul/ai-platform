@@ -17,10 +17,10 @@ import signal
 from argparse import ArgumentParser
 
 from ai_platform.compute.bootstrap import bootstrap_compute
-from ai_platform.jobs.bootstrap import register_domains
+from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import domains_for_runtime
+from mathapp.composition_root import execution_registers_for_runtime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,8 +67,8 @@ def main():
     # runtime's jobs — the worker claims exactly those, leaving other
     # runtimes' jobs PENDING for the pool provisioned with that stack.
     runtime = current_worker_runtime()
-    domains = register_domains(domains_for_runtime(runtime), ws)
-    served = {name: jd.execution for name, jd in domains.job_definitions.items()}
+    domains = register_execution_domains(execution_registers_for_runtime(runtime), ws)
+    served = domains.job_executions
     logger.info(
         "Worker %s runtime=%s serving job types: %s",
         WORKER_ID, runtime, sorted(served.keys()) or "(none)",

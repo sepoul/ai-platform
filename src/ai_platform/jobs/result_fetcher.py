@@ -11,7 +11,7 @@ from uuid import UUID
 
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.artifact_service import ArtifactService
-from ai_platform.jobs.graph_execution import GraphCheckpoint
+from ai_platform.jobs.checkpoint import GraphCheckpoint
 
 
 def hydrate_artifact_refs(

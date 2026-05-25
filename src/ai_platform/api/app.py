@@ -5,7 +5,7 @@ Owns three things the composition root used to do inline:
   - Initialize the platform DI singletons (`init_platform`).
   - Mount the four platform routers (jobs / job_runs / workflows /
     prompts) — the discriminated-union response models depend on every
-    `JobDefinition` already being registered, which `register_domains`
+    `JobControl` already being registered, which `register_control_domains`
     guarantees.
   - Mount each domain's routers + a small health endpoint.
 """
@@ -23,7 +23,7 @@ from ai_platform.api.routers.job_logs import router as platform_job_logs
 from ai_platform.api.routers.job_runs import make_job_runs_router
 from ai_platform.api.routers.jobs import make_jobs_router
 from ai_platform.compute.base import ComputeBackend
-from ai_platform.jobs.bootstrap import DomainsBootstrap
+from ai_platform.jobs.bootstrap import ControlBootstrap
 from ai_platform.runtime.registry import init_platform
 from ai_platform.workspace.bootstrap import WorkspaceBootstrap
 
@@ -31,7 +31,7 @@ from ai_platform.workspace.bootstrap import WorkspaceBootstrap
 def build_api(
     *,
     workspace: WorkspaceBootstrap,
-    domains: DomainsBootstrap,
+    domains: ControlBootstrap,
     compute: ComputeBackend,
     title: str = "Math AI API",
 ) -> FastAPI:
@@ -58,9 +58,8 @@ def build_api(
         )
 
     # Routers see only the control plane — no engine objects in the API.
-    job_controls = {name: jd.control for name, jd in domains.job_definitions.items()}
-    app.include_router(make_jobs_router(job_controls), tags=["Platform / Jobs"])
-    app.include_router(make_job_runs_router(job_controls), tags=["Platform / Jobs"])
+    app.include_router(make_jobs_router(domains.job_controls), tags=["Platform / Jobs"])
+    app.include_router(make_job_runs_router(domains.job_controls), tags=["Platform / Jobs"])
     app.include_router(platform_workflows.router, tags=["Platform / Workflows"])
     app.include_router(platform_prompts.router, tags=["Platform / Prompts"])
     app.include_router(

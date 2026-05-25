@@ -55,15 +55,10 @@ from mathai.math_qa.state import MathQAState
 from mathai.math_qa.tools import validate_figure, validate_latex
 from ai_platform.ai.providers.basic_agent import basic_agent
 from ai_platform.runtime.worker_log import NullLogger, WorkerLogger
-from ai_platform.jobs.artifact_service import ArtifactService
-from ai_platform.jobs.execution_policy import (
-    EdgeSpec,
-    ExecutionPolicy,
-    JobDefinition,
-    NodeGate,
-    PersistencePolicy,
-)
-from ai_platform.jobs.result_fetcher import hydrate_artifact_refs
+
+# NOTE: this module is the execution engine (graph + nodes + extraction).
+# The JobControl/JobExecution builders + ExecutionPolicy/edges live in
+# control.py / execution.py so the API never imports the engine.
 
 
 # ---------------------------------------------------------------------------
@@ -270,21 +265,6 @@ math_qa_node_registry: dict[str, type] = {
 
 
 # ---------------------------------------------------------------------------
-# Execution policy — gate after the LaTeX render so the user reviews
-# text + math together.
-# ---------------------------------------------------------------------------
-
-math_qa_policy = ExecutionPolicy(
-    gates=[
-        NodeGate(
-            node_name="GenerateLatexStep",
-            review_type=UserComment,
-        )
-    ]
-)
-
-
-# ---------------------------------------------------------------------------
 # Result extraction (used as the in-record preview payload).
 # ---------------------------------------------------------------------------
 
@@ -333,158 +313,4 @@ def _extract_math_qa_result(state: MathQAState) -> MathQAResult:
         figure=figure_artifact,
         review=review_artifact,
         artifact_refs=list(state.artifact_refs),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Job definition factory — workspace artifact API closed over for persistence
-# ---------------------------------------------------------------------------
-
-def build_math_qa_job_definition(workspace_client) -> JobDefinition:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-    prompt_registry = getattr(
-        getattr(workspace_client, "platform_client", None),
-        "prompt_registry",
-        None,
-    )
-
-    def _load_prompt(name: str) -> Optional[str]:
-        """Best-effort fetch from the prompt registry. Returning None
-        on a miss lets nodes fall back rather than crashing — useful in
-        bare-bones tests that haven't deployed prompts (and that may
-        stub out the workspace without a platform_client at all).
-        """
-        if prompt_registry is None:
-            return None
-        try:
-            return prompt_registry.get_prompt(name).instructions
-        except Exception:
-            return None
-
-    def _deps_factory(payload: dict):
-        job_id = payload.get("_job_id")
-        logger: WorkerLogger = WorkerLogger(job_id) if job_id else NullLogger()
-        return MathQAWorkflowDependencies(
-            question_text=payload.get("question_text", ""),
-            topic=payload.get("topic"),
-            answer_instructions=_load_prompt("math_qa.answer"),
-            latex_instructions=_load_prompt("math_qa.latex_render"),
-            figure_instructions=_load_prompt("math_qa.figure"),
-            logger=logger,
-        )
-
-    def _persist(job_id: str, state: MathQAState) -> list[UUID]:
-        """Mint any artifacts implied by `state` that don't yet exist.
-
-        Idempotent: inspects existing artifacts referenced by
-        `state.artifact_refs` and only mints the ones that are missing.
-        """
-        existing = artifact_api.get_many(state.artifact_refs) if state.artifact_refs else []
-        existing_types = {type(a) for a in existing}
-        new_ids: list[UUID] = []
-
-        if state.question is not None and MathQuestionArtifact not in existing_types:
-            artifact = MathQuestionArtifact(
-                created_by_job=job_id,
-                question_text=state.question.question_text,
-                topic=state.question.topic,
-                difficulty=state.question.difficulty,
-            )
-            artifact_api.put(artifact)
-            new_ids.append(artifact.artifact_id)
-
-        if state.ai_response is not None and GeneratedAnswerArtifact not in existing_types:
-            artifact = GeneratedAnswerArtifact(
-                created_by_job=job_id,
-                answer_text=state.ai_response.answer_text,
-                reasoning_steps=state.ai_response.reasoning_steps,
-                confidence=state.ai_response.confidence,
-                model_used=state.ai_response.model_used,
-            )
-            artifact_api.put(artifact)
-            new_ids.append(artifact.artifact_id)
-
-        if state.latex_answer is not None and LatexAnswerArtifact not in existing_types:
-            artifact = LatexAnswerArtifact(
-                created_by_job=job_id,
-                latex_source=state.latex_answer.latex_source,
-                validation_attempts=state.latex_answer.validation_attempts,
-            )
-            artifact_api.put(artifact)
-            new_ids.append(artifact.artifact_id)
-
-        if state.figure_output is not None and FigureArtifact not in existing_types:
-            spec = state.figure_output.spec if isinstance(state.figure_output.spec, dict) else {}
-            artifact = FigureArtifact(
-                created_by_job=job_id,
-                template=str(spec.get("template", "?")),
-                spec=spec,
-                validation_attempts=state.figure_output.validation_attempts,
-            )
-            artifact_api.put(artifact)
-            new_ids.append(artifact.artifact_id)
-
-        review_raw = state.node_reviews.get("GenerateLatexStep")
-        if review_raw and UserCommentArtifact not in existing_types:
-            comment = UserComment.model_validate(review_raw)
-            artifact = UserCommentArtifact(
-                created_by_job=job_id,
-                comment_text=comment.comment_text,
-                rating=comment.rating,
-                is_correct=comment.is_correct,
-            )
-            artifact_api.put(artifact)
-            new_ids.append(artifact.artifact_id)
-
-        return new_ids
-
-    def _fetch_result(record) -> MathQAResult:
-        artifacts = hydrate_artifact_refs(record, artifact_api)
-        question = next(
-            (a for a in artifacts if isinstance(a, MathQuestionArtifact)), None
-        )
-        answer = next(
-            (a for a in artifacts if isinstance(a, GeneratedAnswerArtifact)), None
-        )
-        latex = next(
-            (a for a in artifacts if isinstance(a, LatexAnswerArtifact)), None
-        )
-        figure = next(
-            (a for a in artifacts if isinstance(a, FigureArtifact)), None
-        )
-        review = next(
-            (a for a in artifacts if isinstance(a, UserCommentArtifact)), None
-        )
-        return MathQAResult(
-            question=question,
-            ai_response=answer,
-            latex=latex,
-            figure=figure,
-            review=review,
-            artifact_refs=[a.artifact_id for a in artifacts],
-        )
-
-    return JobDefinition(
-        name="math_qa",
-        graph_ref="math_qa_graph",
-        graph=math_qa_graph,
-        state_type=MathQAState,
-        start_node_key="ReceiveQuestionStep",
-        node_registry=math_qa_node_registry,
-        deps_factory=_deps_factory,
-        policy=math_qa_policy,
-        persistence=PersistencePolicy(on_complete=_persist, on_pause=_persist),
-        result_type=MathQAResult,
-        extract_result=_extract_math_qa_result,
-        fetch_result=_fetch_result,
-        submit_input_type=MathQAInput,
-        edges=[
-            EdgeSpec("ReceiveQuestionStep", "GenerateAnswerStep", "Question received"),
-            EdgeSpec("GenerateAnswerStep", "DecideFigureStep", "Answer generated"),
-            EdgeSpec("DecideFigureStep", "RenderFigureStep", "Figure helpful"),
-            EdgeSpec("DecideFigureStep", "GenerateLatexStep", "Skip figure"),
-            EdgeSpec("RenderFigureStep", "GenerateLatexStep", "Figure rendered"),
-            EdgeSpec("GenerateLatexStep", "HumanReviewStep", "Ready for review"),
-            EdgeSpec("HumanReviewStep", "End", "Comment received"),
-        ],
     )

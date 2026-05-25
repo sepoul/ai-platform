@@ -25,16 +25,18 @@ How it fits together:
 
 A domain that needs jobs on more than one runtime is split into one
 domain per runtime — runtime owns the dependency stack and integration
-surface; a domain just declares JobDefinitions and is assigned to a pool.
+surface; a domain just declares its `JobControl` / `JobExecution` and is
+assigned to a pool (see the control/execution split, docs/...).
 
-**Registration vs. execution — the load-bearing rule.** Building a
-`JobDefinition` (and registering its domain) must stay importable from
-*any* runtime, so the API and every worker can list/submit the job.
-That means heavy, runtime-specific imports (``crewai`` …) must happen
-**lazily inside the node body**, never at module import. The API and
-the ``default`` worker import the conversation domain's JobDefinition
-without ``crewai`` installed; only the ``crewai`` worker imports the
-crew engine, and only when `RunCrewStep` actually runs.
+**The load-bearing rule (narrowed).** The API never imports the engine —
+it loads only `control.py` modules (`JobControl` = schemas). So the
+conflict can't reach the API. But two consumers import *every* domain's
+`execution.py` in one interpreter — the workflow-descriptor generator and
+the (single-pool) Celery worker — so building a `JobExecution` must stay
+import-safe across runtimes: heavy, runtime-specific imports (``crewai`` …)
+happen **lazily inside the node body**, never at module import. Only the
+``crewai`` worker imports the crew engine, and only when `RunCrewStep`
+actually runs.
 """
 from __future__ import annotations
 

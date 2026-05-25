@@ -16,7 +16,7 @@ from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.execution_policy import (
     ExecutionPolicy,
-    JobDefinition,
+    JobExecution,
     PersistencePolicy,
 )
 from ai_platform.jobs.job_runner import run_graph_job
@@ -111,21 +111,18 @@ class _SimpleInput(BaseJobInput):
     job_type: Literal["simple"] = "simple"
 
 
-def _make_job_def(persist_returns: list[UUID]) -> JobDefinition:
-    return JobDefinition(
+def _make_job_def(persist_returns: list[UUID]) -> JobExecution:
+    return JobExecution(
         name="simple",
-        graph_ref="simple_graph",
         graph=_simple_graph,
         state_type=_SimpleState,
         start_node_key="_SimpleNode",
         node_registry={"_SimpleNode": _SimpleNode},
         deps_factory=lambda payload: None,
         policy=ExecutionPolicy(gates=[]),
-        result_type=_SimpleResult,
         extract_result=lambda state: _SimpleResult(
             value=state.value, artifact_refs=list(state.artifact_refs)
         ),
-        submit_input_type=_SimpleInput,
         persistence=PersistencePolicy(
             on_complete=lambda job_id, state: list(persist_returns),
         ),
@@ -188,20 +185,17 @@ async def test_handler_propagates_persist_exceptions():
     """Persist callback raising must surface — silent failures lead to
     `fetch_result` 404s on a 'SUCCEEDED' job. The outer worker loop is
     responsible for catching this and marking the job FAILED."""
-    job_def = JobDefinition(
+    job_def = JobExecution(
         name="simple",
-        graph_ref="simple_graph",
         graph=_simple_graph,
         state_type=_SimpleState,
         start_node_key="_SimpleNode",
         node_registry={"_SimpleNode": _SimpleNode},
         deps_factory=lambda payload: None,
         policy=ExecutionPolicy(gates=[]),
-        result_type=_SimpleResult,
         extract_result=lambda state: _SimpleResult(
             value=state.value, artifact_refs=list(state.artifact_refs)
         ),
-        submit_input_type=_SimpleInput,
         persistence=PersistencePolicy(
             on_complete=lambda job_id, state: (_ for _ in ()).throw(RuntimeError("boom")),
         ),
@@ -231,7 +225,7 @@ def test_math_qa_persist_mints_three_artifacts(tmp_path: Path):
         UserComment,
     )
     from mathai.math_qa.state import MathQAState
-    from mathai.math_qa.workflow import build_math_qa_job_definition
+    from mathai.math_qa.execution import build_math_qa_execution
 
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     artifact_store = ArtifactService(repo, registry=MATH_QA_ARTIFACTS)
@@ -239,7 +233,7 @@ def test_math_qa_persist_mints_three_artifacts(tmp_path: Path):
     class _Workspace:
         def __init__(self, store): self.artifact_store = store
 
-    job_def = build_math_qa_job_definition(_Workspace(artifact_store))
+    job_def = build_math_qa_execution(_Workspace(artifact_store))
 
     from mathai.math_qa.artifacts import LatexAnswerArtifact
     from mathai.math_qa.models import LatexAnswer
@@ -279,7 +273,7 @@ def test_math_qa_fetch_result_hydrates_typed_result(tmp_path: Path):
         MathQuestionArtifact,
         UserCommentArtifact,
     )
-    from mathai.math_qa.workflow import build_math_qa_job_definition
+    from mathai.math_qa.control import build_math_qa_control
 
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     artifact_store = ArtifactService(repo, registry=MATH_QA_ARTIFACTS)
@@ -287,7 +281,7 @@ def test_math_qa_fetch_result_hydrates_typed_result(tmp_path: Path):
     class _Workspace:
         def __init__(self, store): self.artifact_store = store
 
-    job_def = build_math_qa_job_definition(_Workspace(artifact_store))
+    job_def = build_math_qa_control(_Workspace(artifact_store))
 
     q = MathQuestionArtifact(question_text="2+2", topic="arithmetic")
     a = GeneratedAnswerArtifact(answer_text="4", confidence=0.9)

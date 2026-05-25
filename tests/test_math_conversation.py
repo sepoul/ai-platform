@@ -31,10 +31,11 @@ from mathai.math_conversation.crew.callbacks import (
 )
 from mathai.math_conversation.models import MathConversationInput
 from mathai.math_conversation.state import MathConversationState
+from mathai.math_conversation.control import build_math_conversation_control
+from mathai.math_conversation.execution import build_math_conversation_execution
 from mathai.math_conversation.workflow import (
     MathConversationDeps,
     SeedStep,
-    build_math_conversation_job_definition,
     math_conversation_graph,
 )
 
@@ -116,13 +117,16 @@ class _Workspace:
 
 @pytest.fixture
 def job_def(tmp_path: Path):
+    """Returns (execution, control, store) — deps_factory/persist live on the
+    execution plane, fetch_result on the control plane."""
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
-    return build_math_conversation_job_definition(_Workspace(store)), store
+    ws = _Workspace(store)
+    return build_math_conversation_execution(ws), build_math_conversation_control(ws), store
 
 
 def test_deps_factory_parses_payload(job_def):
-    jd, _ = job_def
+    jd, _, _ = job_def
     jid = uuid4()
     deps = jd.deps_factory({"source_job_id": str(jid), "max_turns": 7})
     assert deps.source_job_id == jid
@@ -131,7 +135,7 @@ def test_deps_factory_parses_payload(job_def):
 
 
 def test_persist_mints_conversation_artifact(job_def):
-    jd, store = job_def
+    jd, _, store = job_def
     state = MathConversationState(
         seed_question="What is a group?",
         turns=[ConversationTurn(turn_index=0, agent_role="Algebraist", agent_persona="algebraist", content="...")],
@@ -153,7 +157,7 @@ def test_persist_mints_conversation_artifact(job_def):
 
 
 def test_fetch_result_hydrates_conversation(job_def):
-    jd, store = job_def
+    _, jd, store = job_def
     art = MathConversationArtifact(seed_question="2+2?", stop_reason="max_turns")
     store.put(art)
 
@@ -391,16 +395,16 @@ def conversation_client(tmp_path: Path):
 
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
-    job_def = build_math_conversation_job_definition(_Workspace(store))
+    job_control = build_math_conversation_control(_Workspace(store))
 
     fake_executor = MagicMock()
     fake_compute = MagicMock()
     fake_executor.submit_graph_job.return_value = JobRecord.create(
-        job_type=job_def.name, graph_ref=job_def.graph_ref
+        job_type=job_control.name, graph_ref=job_control.label
     )
 
     deps_mod._job_controls.clear()
-    deps_mod._job_controls[job_def.name] = job_def.control
+    deps_mod._job_controls[job_control.name] = job_control
 
     app = FastAPI()
     app.include_router(make_job_runs_router(deps_mod._job_controls))

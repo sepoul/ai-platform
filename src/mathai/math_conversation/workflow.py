@@ -23,21 +23,14 @@ from uuid import UUID
 
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
-from ai_platform.jobs.artifact_service import ArtifactService
-from ai_platform.jobs.execution_policy import (
-    EdgeSpec,
-    ExecutionPolicy,
-    JobDefinition,
-    PersistencePolicy,
-)
-from ai_platform.jobs.result_fetcher import hydrate_artifact_refs
 from ai_platform.runtime.worker_log import NullLogger, WorkerLogger
 from mathai.math_conversation.artifacts import MathConversationArtifact
-from mathai.math_conversation.models import (
-    MathConversationInput,
-    MathConversationResult,
-)
+from mathai.math_conversation.models import MathConversationResult
 from mathai.math_conversation.state import MathConversationState
+
+# NOTE: this module is the execution engine (graph + nodes + extraction).
+# The JobControl/JobExecution builders + ExecutionPolicy/edges live in
+# control.py / execution.py so the API never imports the engine.
 
 
 # ---------------------------------------------------------------------------
@@ -132,14 +125,6 @@ math_conversation_node_registry: dict[str, type] = {
 
 
 # ---------------------------------------------------------------------------
-# Execution policy — no human gate; the conversation runs autonomously
-# (human touchpoints are submit + the final rendered transcript).
-# ---------------------------------------------------------------------------
-
-math_conversation_policy = ExecutionPolicy(gates=[])
-
-
-# ---------------------------------------------------------------------------
 # Result extraction
 # ---------------------------------------------------------------------------
 
@@ -162,70 +147,4 @@ def _extract_math_conversation_result(state: MathConversationState) -> MathConve
     return MathConversationResult(
         conversation=_build_artifact(state),
         artifact_refs=list(state.artifact_refs),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Job definition factory — workspace artifact API closed over for persistence
-# ---------------------------------------------------------------------------
-
-def build_math_conversation_job_definition(workspace_client) -> JobDefinition:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-
-    def _deps_factory(payload: dict) -> MathConversationDeps:
-        job_id = payload.get("_job_id")
-        logger: WorkerLogger = WorkerLogger(job_id) if job_id else NullLogger()
-        source_raw = payload.get("source_job_id")
-        return MathConversationDeps(
-            source_job_id=UUID(str(source_raw)) if source_raw else None,
-            question_text=payload.get("question_text"),
-            max_turns=int(payload.get("max_turns", 12)),
-            logger=logger,
-        )
-
-    def _persist(job_id: str, state: MathConversationState) -> list[UUID]:
-        """Mint the single MathConversationArtifact if not already present.
-
-        Idempotent: if a conversation artifact is already referenced, skip.
-        """
-        existing = artifact_api.get_many(state.artifact_refs) if state.artifact_refs else []
-        if any(isinstance(a, MathConversationArtifact) for a in existing):
-            return []
-        artifact = _build_artifact(state, job_id=job_id)
-        artifact_api.put(artifact)
-        return [artifact.artifact_id]
-
-    def _fetch_result(record) -> MathConversationResult:
-        artifacts = hydrate_artifact_refs(record, artifact_api)
-        conversation = next(
-            (a for a in artifacts if isinstance(a, MathConversationArtifact)), None
-        )
-        return MathConversationResult(
-            conversation=conversation,
-            artifact_refs=[a.artifact_id for a in artifacts],
-        )
-
-    return JobDefinition(
-        name="math_conversation",
-        graph_ref="math_conversation_graph",
-        graph=math_conversation_graph,
-        state_type=MathConversationState,
-        start_node_key="SeedStep",
-        node_registry=math_conversation_node_registry,
-        deps_factory=_deps_factory,
-        policy=math_conversation_policy,
-        persistence=PersistencePolicy(on_complete=_persist),
-        result_type=MathConversationResult,
-        extract_result=_extract_math_conversation_result,
-        fetch_result=_fetch_result,
-        submit_input_type=MathConversationInput,
-        # Runtime assignment is declared once in mathapp.composition_root
-        # (`crewai` pool — CrewAI's opentelemetry pin conflicts with the
-        # default logfire stack). This domain is only imported/claimed by a
-        # worker with WORKER_RUNTIME=crewai. See ai_platform.jobs.runtimes.
-        edges=[
-            EdgeSpec("SeedStep", "RunCrewStep", "Seed resolved"),
-            EdgeSpec("RunCrewStep", "FinalizeStep", "Conversation done"),
-            EdgeSpec("FinalizeStep", "End", "Artifact persisted"),
-        ],
     )

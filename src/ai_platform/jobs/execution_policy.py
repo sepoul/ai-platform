@@ -78,13 +78,14 @@ class EdgeSpec:
 #   - the **execution plane** (a worker) runs the graph to completion. It
 #     needs the graph, nodes, deps factory, and persistence hooks.
 #
-# `JobControl` and `JobExecution` are those two planes. Today they are
-# derived from `JobDefinition` (below) so nothing downstream changes; the
-# next step inverts this — domains build the two directly and `JobDefinition`
-# is retired. (Named `JobControl`, not `JobSpec`: the platform already has a
-# per-run `JobSpec` — job identity — in job_repository.) Topology (edges)
-# lives on the execution plane; the API serves it via the generated workflow
-# descriptor, not these types. See docs/control_execution_split.md.
+# `JobControl` and `JobExecution` are those two planes. Domains build each
+# directly in their `control.py` / `execution.py` modules; there is no
+# combined object. The API imports only control modules (engine-free); a
+# worker imports only its runtime's execution modules. (Named `JobControl`,
+# not `JobSpec`: the platform already has a per-run `JobSpec` — job identity —
+# in job_repository.) Topology (edges) lives on the execution plane; the API
+# serves it via the generated workflow descriptor, not these types.
+# See docs/control_execution_split.md.
 # ---------------------------------------------------------------------------
 
 
@@ -119,60 +120,3 @@ class JobExecution:
     policy: ExecutionPolicy                          # executable human-gating
     persistence: PersistencePolicy = field(default_factory=PersistencePolicy)
     edges: list[EdgeSpec] = field(default_factory=list)  # graph topology (for the descriptor)
-
-
-@dataclass
-class JobDefinition:
-    """A registered job type as the union of its control + execution planes.
-
-    Transitional: domains still build this flat object, but consumers
-    should read through the `.control` and `.execution` views rather than
-    the flat fields. Phase 1c inverts ownership — domains build
-    `JobControl`/`JobExecution` directly and this class is retired.
-    """
-    name: str                         # key used in API and worker ("math_qa")
-    graph_ref: str                    # human label ("math_qa_graph")
-    graph: Any                        # pydantic_graph Graph instance
-    state_type: type                  # BaseJobState subclass
-    start_node_key: str               # class name of the entry node
-    node_registry: dict[str, type]    # class name → node class (ordered; first = start)
-    deps_factory: Callable[[dict[str, Any]], Any]   # (deps_payload,) → deps
-    policy: ExecutionPolicy
-    result_type: type[BaseJobResult]                            # typed result schema for this job
-    extract_result: Callable[[Any], BaseJobResult]              # (state,) → typed result
-    submit_input_type: type[BaseJobInput]                       # typed schema for the submit request body
-    persistence: PersistencePolicy = field(default_factory=PersistencePolicy)
-    edges: list[EdgeSpec] = field(default_factory=list)
-    # Optional: pulls the canonical typed result from the workspace given a
-    # JobRecord. When defined, the result endpoint prefers this over the
-    # in-record `result_payload`, which then acts as a cheap status preview.
-    # Domains close over their workspace client when building the callback.
-    fetch_result: Callable[[Any], BaseJobResult] | None = None
-
-    @property
-    def control(self) -> JobControl:
-        """Control-plane view — what the API consumes (see `JobControl`)."""
-        return JobControl(
-            name=self.name,
-            label=self.graph_ref,
-            submit_input_type=self.submit_input_type,
-            result_type=self.result_type,
-            gates=self.policy.gates,
-            fetch_result=self.fetch_result,
-        )
-
-    @property
-    def execution(self) -> JobExecution:
-        """Execution-plane view — what a worker consumes (see `JobExecution`)."""
-        return JobExecution(
-            name=self.name,
-            graph=self.graph,
-            state_type=self.state_type,
-            start_node_key=self.start_node_key,
-            node_registry=self.node_registry,
-            deps_factory=self.deps_factory,
-            extract_result=self.extract_result,
-            policy=self.policy,
-            persistence=self.persistence,
-            edges=self.edges,
-        )

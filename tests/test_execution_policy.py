@@ -18,8 +18,6 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from ai_platform.jobs.base_state import BaseJobState
 from ai_platform.jobs.execution_policy import (
     ExecutionPolicy,
-    JobControl,
-    JobDefinition,
     JobExecution,
     NodeGate,
 )
@@ -132,67 +130,22 @@ def _make_record(job_type: str = "dummy") -> Any:
     return record
 
 
-def _make_job_def(policy: ExecutionPolicy) -> JobDefinition:
+def _make_job_def(policy: ExecutionPolicy) -> JobExecution:
     def _extract(state: DummyState) -> DummyResult:
         review_raw = state.node_reviews.get("SummarizeNode")
         review = SummarizeReview.model_validate(review_raw) if review_raw else None
         return DummyResult(computed_value=state.computed_value, review=review)
 
-    return JobDefinition(
+    return JobExecution(
         name="dummy",
-        graph_ref="dummy_graph",
         graph=dummy_graph,
         state_type=DummyState,
         start_node_key="ComputeNode",
         node_registry=dummy_node_registry,
         deps_factory=lambda payload: None,
-        policy=policy,
-        result_type=DummyResult,
         extract_result=_extract,
-        submit_input_type=DummyInput,
+        policy=policy,
     )
-
-
-# ---------------------------------------------------------------------------
-# Control / execution plane views
-# ---------------------------------------------------------------------------
-
-def test_control_view_is_control_plane_only():
-    """`.control` carries schemas — and none of the engine objects."""
-    gate = NodeGate(node_name="SummarizeNode", review_type=SummarizeReview)
-    jd = _make_job_def(ExecutionPolicy(gates=[gate]))
-
-    control = jd.control
-    assert isinstance(control, JobControl)
-    assert control.name == "dummy"
-    assert control.label == "dummy_graph"
-    assert control.submit_input_type is DummyInput
-    assert control.result_type is DummyResult
-    assert control.gates == [gate]
-    # The control plane must not expose execution-engine objects.
-    for leaked in ("graph", "node_registry", "deps_factory", "state_type", "edges"):
-        assert not hasattr(control, leaked)
-
-
-def test_execution_view_is_execution_plane_only():
-    """`.execution` carries the engine — and no API-only schemas."""
-    jd = _make_job_def(ExecutionPolicy())
-
-    ex = jd.execution
-    assert isinstance(ex, JobExecution)
-    assert ex.name == "dummy"
-    assert ex.graph is dummy_graph
-    assert ex.state_type is DummyState
-    assert ex.start_node_key == "ComputeNode"
-    assert ex.node_registry is dummy_node_registry
-    # The execution plane has no business with the submit/result request schemas.
-    for leaked in ("submit_input_type", "result_type"):
-        assert not hasattr(ex, leaked)
-
-
-def test_views_share_the_join_key():
-    jd = _make_job_def(ExecutionPolicy())
-    assert jd.control.name == jd.execution.name == jd.name
 
 
 # ---------------------------------------------------------------------------

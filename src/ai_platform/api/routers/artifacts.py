@@ -47,7 +47,7 @@ def make_artifacts_router(
 ) -> APIRouter:
     """Build the router with a response model that's a discriminated
     union over the supplied artifact types. Mounted by `build_api`
-    after `register_domains` has aggregated every domain's types.
+    after `register_control_domains` has aggregated every domain's types.
     """
     owners = dict(artifact_owners or {})
     router = APIRouter(prefix="/artifacts", tags=["Platform / Artifacts"])
