@@ -1,0 +1,29 @@
+[project]
+name = "mathapp-execution-plane"
+version = "0.1.0"
+description = "Execution plane (worker): the job implementation — pydantic_graph + pydantic_ai engine. Logfire and CrewAI are per-runtime extras (mutually exclusive)."
+requires-python = ">=3.13"
+dependencies = [
+    "mathapp-core",
+    "python-dotenv",
+    # The engine. pydantic-ai-slim pulls pydantic_ai + pydantic_graph + anthropic.
+    "pydantic-ai-slim[anthropic,duckduckgo]>=1.58.0",
+]
+
+[project.optional-dependencies]
+# default runtime: Logfire tracing (opentelemetry-sdk >=1.39)
+logfire = ["pydantic-ai-slim[logfire]>=1.58.0"]
+# crewai runtime: multi-agent panel (opentelemetry-sdk <1.35) — CANNOT be
+# installed alongside `logfire`; that's why each runs as its own worker image.
+crewai = ["crewai>=1.14.5,<1.15"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.uv.sources]
+mathapp-core = { workspace = true }
