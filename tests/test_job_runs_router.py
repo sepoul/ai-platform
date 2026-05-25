@@ -16,12 +16,7 @@ from pydantic import BaseModel
 
 from ai_platform.runtime import registry as deps_mod
 from ai_platform.api.routers.job_runs import make_job_runs_router
-from ai_platform.jobs.execution_policy import (
-    ExecutionPolicy,
-    JobDefinition,
-    NodeGate,
-)
-from ai_platform.jobs.base_state import BaseJobState
+from ai_platform.jobs.execution_policy import JobControl, NodeGate
 from ai_platform.jobs.graph_execution import GraphCheckpoint
 from ai_platform.jobs.input import BaseJobInput
 from ai_platform.jobs.result import BaseJobResult
@@ -31,10 +26,6 @@ from ai_platform.workspace.storage.structured.job_repository import JobRecord, J
 # ---------------------------------------------------------------------------
 # Dummy state / inputs / results
 # ---------------------------------------------------------------------------
-
-class _DummyState(BaseJobState):
-    pass
-
 
 class _DummyResult(BaseJobResult):
     job_type: Literal["dummy"] = "dummy"
@@ -69,49 +60,43 @@ class _OtherReview(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _base_job_def(**overrides) -> JobDefinition:
+def _base_job_def(**overrides) -> JobControl:
     base = dict(
         name="dummy",
-        graph_ref="dummy_graph",
-        graph=None,
-        state_type=_DummyState,
-        start_node_key="N",
-        node_registry={},
-        deps_factory=lambda payload: None,
-        policy=ExecutionPolicy(gates=[]),
-        result_type=_DummyResult,
-        extract_result=lambda state: _DummyResult(),
+        label="dummy_graph",
         submit_input_type=_DummyInput,
+        result_type=_DummyResult,
+        gates=[],
     )
     base.update(overrides)
-    return JobDefinition(**base)
+    return JobControl(**base)
 
 
-def _make_app(job_defs: list[JobDefinition]) -> tuple[TestClient, MagicMock, MagicMock]:
+def _make_app(job_defs: list[JobControl]) -> tuple[TestClient, MagicMock, MagicMock]:
     fake_executor = MagicMock()
     fake_compute = MagicMock()
-    record = JobRecord.create(job_type=job_defs[0].name, graph_ref=job_defs[0].graph_ref)
+    record = JobRecord.create(job_type=job_defs[0].name, graph_ref=job_defs[0].label)
     fake_executor.submit_graph_job.return_value = record
 
-    deps_mod._job_definitions.clear()
+    deps_mod._job_controls.clear()
     for jd in job_defs:
-        deps_mod._job_definitions[jd.name] = jd
+        deps_mod._job_controls[jd.name] = jd
 
     app = FastAPI()
-    app.include_router(make_job_runs_router(deps_mod._job_definitions))
+    app.include_router(make_job_runs_router(deps_mod._job_controls))
     app.dependency_overrides[deps_mod.get_executor] = lambda: fake_executor
     app.dependency_overrides[deps_mod.get_compute] = lambda: fake_compute
-    app.dependency_overrides[deps_mod.get_job_definitions] = lambda: deps_mod._job_definitions
+    app.dependency_overrides[deps_mod.get_job_controls] = lambda: deps_mod._job_controls
     return TestClient(app), fake_executor, fake_compute
 
 
 def _wire_pending_review(
     executor: MagicMock,
-    job_def: JobDefinition,
+    job_def: JobControl,
     gated_node: str,
 ) -> JobRecord:
     """Set up a record paused at a gate so /review can resume it."""
-    record = JobRecord.create(job_type=job_def.name, graph_ref=job_def.graph_ref)
+    record = JobRecord.create(job_type=job_def.name, graph_ref=job_def.label)
     record.state.status = JobStatus.WAITING_INPUT
     executor.repo.get.return_value = record
     executor.load_checkpoint.return_value = GraphCheckpoint(
@@ -189,9 +174,8 @@ def test_submit_discriminated_union_routes_by_job_type():
     dummy = _base_job_def()
     other = _base_job_def(
         name="other",
-        graph_ref="other_graph",
+        label="other_graph",
         result_type=_OtherResult,
-        extract_result=lambda state: _OtherResult(),
         submit_input_type=_OtherInput,
     )
     client, executor, _ = _make_app([dummy, other])
@@ -210,9 +194,8 @@ def test_submit_discriminated_union_rejects_wrong_shape_for_job_type():
     dummy = _base_job_def()
     other = _base_job_def(
         name="other",
-        graph_ref="other_graph",
+        label="other_graph",
         result_type=_OtherResult,
-        extract_result=lambda state: _OtherResult(),
         submit_input_type=_OtherInput,
     )
     client, _, _ = _make_app([dummy, other])
@@ -234,7 +217,7 @@ def _gate(node: str = "GateNode", review_type=_DummyReview) -> NodeGate:
 
 
 def test_review_typed_body_resumes_job():
-    job_def = _base_job_def(policy=ExecutionPolicy(gates=[_gate()]))
+    job_def = _base_job_def(gates=[_gate()])
     client, executor, _ = _make_app([job_def])
     record = _wire_pending_review(executor, job_def, "GateNode")
 
@@ -252,7 +235,7 @@ def test_review_typed_body_resumes_job():
 
 
 def test_review_rejects_missing_required_field():
-    job_def = _base_job_def(policy=ExecutionPolicy(gates=[_gate()]))
+    job_def = _base_job_def(gates=[_gate()])
     client, executor, _ = _make_app([job_def])
     record = _wire_pending_review(executor, job_def, "GateNode")
 
@@ -264,9 +247,9 @@ def test_review_rejects_missing_required_field():
 def test_review_rejects_when_no_pending_gate():
     """Even with a valid review body, /review must 409 if the checkpoint
     has no gated_node — the job isn't waiting on anyone."""
-    job_def = _base_job_def(policy=ExecutionPolicy(gates=[_gate()]))
+    job_def = _base_job_def(gates=[_gate()])
     client, executor, _ = _make_app([job_def])
-    record = JobRecord.create(job_type=job_def.name, graph_ref=job_def.graph_ref)
+    record = JobRecord.create(job_type=job_def.name, graph_ref=job_def.label)
     executor.repo.get.return_value = record
     executor.load_checkpoint.return_value = GraphCheckpoint(
         state_data={}, next_node_key="__done__", gated_node=None, attempt=0,
@@ -280,14 +263,13 @@ def test_review_union_rejects_wrong_shape_for_resolved_gate():
     """With two gates registered (different review types), pydantic might
     parse a body that matches the *other* gate's type. The router must
     re-check it against the resolved gate and 422 the mismatch."""
-    dummy = _base_job_def(policy=ExecutionPolicy(gates=[_gate("DummyGate", _DummyReview)]))
+    dummy = _base_job_def(gates=[_gate("DummyGate", _DummyReview)])
     other = _base_job_def(
         name="other",
-        graph_ref="other_graph",
+        label="other_graph",
         result_type=_OtherResult,
-        extract_result=lambda state: _OtherResult(),
         submit_input_type=_OtherInput,
-        policy=ExecutionPolicy(gates=[_gate("OtherGate", _OtherReview)]),
+        gates=[_gate("OtherGate", _OtherReview)],
     )
     client, executor, _ = _make_app([dummy, other])
     # Pause the *dummy* job at its gate, but POST a body shaped like _OtherReview.
@@ -317,7 +299,7 @@ def test_submit_calls_compute_enqueue_with_job_id():
 def test_review_calls_compute_enqueue_to_resume_run():
     """Resuming a paused job is a 'submit moment' too — queue-based
     backends need to re-deliver the job id to a worker."""
-    job_def = _base_job_def(policy=ExecutionPolicy(gates=[_gate()]))
+    job_def = _base_job_def(gates=[_gate()])
     client, executor, compute = _make_app([job_def])
     record = _wire_pending_review(executor, job_def, "GateNode")
 
@@ -331,7 +313,7 @@ def test_review_calls_compute_enqueue_to_resume_run():
 
 
 def test_openapi_uses_typed_review_schema():
-    job_def = _base_job_def(policy=ExecutionPolicy(gates=[_gate()]))
+    job_def = _base_job_def(gates=[_gate()])
     client, _, _ = _make_app([job_def])
 
     schema = client.app.openapi()
@@ -346,9 +328,8 @@ def test_openapi_uses_typed_submit_schema():
     dummy = _base_job_def()
     other = _base_job_def(
         name="other",
-        graph_ref="other_graph",
+        label="other_graph",
         result_type=_OtherResult,
-        extract_result=lambda state: _OtherResult(),
         submit_input_type=_OtherInput,
     )
     client, _, _ = _make_app([dummy, other])

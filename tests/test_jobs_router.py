@@ -17,10 +17,7 @@ from pydantic import BaseModel
 
 from ai_platform.runtime import registry as deps_mod
 from ai_platform.api.routers.jobs import make_jobs_router
-from ai_platform.jobs.execution_policy import (
-    ExecutionPolicy,
-    JobDefinition,
-)
+from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.input import BaseJobInput
 from ai_platform.jobs.result import BaseJobResult
 from ai_platform.workspace.storage.structured.job_repository import (
@@ -32,10 +29,6 @@ from ai_platform.workspace.storage.structured.job_repository import (
 # ---------------------------------------------------------------------------
 # Dummy state + result
 # ---------------------------------------------------------------------------
-
-class _DummyState(BaseModel):
-    value: Optional[int] = None
-
 
 class _DummyResult(BaseJobResult):
     job_type: Literal["dummy"] = "dummy"
@@ -54,38 +47,32 @@ def _make_record(status: JobStatus, payload: dict | None = None) -> JobRecord:
     return record
 
 
-def _make_app(job_def: JobDefinition, record: JobRecord) -> TestClient:
+def _make_app(job_def: JobControl, record: JobRecord) -> TestClient:
     """Wire a FastAPI app with the jobs router and dependency overrides."""
     fake_executor = MagicMock()
     fake_executor.repo.get.return_value = record
 
-    # Reset and register only this job def
-    deps_mod._job_definitions.clear()
-    deps_mod._job_definitions[job_def.name] = job_def
+    # Reset and register only this job control
+    deps_mod._job_controls.clear()
+    deps_mod._job_controls[job_def.name] = job_def
 
     app = FastAPI()
-    app.include_router(make_jobs_router(deps_mod._job_definitions))
+    app.include_router(make_jobs_router(deps_mod._job_controls))
     app.dependency_overrides[deps_mod.get_executor] = lambda: fake_executor
-    app.dependency_overrides[deps_mod.get_job_definitions] = lambda: deps_mod._job_definitions
+    app.dependency_overrides[deps_mod.get_job_controls] = lambda: deps_mod._job_controls
     return TestClient(app)
 
 
-def _base_job_def(**overrides) -> JobDefinition:
+def _base_job_def(**overrides) -> JobControl:
     base = dict(
         name="dummy",
-        graph_ref="dummy_graph",
-        graph=None,
-        state_type=_DummyState,
-        start_node_key="N",
-        node_registry={},
-        deps_factory=lambda payload: None,
-        policy=ExecutionPolicy(gates=[]),
-        result_type=_DummyResult,
-        extract_result=lambda state: _DummyResult(value=state.value, source="payload"),
+        label="dummy_graph",
         submit_input_type=_DummyInput,
+        result_type=_DummyResult,
+        gates=[],
     )
     base.update(overrides)
-    return JobDefinition(**base)
+    return JobControl(**base)
 
 
 # ---------------------------------------------------------------------------

@@ -57,8 +57,10 @@ def build_api(
             allow_headers=["*"],
         )
 
-    app.include_router(make_jobs_router(domains.job_definitions), tags=["Platform / Jobs"])
-    app.include_router(make_job_runs_router(domains.job_definitions), tags=["Platform / Jobs"])
+    # Routers see only the control plane — no engine objects in the API.
+    job_controls = {name: jd.control for name, jd in domains.job_definitions.items()}
+    app.include_router(make_jobs_router(job_controls), tags=["Platform / Jobs"])
+    app.include_router(make_job_runs_router(job_controls), tags=["Platform / Jobs"])
     app.include_router(platform_workflows.router, tags=["Platform / Workflows"])
     app.include_router(platform_prompts.router, tags=["Platform / Prompts"])
     app.include_router(

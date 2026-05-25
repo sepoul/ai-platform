@@ -399,14 +399,14 @@ def conversation_client(tmp_path: Path):
         job_type=job_def.name, graph_ref=job_def.graph_ref
     )
 
-    deps_mod._job_definitions.clear()
-    deps_mod._job_definitions[job_def.name] = job_def
+    deps_mod._job_controls.clear()
+    deps_mod._job_controls[job_def.name] = job_def.control
 
     app = FastAPI()
-    app.include_router(make_job_runs_router(deps_mod._job_definitions))
+    app.include_router(make_job_runs_router(deps_mod._job_controls))
     app.dependency_overrides[deps_mod.get_executor] = lambda: fake_executor
     app.dependency_overrides[deps_mod.get_compute] = lambda: fake_compute
-    app.dependency_overrides[deps_mod.get_job_definitions] = lambda: deps_mod._job_definitions
+    app.dependency_overrides[deps_mod.get_job_controls] = lambda: deps_mod._job_controls
     return TestClient(app), fake_executor
 
 

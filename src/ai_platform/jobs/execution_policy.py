@@ -101,6 +101,10 @@ class JobControl:
     # `result_payload`. Touches only the shared workspace lib, never the engine.
     fetch_result: Callable[[Any], BaseJobResult] | None = None
 
+    def gate_for(self, node_name: str) -> NodeGate | None:
+        """The review gate after `node_name`, if any (mirrors ExecutionPolicy)."""
+        return next((g for g in self.gates if g.node_name == node_name), None)
+
 
 @dataclass(frozen=True)
 class JobExecution:

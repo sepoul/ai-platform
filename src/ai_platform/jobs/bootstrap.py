@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.domain import BootstrapContext, DomainRegister
-from ai_platform.runtime.registry import register_job
+from ai_platform.runtime.registry import register_job_control
 from ai_platform.jobs.execution_policy import JobDefinition
 from ai_platform.workspace.bootstrap import WorkspaceBootstrap
 
@@ -37,8 +37,8 @@ def register_domains(
     `register()`, and aggregate the results.
 
     Side effects:
-      - each `JobDefinition` is registered on the platform's global
-        `_job_definitions` map so router factories can discover it
+      - each job's control plane is registered on the platform's global
+        `_job_controls` map so router factories can discover it
       - each domain's artifact types are registered on the shared
         `ArtifactService`, which is what the platform artifacts router
         hydrates against
@@ -54,7 +54,8 @@ def register_domains(
     for domain_register in domains:
         domain = domain_register(ctx)
         for job_def in domain.job_definitions:
-            register_job(job_def)
+            # Registry holds only the control plane (what the API serves).
+            register_job_control(job_def.control)
             out.job_definitions[job_def.name] = job_def
         out.routers.extend(domain.routers)
         for artifact_cls in domain.artifact_types:

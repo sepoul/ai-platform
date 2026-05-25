@@ -17,7 +17,7 @@ from typing import Optional
 
 from ai_platform.compute.base import ComputeBackend
 from ai_platform.jobs.artifact_service import ArtifactService
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.client import PlatformClient
 
@@ -26,7 +26,9 @@ _platform_client: Optional[PlatformClient] = None
 _executor: Optional[GraphJobExecutor] = None
 _compute: Optional[ComputeBackend] = None
 _artifact_service: Optional[ArtifactService] = None
-_job_definitions: dict[str, JobDefinition] = {}
+# Control-plane only: the API serves submission/result/status from these.
+# Execution objects never enter the API process (see control/execution split).
+_job_controls: dict[str, JobControl] = {}
 
 
 def init_platform(
@@ -42,8 +44,8 @@ def init_platform(
     _artifact_service = artifact_service
 
 
-def register_job(job_def: JobDefinition) -> None:
-    _job_definitions[job_def.name] = job_def
+def register_job_control(control: JobControl) -> None:
+    _job_controls[control.name] = control
 
 
 def get_platform_client() -> PlatformClient:
@@ -70,5 +72,5 @@ def get_artifact_service() -> ArtifactService:
     return _artifact_service
 
 
-def get_job_definitions() -> dict[str, JobDefinition]:
-    return _job_definitions
+def get_job_controls() -> dict[str, JobControl]:
+    return _job_controls

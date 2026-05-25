@@ -1,7 +1,7 @@
 """Platform job-run endpoints — generic dispatch by job_type.
 
 Built as a factory so the submit body reflects the discriminated union of
-every registered `JobDefinition.submit_input_type`. The TS client narrows
+every registered `JobControl.submit_input_type`. The TS client narrows
 on `job_type` for both the request and the response.
 """
 # NOTE: deliberately no `from __future__ import annotations` — FastAPI
@@ -11,33 +11,33 @@ on `job_type` for both the request and the response.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import RootModel
 
-from ai_platform.runtime.registry import get_compute, get_executor, get_job_definitions
+from ai_platform.runtime.registry import get_compute, get_executor, get_job_controls
 from ai_platform.api.schemas.jobs import (
     RunSubmitResponse,
     build_review_request_model,
     build_run_submit_request_model,
 )
 from ai_platform.compute.base import ComputeBackend
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobStatus
 
 
-def make_job_runs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
+def make_job_runs_router(jobs: dict[str, JobControl]) -> APIRouter:
     router = APIRouter()
 
     RunSubmitRequest = build_run_submit_request_model(
         [j.submit_input_type for j in jobs.values()]
     )
     ReviewRequest = build_review_request_model(
-        [g.review_type for j in jobs.values() for g in j.policy.gates]
+        [g.review_type for j in jobs.values() for g in j.gates]
     )
 
     @router.post("/jobs/runs/submit", response_model=RunSubmitResponse)
     def submit_job_run(
         body: RunSubmitRequest,
         executor: GraphJobExecutor = Depends(get_executor),
-        jobs_dep: dict[str, JobDefinition] = Depends(get_job_definitions),
+        jobs_dep: dict[str, JobControl] = Depends(get_job_controls),
         compute: ComputeBackend = Depends(get_compute),
     ):
         inner = body.root if isinstance(body, RootModel) else body
@@ -46,7 +46,7 @@ def make_job_runs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
 
         record = executor.submit_graph_job(
             job_type=job_def.name,
-            graph_ref=job_def.graph_ref,
+            graph_ref=job_def.label,
             initial_state={},
             deps_payload=params,
             created_by=params.get("created_by"),
@@ -59,7 +59,7 @@ def make_job_runs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
         job_id: str,
         body: ReviewRequest,
         executor: GraphJobExecutor = Depends(get_executor),
-        jobs_dep: dict[str, JobDefinition] = Depends(get_job_definitions),
+        jobs_dep: dict[str, JobControl] = Depends(get_job_controls),
         compute: ComputeBackend = Depends(get_compute),
     ):
         try:
@@ -82,7 +82,7 @@ def make_job_runs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
         if not gated_node:
             raise HTTPException(status_code=409, detail=f"Job {job_id} has no pending gate")
 
-        gate = job_def.policy.gate_for(gated_node)
+        gate = job_def.gate_for(gated_node)
         if not gate:
             raise HTTPException(
                 status_code=409,

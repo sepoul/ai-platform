@@ -1,7 +1,7 @@
 """Platform jobs router — generic job status / list / result endpoints.
 
 Built as a factory so that the response models reflect the discriminated
-union of every registered `JobDefinition.result_type`. This is what the
+union of every registered `JobControl.result_type`. This is what the
 TypeScript client narrows on (`job_type` is the discriminator).
 """
 from __future__ import annotations
@@ -10,25 +10,25 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ai_platform.runtime.registry import get_executor, get_job_definitions
+from ai_platform.runtime.registry import get_executor, get_job_controls
 from ai_platform.api.schemas.jobs import (
     JobListParams,
     build_job_result_response_model,
     build_job_status_response_model,
 )
-from ai_platform.jobs.execution_policy import JobDefinition
+from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobStatus
 
 
-def make_jobs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
+def make_jobs_router(jobs: dict[str, JobControl]) -> APIRouter:
     router = APIRouter()
 
     result_types = [j.result_type for j in jobs.values()]
     JobStatusResponse = build_job_status_response_model(result_types)
     JobResultResponse = build_job_result_response_model(result_types)
 
-    def _typed_result(record, jobs_dep: dict[str, JobDefinition]):
+    def _typed_result(record, jobs_dep: dict[str, JobControl]):
         if record.state.result_payload is None:
             return None
         job_def = jobs_dep.get(record.spec.job_type)
@@ -36,7 +36,7 @@ def make_jobs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
             return None
         return job_def.result_type.model_validate(record.state.result_payload)
 
-    def _to_status(record, jobs_dep: dict[str, JobDefinition]):
+    def _to_status(record, jobs_dep: dict[str, JobControl]):
         return JobStatusResponse(
             job_id=str(record.spec.job_id),
             job_type=record.spec.job_type,
@@ -54,7 +54,7 @@ def make_jobs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
     def get_job_status(
         job_id: str,
         executor: GraphJobExecutor = Depends(get_executor),
-        jobs_dep: dict[str, JobDefinition] = Depends(get_job_definitions),
+        jobs_dep: dict[str, JobControl] = Depends(get_job_controls),
     ):
         try:
             record = executor.repo.get(job_id)
@@ -66,7 +66,7 @@ def make_jobs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
     def get_job_result(
         job_id: str,
         executor: GraphJobExecutor = Depends(get_executor),
-        jobs_dep: dict[str, JobDefinition] = Depends(get_job_definitions),
+        jobs_dep: dict[str, JobControl] = Depends(get_job_controls),
     ):
         try:
             record = executor.repo.get(job_id)
@@ -105,7 +105,7 @@ def make_jobs_router(jobs: dict[str, JobDefinition]) -> APIRouter:
     def list_jobs(
         params: Annotated[JobListParams, Query()],
         executor: GraphJobExecutor = Depends(get_executor),
-        jobs_dep: dict[str, JobDefinition] = Depends(get_job_definitions),
+        jobs_dep: dict[str, JobControl] = Depends(get_job_controls),
     ):
         status_filter = None
         if params.status:
