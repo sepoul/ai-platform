@@ -12,7 +12,6 @@ from typing import Callable
 
 from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
-from ai_platform.jobs.worker_loop import _run_one_job
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +43,11 @@ class PollingComputeBackend:
         should_stop: Callable[[], bool] = lambda: False,
         max_job_age_s: float | None = None,
     ) -> None:
+        # Lazy: the worker loop pulls the graph engine. Keep it out of the
+        # module top so `enqueue` (used by the engine-free API) doesn't import
+        # pydantic_graph — only an actual worker calling start_worker does.
+        from ai_platform.jobs.worker_loop import _run_one_job
+
         interval = interval_s if interval_s is not None else self._default_interval_s
         logger.info(
             "Worker %s starting (poll interval=%ds, once=%s, max_job_age=%s)",

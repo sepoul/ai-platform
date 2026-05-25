@@ -1,14 +1,19 @@
 from __future__ import annotations
 import logging
 from datetime import datetime, timezone
-from typing import Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
-from pydantic_graph import BaseNode, End
 
 from ai_platform.jobs.checkpoint import GraphCheckpoint  # re-exported for callers
 from ai_platform.workspace.storage.protocols import JobRepository
 from ai_platform.workspace.storage.structured.job_repository import JobRecord, JobStatus
+
+if TYPE_CHECKING:
+    # Only used in a Protocol return annotation (stringized by `from __future__
+    # import annotations`), so the engine is never imported at runtime — which
+    # keeps GraphJobExecutor importable in the engine-free control plane.
+    from pydantic_graph import BaseNode, End
 
 logger = logging.getLogger(__name__)
 

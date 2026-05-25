@@ -15,11 +15,17 @@ Adding a domain means appending to `mathapp.composition_root._DOMAINS`.
 """
 from __future__ import annotations
 
-from ai_platform.api.app import build_api
-from ai_platform.compute.bootstrap import bootstrap_compute
-from ai_platform.jobs.bootstrap import register_control_domains
-from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import control_registers
+# Platform-enforced boundary: arm BEFORE importing anything domain-related so
+# a stray engine import in a control.py crashes the API at startup, named.
+from ai_platform.jobs.import_guard import enforce_control_plane
+
+enforce_control_plane()
+
+from ai_platform.api.app import build_api  # noqa: E402
+from ai_platform.compute.bootstrap import bootstrap_compute  # noqa: E402
+from ai_platform.jobs.bootstrap import register_control_domains  # noqa: E402
+from ai_platform.workspace.bootstrap import bootstrap_workspace  # noqa: E402
+from mathapp.composition_root import control_registers  # noqa: E402
 
 _workspace = bootstrap_workspace()
 # Control plane only — every job type, across all runtimes, no engine import.

@@ -141,7 +141,23 @@ Phase 1 is landed as green increments (the leak fixes come first, while
     API imports neither `pydantic_graph` nor `crewai`.** The load-bearing
     rule is narrowed, not deleted — it now guards the two all-execution
     consumers (the descriptor generator + single-pool celery), not the API.
-- **Phase 3 — physical packaging (optional).**
+- **Phase 3 — platform-enforced boundary (done).** Instead of trusting
+  `control.py` to stay engine-free, the platform *blocks* the engine. A
+  `sys.meta_path` guard ([`import_guard.py`](../src/ai_platform/jobs/import_guard.py))
+  raises `ControlPlaneViolation` if a denied module (`pydantic_graph`,
+  `crewai`) is imported; the API entrypoint arms it before importing any
+  domain, so a stray engine import crashes the API at startup with the
+  offender named. Blunt and unbypassable. It immediately caught two real
+  leaks: `compute.base → graph_execution` and `bootstrap_compute → poll →
+  worker_loop → job_runner` both pulled `pydantic_graph` into the API.
+  Fixes: `graph_execution` imports the engine only under `TYPE_CHECKING`
+  (the annotations are stringized); the poll/thread backends lazy-import the
+  worker loop inside `start_worker`/`_tick`, so the `enqueue` path the API
+  uses is engine-free. Verified by `tests/test_import_guard.py` (incl. a
+  subprocess that boots the real API entrypoint under the guard).
+- **Phase 3b — physical packaging (still optional, not done).** Separate
+  installable packages with per-image deps. The guard makes this less
+  urgent: the boundary is now enforced at runtime, not just by layout.
 
 ## Shared library
 

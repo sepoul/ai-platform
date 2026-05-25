@@ -25,7 +25,6 @@ from typing import Callable
 
 from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
-from ai_platform.jobs.worker_loop import _run_one_job
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +53,10 @@ class ThreadComputeBackend:
         self._pool.submit(self._tick)
 
     def _tick(self) -> None:
+        # Lazy import: the worker loop pulls the graph engine. Thread compute
+        # runs jobs in-process, so this backend is not for the engine-free API.
+        from ai_platform.jobs.worker_loop import _run_one_job
+
         try:
             _run_one_job(self._executor, self._job_definitions, self._worker_id)
         except Exception:
