@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ai_platform.api.schemas.workflows import ParamSpec
+from ai_platform.jobs.workflow_schemas import ParamSpec
 
 
 def schema_type_label(prop: dict) -> str:

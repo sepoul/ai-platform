@@ -12,8 +12,8 @@ command can import it without pulling the web framework.
 """
 from __future__ import annotations
 
-from ai_platform.api.pydantic_fields import params_from_model
-from ai_platform.api.schemas.workflows import (
+from ai_platform.jobs.pydantic_fields import params_from_model
+from ai_platform.jobs.workflow_schemas import (
     EdgeResponse,
     GateSpec,
     StageResponse,

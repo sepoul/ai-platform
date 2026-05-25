@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 
-from ai_platform.api.workflow_descriptor import WORKFLOWS_BLOB, build_workflow_descriptor
+from ai_platform.jobs.workflow_descriptor import WORKFLOWS_BLOB, build_workflow_descriptor
 from ai_platform.jobs.bootstrap import (
     register_control_domains,
     register_execution_domains,

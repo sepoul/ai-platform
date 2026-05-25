@@ -13,12 +13,12 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ai_platform.api.schemas.workflows import (
+from ai_platform.jobs.workflow_schemas import (
     WorkflowListItem,
     WorkflowListResponse,
     WorkflowSpecResponse,
 )
-from ai_platform.api.workflow_descriptor import WORKFLOWS_BLOB
+from ai_platform.jobs.workflow_descriptor import WORKFLOWS_BLOB
 from ai_platform.runtime.registry import get_platform_client
 from ai_platform.workspace.client import PlatformClient
 from ai_platform.workspace.storage.exceptions import ObjectNotFound

@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from ai_platform.api.schemas.workflows import ParamSpec
+from ai_platform.jobs.workflow_schemas import ParamSpec
 
 
 class ArtifactTypeSpec(BaseModel):

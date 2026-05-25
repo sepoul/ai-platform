@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from ai_platform.api.routers import workflows as workflows_mod
-from ai_platform.api.workflow_descriptor import build_workflow_descriptor
+from ai_platform.jobs.workflow_descriptor import build_workflow_descriptor
 from ai_platform.jobs.execution_policy import (
     EdgeSpec,
     ExecutionPolicy,

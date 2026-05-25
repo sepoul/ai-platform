@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 
-from ai_platform.api.pydantic_fields import params_from_model
+from ai_platform.jobs.pydantic_fields import params_from_model
 from ai_platform.api.schemas.artifacts import (
     ArtifactListResponse,
     ArtifactSummary,
