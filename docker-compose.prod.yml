@@ -1,5 +1,5 @@
-# Production override: pull pre-built images from GHCR instead of
-# rebuilding on the box. Merge on top of docker-compose.yml.
+# Production override: pull the three pre-built split images from GHCR
+# instead of rebuilding on the box. Merge on top of docker-compose.yml.
 #
 # Usage on the Hetzner box (or any deploy target):
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
@@ -8,23 +8,24 @@
 # Pin to a specific build by exporting IMAGE_TAG (defaults to :latest):
 #   IMAGE_TAG=sha-abc1234 docker compose -f ... -f ... up -d
 #
-# `build:` from the base file is merged in but ignored by `pull` — only
-# `image:` is fetched, and `up -d` finds the pulled tag locally.
-#
-# The math-ui service is gated behind the `ui` compose profile so the
-# default `redeploy.sh` keeps shipping just api + worker (current
-# Hetzner posture). Bring the UI up with `--profile ui`; see
-# `infra/hetzner/scripts/redeploy.sh` and the deploy doc Step 5.
+# Production runs BOTH workers simultaneously (different domains use
+# different agentic libraries — pydantic_ai for math_qa, CrewAI for
+# math_conversation). `worker-crewai` inherits the `crewai` profile from
+# the base file; `redeploy.sh` opts it in by default. The `ui` profile
+# brings up math-ui.
 
 services:
   api:
-    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/mathapp-api:${IMAGE_TAG:-latest}
 
   worker:
-    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/mathapp-worker:${IMAGE_TAG:-latest}
+
+  worker-crewai:
+    image: ghcr.io/sepoul/mathapp-worker-crewai:${IMAGE_TAG:-latest}
 
   celery-worker:
-    image: ghcr.io/sepoul/mathapp:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/mathapp-worker:${IMAGE_TAG:-latest}
 
   math-ui:
     image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}
