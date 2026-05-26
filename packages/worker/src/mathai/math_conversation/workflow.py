@@ -17,6 +17,7 @@ changing this skeleton.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Optional
 from uuid import UUID
@@ -24,7 +25,11 @@ from uuid import UUID
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from ai_platform.runtime.worker_log import NullLogger, WorkerLogger
-from mathai.math_conversation.artifacts import MathConversationArtifact
+from mathai.math_conversation.artifacts import (
+    ConversationTurn,
+    MathConversationArtifact,
+)
+from mathai.math_conversation.crew.crew_builder import build_micro_crew
 from mathai.math_conversation.models import MathConversationResult
 from mathai.math_conversation.state import MathConversationState
 
@@ -85,10 +90,33 @@ class RunCrewStep(BaseNode[MathConversationState, MathConversationDeps]):
         self, ctx: GraphRunContext[MathConversationState, MathConversationDeps]
     ) -> "FinalizeStep":
         log = ctx.deps.logger.for_stage("RunCrewStep")
-        # Crew assembly + the turn loop land in T5/T6. The skeleton
-        # records the default stop reason and leaves an empty transcript.
+        # Micro T5/T6: ONE Algebraist agent answers the seed question in one
+        # task. The full panel (multi-persona + skills + conclude tool +
+        # turn loop) lands next; this proves the worker[crewai] image runs
+        # crewai end-to-end through to a persisted MathConversationArtifact.
+        # If something earlier set `concluded` (the conclude tool in the full
+        # T5 panel), exit without running the crew. Otherwise the micro path
+        # runs ONE Algebraist agent on the seed question; the multi-persona
+        # panel + turn loop + skills are still to come.
+        if not ctx.state.concluded:
+            persona = "algebraist"
+            await log.info(f"micro crew: kicking off {persona} on seed question")
+            crew = build_micro_crew(ctx.state.seed_question or "", persona=persona)
+            result = await asyncio.to_thread(crew.kickoff)
+            content = str(getattr(result, "raw", result)).strip()
+            cost = float(getattr(getattr(result, "token_usage", None), "total_cost", 0.0) or 0.0)
+            ctx.state.turns.append(
+                ConversationTurn(
+                    turn_index=len(ctx.state.turns),
+                    agent_role=persona,
+                    agent_persona=persona,
+                    content=content,
+                    cost_usd=cost,
+                )
+            )
+            ctx.state.cost_so_far += cost
+            await log.info(f"micro crew done: 1 turn, cost=${cost:.4f}, content_len={len(content)} chars")
         ctx.state.stop_reason = "concluded" if ctx.state.concluded else "max_turns"
-        await log.info(f"crew run stub — {len(ctx.state.turns)} turn(s), stop_reason={ctx.state.stop_reason}")
         return FinalizeStep()
 
 

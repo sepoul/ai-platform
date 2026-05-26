@@ -78,18 +78,33 @@ def test_input_max_turns_bounds():
 # T1 — graph runs to End for both input forms
 # ---------------------------------------------------------------------------
 
+def _patch_micro_crew(monkeypatch):
+    """Replace build_micro_crew so RunCrewStep doesn't import crewai in the
+    test env (the engine ships only in the worker[crewai] image)."""
+    from types import SimpleNamespace
+    fake_output = SimpleNamespace(raw="micro stub", token_usage=SimpleNamespace(total_cost=0.0))
+    fake_crew = SimpleNamespace(kickoff=lambda: fake_output)
+    monkeypatch.setattr(
+        "mathai.math_conversation.workflow.build_micro_crew",
+        lambda seed, persona="algebraist": fake_crew,
+    )
+
+
 @pytest.mark.anyio
-async def test_graph_runs_to_end_with_question_text():
+async def test_graph_runs_to_end_with_question_text(monkeypatch):
+    _patch_micro_crew(monkeypatch)
     state = MathConversationState()
     deps = MathConversationDeps(question_text="What is a manifold?", max_turns=5)
     await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
     assert state.seed_question == "What is a manifold?"
     assert state.max_turns == 5
     assert state.stop_reason == "max_turns"
+    assert len(state.turns) == 1 and state.turns[0].content == "micro stub"
 
 
 @pytest.mark.anyio
-async def test_graph_runs_to_end_with_source_job_id():
+async def test_graph_runs_to_end_with_source_job_id(monkeypatch):
+    _patch_micro_crew(monkeypatch)
     jid = uuid4()
     state = MathConversationState()
     deps = MathConversationDeps(source_job_id=jid)
