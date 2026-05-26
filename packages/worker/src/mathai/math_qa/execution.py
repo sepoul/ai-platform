@@ -25,7 +25,7 @@ from mathai.math_qa.artifacts import (
     MathQuestionArtifact,
     UserCommentArtifact,
 )
-from mathai.math_qa.control import MATH_QA_GATES
+from mathai.math_qa.gates import MATH_QA_GATES
 from mathai.math_qa.models import UserComment
 from mathai.math_qa.state import MathQAState
 from mathai.math_qa.workflow import (

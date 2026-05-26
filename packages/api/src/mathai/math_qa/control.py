@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.domain import BootstrapContext, ControlDomain
-from ai_platform.jobs.execution_policy import JobControl, NodeGate
+from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.result_fetcher import hydrate_artifact_refs
 from mathai.api.dependencies import init_workspace
 from mathai.math_qa.artifacts import (
@@ -19,13 +19,8 @@ from mathai.math_qa.artifacts import (
     MathQuestionArtifact,
     UserCommentArtifact,
 )
-from mathai.math_qa.models import MathQAInput, MathQAResult, UserComment
-from mathai.workspace.client import MathWorkspaceClient
-
-# Human review fires after the LaTeX render so the user reviews text + math
-# together. The gate node name is a string here (no engine import); the
-# execution plane builds the runnable ExecutionPolicy from the same list.
-MATH_QA_GATES = [NodeGate(node_name="GenerateLatexStep", review_type=UserComment)]
+from mathai.math_qa.gates import MATH_QA_GATES
+from mathai.math_qa.models import MathQAInput, MathQAResult
 
 
 def build_math_qa_control(workspace_client) -> JobControl:
