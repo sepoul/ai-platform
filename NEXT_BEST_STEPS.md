@@ -609,6 +609,34 @@ OpenAPI shapes. See
 [prompt_registry.md](docs/prompt_registry.md) for the backend
 model.
 
+### Perf §9. Artifacts list — fix the N+1 against Supabase 📝 open
+
+`GET /artifacts` takes ~5s TTFB consistently (cold + warm) for a tiny
+11 KB payload — classic per-id round-trip pattern. Probably one Supabase
+query per artifact id in `ArtifactService.list` / `get_many`. Batch into
+a single `IN (...)` query and add `?limit/offset` so the panel doesn't
+always pull everything. Halves both the API cost AND the React render
+cost (fewer cards mounted on first paint). Diagnosed 2026-05-26.
+
+### Perf §10. Artifacts panel — memoize per-card body rendering 📝 open
+
+200 unmemoized `ArtifactCard` instances each call
+`katex.renderToString()` / `react-markdown` on every parent render
+(~10ms/card → ~2s of sync React work on first paint). `React.memo` the
+card, `useMemo` the KaTeX HTML by source string, and `next/dynamic` the
+KaTeX import so it leaves the initial JS bundle. Fixes after §9 lands
+(fewer cards alone removes most of the pain).
+
+### Tooling §11. Frontend perf playbook 📝 open
+
+Add `docs/frontend_perf_playbook.md` codifying the "is it the API, the
+BFF, the React render, or which component?" diagnostic. Modern Selenium
+successor (Playwright + Chrome DevTools Protocol) for runtime React
+profiling — the curl-based recipe we used today only catches the
+API/BFF half. Should include: Playwright tracing for paint timing,
+React DevTools Profiler equivalents, and the "count heavy leaf
+components × per-instance ms" back-of-envelope.
+
 ### Frontend §8. Audit `math-ui/components/workflow/` for hidden math_qa coupling 📝 open
 
 The workflow components were named generically before the platform
