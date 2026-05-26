@@ -21,6 +21,7 @@ from mathai.math_qa.artifacts import (
 )
 from mathai.math_qa.gates import MATH_QA_GATES
 from mathai.math_qa.models import MathQAInput, MathQAResult
+from mathai.workspace.client import MathWorkspaceClient
 
 
 def build_math_qa_control(workspace_client) -> JobControl:
