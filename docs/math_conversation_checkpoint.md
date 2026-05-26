@@ -37,8 +37,13 @@ d632828 feat(math_conversation): persona/skill registry extension (T3)
 
 ## Decisions locked in (don't relitigate)
 
-- **Crew runs on OpenAI**, CrewAI's native provider — avoids the
-  `anthropic` SDK clash (`crewai[anthropic]` pins `~=0.73` vs our `>=0.97`).
+- **Crew runs on Anthropic** (CrewAI's native Anthropic provider). The
+  original OpenAI choice dodged a `crewai[anthropic]~=0.73` vs
+  `pydantic-ai-slim>=0.97` clash in *one* interpreter; the Phase-3b
+  physical package split puts the two runtimes in separate images, so
+  each carries the anthropic version its stack is happy with. Plain
+  `crewai` (no `[anthropic]` extra) doesn't constrain it; the SDK is
+  available transitively via `pydantic-ai-slim[anthropic]`.
 - **No LiteLLM.** It's an optional crewai fallback for non-native
   providers only; we never touch it. (A throwaway in-process litellm
   burn-in was reverted — it bypassed pydantic_ai and went dark in Logfire.)
@@ -76,22 +81,24 @@ owns the dep stack; a domain just declares JobDefinitions.
   have to care about runtime at all. Future cleanup; see the TODO in
   `composition_root.py`.
 
-| Runtime | Requirements | Stack | Jobs |
+| Runtime | Install | Stack | Jobs |
 |---|---|---|---|
-| `default` | `requirements.txt` | pydantic_ai + logfire (otel ≥1.39) | `math_qa`, API |
-| `crewai` | `requirements-crewai.txt` | crewai (otel <1.35), no logfire | `math_conversation` |
+| `default` | `packages/worker[logfire]` | pydantic_ai + Anthropic + Logfire (otel ≥1.39) | `math_qa`, API |
+| `crewai` | `packages/worker[crewai]` | CrewAI + Anthropic (otel <1.35), no Logfire SDK | `math_conversation` |
 
 ## How to resume (T5/T6)
 
-1. **Provision the crewai runtime** (separate venv/image):
-   `pip install -r requirements-crewai.txt`. Set `OPENAI_API_KEY`.
-   (Local dev: a second venv; compose: `docker compose --profile crewai up worker-crewai`.)
+1. **Provision the crewai runtime** (its own image/venv):
+   `uv pip install -e "packages/worker[crewai]"`. Set `ANTHROPIC_API_KEY`.
+   (Compose: `docker compose --profile crewai up worker-crewai`.)
 2. **T5 — crew engine** (all imports lazy inside the node / `crew/` modules):
    - `crew/personae.py` — `build_agent(persona_name, llm) -> crewai.Agent`
      from `mathai.math_conversation.registry.load_persona/load_skill`.
    - `crew/skills.py` — skill loader + tool-allowlist enforcement.
    - `crew/crew.py` — `build_crew(personae, llm_factory, step_callback) -> Crew`,
-     sequential `Process`, `Crew(memory=False)`, `crewai.LLM(model="<openai>")`.
+     sequential `Process`, `Crew(memory=False)`,
+     `crewai.LLM(model="anthropic/claude-…")` (anthropic SDK present via
+     `pydantic-ai-slim[anthropic]`).
    - `tools/conclude.py` — `conclude(reason)` tool flips `state.concluded`.
    - Wire CrewAI `step_callback` → the existing
      [`CrewChatEmitter`](../src/mathai/math_conversation/crew/callbacks.py).
@@ -100,8 +107,8 @@ owns the dep stack; a domain just declares JobDefinitions.
    hydration from a source `math_qa` job (guard: source must be
    `completed`), RunCrewStep turn loop (cap `max_turns`, respect
    `conclude`), FinalizeStep already persists the artifact.
-4. **Acceptance probes** (the Day-0 burn-in): `requirements-crewai.txt`
-   resolves (✓ verified, otel-sdk 1.34.1); a trivial native-OpenAI
+4. **Acceptance probes** (the Day-0 burn-in): `packages/worker[crewai]`
+   resolves (✓ verified, otel-sdk 1.34.1); a trivial native-Anthropic
    crewai agent completes one call; an end-to-end `math_conversation`
    job run by the `crewai` worker produces a `MathConversationArtifact`.
 

@@ -89,7 +89,7 @@ rather than a silent fallback.
 
 To finish it:
 
-1. Add `celery` + a broker driver (e.g. `redis`) to `requirements.txt`.
+1. Add `celery` + a broker driver (e.g. `redis`) to `packages/core/pyproject.toml`.
 2. Create `execution/celery_app.py` with a `Celery("mathapp", broker=…)`
    instance and a `run_job(job_id)` task that:
    - bootstraps the workspace + domains (same three calls above),

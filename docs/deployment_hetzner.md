@@ -368,8 +368,8 @@ so you can flip back).
 ### Status
 
 Wiring is in place as of 2026-05-12: `celery[redis]>=5.4` is in
-`requirements.txt`, `src/mathapp/entrypoints/celery_app.py` defines
-the `run_job` task, and `CeleryComputeBackend.enqueue` calls
+`packages/core/pyproject.toml`, `packages/worker/src/mathapp/entrypoints/celery_app.py`
+defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
 `run_job.delay(job_id)`. The compose `celery` profile adds `redis`
 and `celery-worker`.
 
