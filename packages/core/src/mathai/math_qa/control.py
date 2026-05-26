@@ -10,7 +10,6 @@ from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.domain import BootstrapContext, ControlDomain
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.result_fetcher import hydrate_artifact_refs
-from mathai.api.dependencies import init_workspace
 from mathai.math_qa.artifacts import (
     MATH_QA_ARTIFACTS,
     FigureArtifact,
@@ -58,7 +57,6 @@ def register_control(ctx: BootstrapContext) -> ControlDomain:
         artifact_service=ctx.artifact_service,
         platform_client=ctx.platform_client,
     )
-    init_workspace(workspace_client)
     return ControlDomain(
         name="math_qa",
         job_controls=[build_math_qa_control(workspace_client)],
