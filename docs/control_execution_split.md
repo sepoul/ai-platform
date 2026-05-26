@@ -175,22 +175,41 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   packages/worker/src/...             #   + optional-deps: crewai (the crewai runtime)
   ```
 
-  **Module partition** (cross-cutters resolved):
-  - **core** — `ai_platform/{workspace,compute,runtime,ai/prompts}`,
-    `ai_platform/jobs/*` EXCEPT `job_runner.py`+`worker_loop.py`
-    (`graph_execution` is already engine-free via TYPE_CHECKING),
-    `mathai/<d>/{models,artifacts,state,registry,crew,tools*}`,
-    `mathai/workspace`, `mathai/api/dependencies`, `mathapp/composition_root`.
-    Also move here (pydantic-only, needed by both api router + worker's gen):
-    `ai_platform/api/{pydantic_fields,workflow_descriptor,schemas/workflows}`
-    → relocate to `ai_platform/jobs/` to avoid an `ai_platform.api` namespace split.
-    deps: pydantic, storage (b2sdk, supabase), redis/celery, httpx, pyyaml.
-  - **api (control)** — `ai_platform/api/{app,routers,schemas(except workflows)}`,
-    `mathai/<d>/control.py`, `mathapp/entrypoints/api.py`. deps: core + fastapi + uvicorn.
-  - **worker (execution)** — `mathai/<d>/{workflow,execution}`,
-    `ai_platform/jobs/{job_runner,worker_loop}`, `ai_platform/ai/providers`,
-    `mathapp/entrypoints/{worker,celery_app,gen_workflows}`. deps: core +
-    pydantic_graph + pydantic_ai + logfire; `[crewai]` extra: + crewai (no logfire).
+  **Module partition** (as deployed — the api/worker split is along
+  *platform layers*, not domain layers; all domain code lives in core):
+  - **core** — all shared platform + ALL domain code:
+    - platform: `ai_platform/{workspace,compute,runtime,utilities,
+      ai/prompts}`, `ai_platform/jobs/*` EXCEPT `job_runner.py` +
+      `worker_loop.py` (which need the engine at module load),
+      `mathapp/composition_root.py`, `scripts/`.
+    - domain: `mathai/<d>/{models,artifacts,state,registry,crew/callbacks,
+      tools,gates,control,workflow,execution}` (+ `crew/{personae,
+      crew_builder}` for `math_conversation`), `mathai/workspace`.
+    - deps: pydantic, storage (b2sdk, psycopg), celery[redis], httpx,
+      pyyaml, figure/doc libs. No FastAPI, no engine.
+  - **api (control)** — `ai_platform/api/{app,routers,schemas}` +
+    `mathapp/entrypoints/api.py`. **No domain code** (it's all in core).
+    deps: core + fastapi + uvicorn + python-multipart.
+  - **worker (execution)** — `ai_platform/jobs/{job_runner,worker_loop}`,
+    `ai_platform/ai/{providers,run_context}`, `mathapp/entrypoints/{worker,
+    celery_app,gen_workflows,crewai_smoke}`. **No domain code** (all in
+    core). deps: core + `pydantic-ai-slim[anthropic,duckduckgo]`. Extras:
+    `[logfire]` (default runtime), `[crewai]` (crewai runtime) — mutually
+    exclusive.
+
+  Isolation between runtimes is enforced by three mechanisms, NOT by where
+  source files live:
+  1. **Per-image deps** — the api image installs no engine; the default
+     image has no crewai; the crewai image has no Logfire SDK.
+  2. **`composition_root._DOMAINS` manifest** — `execution_registers_for_runtime`
+     only imports the execution module for domains assigned to that runtime,
+     so the wrong domain's `.py` files (present on disk in core) never load.
+  3. **Runtime import guard** (`import_guard.py`) — arms in the api process
+     to crash on any `pydantic_graph`/`crewai` import.
+
+  Domain code being shared in core is packaging convenience; the three
+  enforcers above are what guarantee a domain can never run on the wrong
+  runtime.
 
   **Namespace packages** (delete `__init__.py` at these split roots; keep on
   leaves): `ai_platform`, `ai_platform.jobs`, `ai_platform.ai`, `mathai`,
