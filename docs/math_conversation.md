@@ -117,7 +117,7 @@ kind: persona
 role: Algebraist
 goal: Drive the conversation toward formal, symbolic clarity.
 display_name: "Algebraist"
-model: claude-opus-4-7
+model: gpt-4o
 skills: [symbolic-manipulation, proof-checking]
 ---
 
@@ -255,45 +255,77 @@ platform primitives live in `ai_platform.*`, domain logic in
 
 ## Dependency strategy
 
-CrewAI is the proposed multi-agent runtime. The earlier assumption
-that CrewAI *mandates* LiteLLM is **wrong for our case** — verified
-against the CrewAI 1.14.5 source:
+CrewAI is the multi-agent runtime. **Both runtimes use Anthropic** —
+`math_qa` via `pydantic_ai`, the conversation panel via CrewAI's native
+Anthropic provider — because per-image isolation (Phase 3b) removed the
+SDK version clash that had forced an earlier OpenAI workaround:
 
-- `litellm` is an *optional* dependency (`crewai[litellm]`), imported
-  lazily inside a `try/except`; it is never imported at module load.
-- CrewAI's `LLM` factory inspects the model's provider prefix and
-  routes the native set (`openai`, `anthropic`/`claude`, `azure`,
-  `bedrock`, `gemini`, …) to a native SDK client. Only non-native
-  providers (Ollama, Groq, OpenRouter, Perplexity, …) fall back to
-  LiteLLM.
-- The native Anthropic path
-  (`crewai.llms.providers.anthropic.AnthropicCompletion`) calls the
-  official `anthropic` SDK directly (`Anthropic` / `AsyncAnthropic`).
+- **No LiteLLM.** CrewAI 1.14.5's `litellm` is an *optional* extra,
+  imported lazily; the `LLM` factory routes native providers (`openai`,
+  `anthropic`, `azure`, `bedrock`, …) to their SDKs and only falls back
+  to LiteLLM for non-native ones. We never touch the fallback.
+- **Anthropic on both sides.** The crewai worker image installs
+  `packages/worker[crewai]`, whose base deps already pull the Anthropic
+  SDK (transitively via `pydantic-ai-slim[anthropic]`). Plain `crewai`
+  (no `[anthropic]` extra) doesn't constrain anthropic, so the modern
+  version coexists fine. The two runtimes live in separate interpreters
+  (different images), so the old "shared interpreter, conflicting pins"
+  problem is gone — each image installs the anthropic version its stack
+  is happy with. Crew agents get `crewai.LLM(model="anthropic/claude-…")`.
+  Requires `ANTHROPIC_API_KEY` in the worker env.
 
-Since the panel runs Anthropic models exclusively, CrewAI uses the
-native `anthropic` SDK and **LiteLLM never enters the picture**. We
-install `crewai[anthropic]` and hand each agent a
-`crewai.LLM(model="anthropic/<model>")`. No custom `BaseLLM` adapter,
-no LiteLLM router, no OpenAI-compatible proxy.
+### The unavoidable clash: CrewAI vs. Logfire over OpenTelemetry
 
-**Observability.** The native path hits the `anthropic` SDK, so
-`logfire.instrument_anthropic()` captures every agent's LLM call at
-the SDK layer — into the same Logfire project the rest of the stack
-already reports to. (This is the same reason the discarded "route a
-node through in-process LiteLLM" experiment went dark: bypassing the
-instrumented SDK loses the spans. The native path avoids that.)
+Per-image isolation resolves the *anthropic* SDK clash, but a second
+constraint no provider choice avoids: **CrewAI 1.14.5 pins
+`opentelemetry-sdk <1.35`, while Logfire** (pulled by
+`pydantic-ai-slim[logfire]`) **needs `>=1.39`.** No CrewAI release
+loosens it. The two **cannot coexist in one Python interpreter**, so
+the crewai image installs `packages/worker[crewai]` (no `logfire`
+extra) and exports traces to Logfire via OTLP instead.
 
-**The real Day-0 risk is an `anthropic` SDK version clash, not
-LiteLLM.** Our stack pulls `anthropic 0.103.1` via
-`pydantic-ai-slim[anthropic]`; CrewAI 1.14.5's `[anthropic]` extra
-pins `anthropic~=0.73.0` (= `>=0.73.0,<0.74.0`). Those ranges are
-mutually exclusive. The Day-0 pre-task (see
-[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md)) is to determine whether
-`crewai[anthropic]` can coexist with `pydantic-ai-slim[anthropic]` —
-by finding a CrewAI release whose anthropic pin overlaps ours, by
-loosening one side, or by isolating CrewAI in the worker image and
-accepting a divergent anthropic version there. If the two cannot be
-reconciled, *that* — not LiteLLM — is what reroutes the plan.
+Resolution: **per-runtime worker pools** (see
+[`ai_platform/jobs/runtimes.py`](../src/ai_platform/jobs/runtimes.py)).
+A *runtime* is an isolated dependency environment. Runtime is scoped at
+the **domain** level: the import manifest in
+[`composition_root.py`](../src/mathapp/composition_root.py)
+(`runtime → domain modules`) is the single source of truth. There is no
+per-job runtime field — you can't read one without importing the module
+that may crash on a slim env. A worker serves one runtime
+(`WORKER_RUNTIME`), imports only that runtime's domains, and so claims
+only its own jobs.
+
+| Runtime | Install | Stack | Job types |
+|---|---|---|---|
+| `default` | `packages/worker[logfire]` | pydantic_ai + Anthropic + **Logfire** (otel ≥1.39) | `math_qa`, API process |
+| `crewai` | `packages/worker[crewai]` | CrewAI + Anthropic (otel <1.35), no Logfire SDK | `math_conversation` |
+
+The manifest assigns `mathai.math_conversation.domain` to `crewai`, so a
+`default` worker never imports it (leaving those jobs `PENDING`) and the
+`crewai` worker pool picks them up. The two stacks never share an
+interpreter. A domain that needs to span runtimes is split into one
+domain per runtime.
+
+**The load-bearing rule** that makes this work: building a
+`JobDefinition` must be importable from *any* runtime. The composition
+root imports domains lazily, per runtime, so the `crewai` worker never
+imports `math_qa` (→ `basic_agent` → `logfire`). Heavy crew imports
+(`crewai`) live **inside `RunCrewStep`**, not at module load, so the API
+and `default` worker register the conversation job without `crewai`
+installed. (The API importing *all* domains is what forces this rule; it
+only needs each job's schemas, not its execution code, so decoupling the
+API from runtime is flagged as future cleanup.)
+
+**Observability per runtime.** The `default` runtime runs the Logfire SDK
+directly. The `crewai` runtime can't (otel pin) but ships
+`opentelemetry-exporter-otlp` — Logfire is an OTLP collector, so crew traces
+can land in the same project via direct OTLP export. v1 surfaces crew
+progress through the structured `CrewChatEvent` log stream (below) and wires
+OTLP-to-Logfire as a follow-up.
+
+**Day-0 burn-in:** `uv pip install -e "packages/worker[crewai]"` resolves
+(verified: otel-sdk 1.34.1); `pytest tests/` stays green; a trivial native
+Anthropic CrewAI agent completes one call.
 
 CrewAI memory features (long-term, entity, contextual) are **off**
 for v1 (`Crew(memory=False)`). Each conversation is hermetic. This
@@ -347,8 +379,7 @@ completes; runaway cost is gated by `max_turns` alone.
 - Three personae with real prompts; skill bodies as stubs.
 - Native CrewAI Anthropic LLM wiring and `conclude` tool.
 - math-ui chat renderer + submit/CTA entry points.
-- Day-0 anthropic-SDK coexistence pre-task resolved
-  (`crewai[anthropic]` ↔ `pydantic-ai-slim[anthropic]`).
+- Day-0 CrewAI install + Anthropic burn-in done.
 
 What does **not** ship in v1:
 

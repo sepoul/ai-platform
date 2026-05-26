@@ -8,8 +8,10 @@ zero-downtime story; that's a different document.
 > **Status (2026-05-15): steps 1–4 live end-to-end.** Box
 > `mathapp-prod` (CX23, Falkenstein) is provisioned via
 > `cd infra/hetzner && terraform apply`. App deploy runs from a
-> GHCR-built image — GitHub Actions builds on push to `main` and
-> publishes `ghcr.io/sepoul/mathapp:latest`; the box pulls it via
+> GHCR-built images — GitHub Actions builds on push to `main` and
+> publishes the three split images
+> (`ghcr.io/sepoul/mathapp-{api,worker,worker-crewai}:latest`); the box
+> pulls them via
 > [`infra/hetzner/scripts/redeploy.sh`](../infra/hetzner/scripts/redeploy.sh).
 > Step 6's Celery wiring is implemented and locally smoke-tested via
 > `--profile celery`; not yet exercised on the box. The manual
@@ -267,9 +269,15 @@ ssh root@mathapp-prod 'cd /srv/mathapp && infra/hetzner/scripts/redeploy.sh'
 ```
 
 `redeploy.sh` runs `docker compose -f docker-compose.yml -f
-docker-compose.prod.yml pull && up -d`, then prunes dangling images.
-The compose override pins each service to `ghcr.io/sepoul/mathapp:latest`
-(or `${IMAGE_TAG}` if exported) — no build happens on the box.
+docker-compose.prod.yml --profile ui --profile crewai pull && up -d`,
+then prunes dangling images. The compose override pins each service to
+its split image (`mathapp-api`, `mathapp-worker`, `mathapp-worker-crewai`)
+at `:latest` (or `${IMAGE_TAG}` if exported) — no build happens on the box.
+
+**Both workers run simultaneously.** The `worker` container serves the
+default runtime (pydantic_ai, math_qa) and `worker-crewai` serves the
+CrewAI runtime (math_conversation); they are not swappable. Storage and
+compute backends are still pick-one (`BACKEND`, `COMPUTE` env vars).
 
 From the laptop on the tailnet:
 
@@ -368,8 +376,8 @@ so you can flip back).
 ### Status
 
 Wiring is in place as of 2026-05-12: `celery[redis]>=5.4` is in
-`requirements.txt`, `src/mathapp/entrypoints/celery_app.py` defines
-the `run_job` task, and `CeleryComputeBackend.enqueue` calls
+`packages/core/pyproject.toml`, `packages/worker/src/mathapp/entrypoints/celery_app.py`
+defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
 `run_job.delay(job_id)`. The compose `celery` profile adds `redis`
 and `celery-worker`.
 
@@ -398,8 +406,8 @@ services:
     profiles: [celery]
 
   celery-worker:
-    build: { context: ., dockerfile: Dockerfile }
-    image: mathapp:local
+    build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: logfire } }
+    image: mathapp-worker:local
     command: >
       celery -A mathapp.entrypoints.celery_app worker
       --loglevel=info

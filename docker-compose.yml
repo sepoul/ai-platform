@@ -21,8 +21,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.api   # control plane: core + FastAPI, NO engine
+    image: mathapp-api:local
     command: >
       python -u -m uvicorn mathapp.entrypoints.api:app
       --host 0.0.0.0
@@ -30,8 +30,6 @@ services:
     environment:
       BACKEND: ${BACKEND:-local}
       LOCAL_DATA_DIR: /data
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APP_KEY: ${B2_APP_KEY:-}
       B2_BUCKET: ${B2_BUCKET:-app-data}
@@ -59,8 +57,10 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.worker
+      args:
+        EXTRA: logfire   # default execution runtime: engine + Logfire (otel >=1.39)
+    image: mathapp-worker:local
     command: >
       python -u -m mathapp.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -90,6 +90,47 @@ services:
       - api
     restart: unless-stopped
 
+  # crewai runtime worker pool. Built from packages/worker[crewai] (crewai,
+  # no logfire — the otel-sdk pins conflict). Only serves the math_conversation
+  # domain (runtime=crewai). Opt-in via `--profile crewai`; default
+  # `docker compose up` doesn't build/run it.
+  # See ai_platform/jobs/runtimes.py and docs/math_conversation.md.
+  worker-crewai:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        EXTRA: crewai
+    image: mathapp-worker-crewai:local
+    command: >
+      python -u -m mathapp.entrypoints.worker
+      --interval ${WORKER_INTERVAL:-5}
+    environment:
+      WORKER_RUNTIME: crewai
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      # Crew runs on Anthropic via CrewAI's native provider (anthropic SDK
+      # present transitively via pydantic-ai-slim[anthropic]). No LOGFIRE_TOKEN
+      # — this runtime can't load the Logfire SDK (otel pin); OTLP export to
+      # Logfire is a follow-up.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
+      PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
+      UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
+    volumes:
+      - mathapp-data:/data
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles: [crewai]
+
   # Celery profile: redis broker + celery-worker container. Only started
   # with `--profile celery`. See docs/deployment_hetzner.md §6 for the
   # full migration recipe. When running this profile, also
@@ -111,8 +152,10 @@ services:
   celery-worker:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mathapp:local
+      dockerfile: Dockerfile.worker
+      args:
+        EXTRA: logfire   # celery worker is an execution context → engine package
+    image: mathapp-worker:local
     command: >
       celery -A mathapp.entrypoints.celery_app worker
       --loglevel=info

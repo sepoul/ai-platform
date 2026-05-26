@@ -29,12 +29,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: mathapp
+          # Control plane (FastAPI; NO engine) — control/execution split phase 3b.
+          - name: mathapp-api
             context: .
-            image: ghcr.io/sepoul/mathapp
+            file: Dockerfile.api
+            image: ghcr.io/sepoul/mathapp-api
+            build-args: ""
+          # Default execution runtime (pydantic_ai + Logfire).
+          - name: mathapp-worker
+            context: .
+            file: Dockerfile.worker
+            image: ghcr.io/sepoul/mathapp-worker
+            build-args: |
+              EXTRA=logfire
+          # CrewAI execution runtime (multi-agent panel, otel <1.35, no Logfire SDK).
+          - name: mathapp-worker-crewai
+            context: .
+            file: Dockerfile.worker
+            image: ghcr.io/sepoul/mathapp-worker-crewai
+            build-args: |
+              EXTRA=crewai
           - name: math-ui
             context: math-ui
+            file: ""
             image: ghcr.io/sepoul/math-ui
+            build-args: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +72,8 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-args: ${{ matrix.build-args }}
           push: true
           tags: |
             ${{ matrix.image }}:latest

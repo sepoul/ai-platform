@@ -1,3 +1,21 @@
+# Control/execution-plane split (docs/control_execution_split.md). Three
+# distinct installable packages that share import namespaces (PEP-420) but have
+# disjoint dependency closures:
+#   packages/core    (mathapp-core)             — shared: JobRecord, storage, compute
+#   packages/api     (mathapp-control-plane)    — core + fastapi, NO engine
+#   packages/worker  (mathapp-execution-plane)  — core + pydantic_graph/pydantic_ai (+[crewai])
+#
+# Each service installs standalone with uv from just core + itself (api/worker
+# pyproject pin `mathapp-core` via a path source), so the api image never
+# contains worker code and vice versa — true per-image isolation. NOT a uv
+# workspace: a workspace forbids path sources for members, which we need for
+# standalone installs. Tests run against source via `pythonpath` below (no
+# install needed).
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [
+    "packages/core/src",
+    "packages/api/src",
+    "packages/worker/src",
+]

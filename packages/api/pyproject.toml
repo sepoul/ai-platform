@@ -1,0 +1,25 @@
+[project]
+name = "mathapp-control-plane"
+version = "0.1.0"
+description = "Control plane (API): job creation, exploration, artifact lookup. Depends on core + FastAPI; never the execution engine."
+requires-python = ">=3.13"
+dependencies = [
+    "mathapp-core",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "python-multipart",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.uv.sources]
+# Path (not workspace) so a service installs standalone from just core + itself
+# — the api image never needs the worker package present. Still resolves inside
+# the workspace for dev `uv sync`.
+mathapp-core = { path = "../core", editable = true }
