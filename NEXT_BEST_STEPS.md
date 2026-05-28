@@ -611,12 +611,30 @@ model.
 
 ### Perf §9. Artifacts list — fix the N+1 against Supabase 📝 open
 
-`GET /artifacts` takes ~5s TTFB consistently (cold + warm) for a tiny
-11 KB payload — classic per-id round-trip pattern. Probably one Supabase
-query per artifact id in `ArtifactService.list` / `get_many`. Batch into
-a single `IN (...)` query and add `?limit/offset` so the panel doesn't
-always pull everything. Halves both the API cost AND the React render
-cost (fewer cards mounted on first paint). Diagnosed 2026-05-26.
+`GET /artifacts` takes ~5s TTFB consistently (cold + warm) for an 11 KB
+payload. Confirmed in code: `SupabaseArtifactRepository` only exposes
+`put` / `get` / `list_ids` — so the caller (`ArtifactService.list`)
+reads ids, then `get(id)` per artifact. One round-trip per artifact.
+
+The original reason `list_ids` was the only list shape: artifacts are a
+discriminated union, and mixed-type batch hydration is awkward — the
+service needs the type to know which `BaseArtifact` subclass to validate
+against. The safe fix:
+
+  - Add `list_by_type(artifact_type) -> list[dict]` to the repo
+    (Supabase + local + b2; touch the protocol in `storage/protocols.py`
+    too). Within a single type, the model class is fixed → safe hydration
+    in `ArtifactService` with one query. This is what the panel actually
+    wants (it already groups by type tab).
+  - Optional follow-up: `list_all() -> list[dict]` that returns raw
+    payloads, dispatched via the `artifact_type` discriminator at the
+    service layer. Strictly an "All" tab nice-to-have; per-type already
+    covers the hot path.
+  - Add `?limit/offset` (and an `artifact_type=` query param) on
+    `GET /artifacts` so the panel pulls a page per tab instead of
+    everything. Pairs with §10 to halve the React render cost too.
+
+Diagnosed 2026-05-26. Design refined 2026-05-28.
 
 ### Perf §10. Artifacts panel — memoize per-card body rendering 📝 open
 
