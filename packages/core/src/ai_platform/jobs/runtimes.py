@@ -19,11 +19,15 @@ How it fits together:
   domains, so its job-definition set already contains *only* its jobs;
   it claims exactly those (see `ai_platform.jobs.worker_loop`). Jobs for
   other runtimes stay ``PENDING`` for the pool that can run them.
-- Deployment provisions one worker pool per runtime, each installing a
-  different extra of the execution package: ``packages/worker[logfire]`` for
-  ``default`` (engine + Logfire) and ``packages/worker[crewai]`` for
-  ``crewai`` (engine + CrewAI, no Logfire — otel-sdk pin conflict).
-  See docs/control_execution_split.md.
+- Deployment provisions one worker pool per runtime. Each extra installs
+  its own LLM stack on top of a shared base (``pydantic-graph`` only —
+  the platform graph framework): ``packages/worker[default]`` brings
+  ``pydantic-ai-slim[anthropic,duckduckgo,logfire]`` (math_qa);
+  ``packages/worker[crewai]`` brings ``crewai[anthropic]`` (math_conversation,
+  no Logfire — otel-sdk pin conflict). The two are mutually exclusive
+  per the otel-sdk pin; per-image isolation makes ``crewai[anthropic]``
+  safe (the historical clash with ``pydantic-ai-slim`` only existed when
+  they shared one interpreter). See docs/control_execution_split.md.
 
 A domain that needs jobs on more than one runtime is split into one
 domain per runtime — runtime owns the dependency stack and integration
@@ -51,8 +55,8 @@ WORKER_RUNTIME_ENV = "WORKER_RUNTIME"
 # provisions it). Informational: the functional contract is the import
 # manifest in composition_root + the WORKER_RUNTIME this worker serves.
 RUNTIMES: dict[str, str] = {
-    "default": "pydantic_ai + Logfire (packages/worker[logfire]) — math_qa, API process",
-    "crewai": "CrewAI panel (packages/worker[crewai]) — math_conversation; no Logfire (otel-sdk <1.35)",
+    "default": "pydantic_ai + Anthropic + Logfire (packages/worker[default]) — math_qa, API process",
+    "crewai":  "CrewAI[anthropic] (packages/worker[crewai]) — math_conversation; no Logfire (otel-sdk <1.35)",
 }
 
 

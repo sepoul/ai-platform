@@ -1,21 +1,27 @@
 [project]
 name = "mathapp-execution-plane"
 version = "0.1.0"
-description = "Execution plane (worker): the job implementation — pydantic_graph + pydantic_ai engine. Logfire and CrewAI are per-runtime extras (mutually exclusive)."
+description = "Execution plane (worker): per-runtime job implementation. The base ships only pydantic_graph (the platform graph framework all runtimes need); each runtime's LLM stack lives in its own extra. The two extras are mutually exclusive — each runs as its own worker image, so no shared interpreter, no shared SDK pins."
 requires-python = ">=3.13"
 dependencies = [
     "mathapp-core",
     "python-dotenv",
-    # The engine. pydantic-ai-slim pulls pydantic_ai + pydantic_graph + anthropic.
-    "pydantic-ai-slim[anthropic,duckduckgo]>=1.58.0",
+    # The platform graph framework — both runtimes need it. Direct dep
+    # (previously transitive via pydantic-ai-slim, but pydantic-ai-slim
+    # itself is now per-runtime).
+    "pydantic-graph>=1.58.0",
 ]
 
 [project.optional-dependencies]
-# default runtime: Logfire tracing (opentelemetry-sdk >=1.39)
-logfire = ["pydantic-ai-slim[logfire]>=1.58.0"]
-# crewai runtime: multi-agent panel (opentelemetry-sdk <1.35) — CANNOT be
-# installed alongside `logfire`; that's why each runs as its own worker image.
-crewai = ["crewai>=1.14.5,<1.15"]
+# default runtime: pydantic_ai + Anthropic SDK + Logfire (otel >=1.39).
+# Used by math_qa. Image: `Dockerfile.worker --build-arg EXTRA=default`.
+default = ["pydantic-ai-slim[anthropic,duckduckgo,logfire]>=1.58.0"]
+# crewai runtime: multi-agent panel + Anthropic SDK (otel <1.35). Used by
+# math_conversation. Image: `Dockerfile.worker --build-arg EXTRA=crewai`.
+# crewai[anthropic] is safe here because this is a separate image — the
+# historical clash with pydantic-ai-slim was about sharing one interpreter,
+# which per-image isolation eliminates.
+crewai = ["crewai[anthropic]>=1.14.5,<1.15"]
 
 [build-system]
 requires = ["setuptools>=61"]

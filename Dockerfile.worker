@@ -1,9 +1,10 @@
-# Execution-plane image (mathapp-execution-plane): the job implementation —
-# pydantic_graph + pydantic_ai engine. Installs ONLY core + worker (no api
-# code). EXTRA selects the runtime:
-#   EXTRA=logfire  default runtime (Logfire tracing, otel >=1.39)
-#   EXTRA=crewai   crewai runtime (multi-agent, otel <1.35; no logfire)
-# The two are mutually exclusive, so each runs as its own image.
+# Execution-plane image (mathapp-execution-plane). The base ships only
+# pydantic_graph (the platform graph framework). EXTRA selects the runtime,
+# and each runtime brings its own LLM stack so the image is slim:
+#   EXTRA=default  pydantic_ai + Anthropic + Logfire (otel >=1.39) — math_qa
+#   EXTRA=crewai   CrewAI[anthropic] (otel <1.35; no logfire) — math_conversation
+# The two are mutually exclusive over the otel-sdk pin, so each runs as
+# its own image with its own dependency tree.
 # See docs/control_execution_split.md and ai_platform/jobs/runtimes.py.
 FROM python:3.13-slim
 
@@ -24,5 +25,5 @@ COPY packages/worker /app/packages/worker
 COPY instructions    /app/instructions
 COPY supabase        /app/supabase
 
-ARG EXTRA=logfire
+ARG EXTRA=default
 RUN uv pip install --system --no-cache -e "packages/worker[${EXTRA}]"
