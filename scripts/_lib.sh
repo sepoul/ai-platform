@@ -32,8 +32,10 @@ if [[ -f .env ]]; then
   set +a
 fi
 
-# Defaults.
-export PYTHONPATH="${PYTHONPATH:-$REPO_ROOT/src}"
+# Defaults. PYTHONPATH covers all three workspace package roots so scripts
+# that import `mathapp` / `mathai` / `ai_platform` resolve them; the old
+# single-root layout (`src/`) predates the uv workspace split.
+export PYTHONPATH="${PYTHONPATH:-$REPO_ROOT/packages/core/src:$REPO_ROOT/packages/api/src:$REPO_ROOT/packages/worker/src}"
 export BACKEND="${BACKEND:-local}"
 if [[ "$BACKEND" == "local" && -z "${LOCAL_DATA_DIR:-}" ]]; then
   export LOCAL_DATA_DIR="$REPO_ROOT/mathdata"

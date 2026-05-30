@@ -10,6 +10,7 @@ import { JobLogs } from "@/components/jobs/job-logs";
 import { updateActiveJob, clearActiveJob } from "@/lib/platform";
 import type { MathQAResult } from "@/lib/domains/math-qa";
 import { PageContainer, PageHeader } from "@/components/library";
+import { StartFromAnswerButton } from "@/components/conversation/start-from-answer-button";
 
 interface Props {
   params: Promise<{ jobId: string }>;
@@ -104,7 +105,15 @@ export default function MathQAJobPage({ params }: Props) {
             {loadingResult && (
               <p className="text-sm text-muted-foreground">Loading result…</p>
             )}
-            {!loadingResult && qaResult && <ResultDisplay result={qaResult} />}
+            {!loadingResult && qaResult && (
+              <>
+                <ResultDisplay result={qaResult} />
+                {/* CTA: spin up a math_conversation panel seeded from this
+                 * job's artifacts. SeedStep hydrates the question/answer/
+                 * latex/figure into the panel's context. */}
+                <StartFromAnswerButton sourceJobId={jobId} />
+              </>
+            )}
           </>
         )}
       </div>

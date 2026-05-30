@@ -193,9 +193,11 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   - **worker (execution)** — `ai_platform/jobs/{job_runner,worker_loop}`,
     `ai_platform/ai/{providers,run_context}`, `mathapp/entrypoints/{worker,
     celery_app,gen_workflows,crewai_smoke}`. **No domain code** (all in
-    core). deps: core + `pydantic-ai-slim[anthropic,duckduckgo]`. Extras:
-    `[logfire]` (default runtime), `[crewai]` (crewai runtime) — mutually
-    exclusive.
+    core). deps: core + `pydantic-graph` (the platform graph framework,
+    needed by every runtime). Each runtime's LLM stack lives in its own
+    extra: `[default]` = `pydantic-ai-slim[anthropic,duckduckgo,logfire]`
+    (math_qa); `[crewai]` = `crewai[anthropic]` (math_conversation, no
+    Logfire). Mutually exclusive — each runs as its own image.
 
   Isolation between runtimes is enforced by three mechanisms, NOT by where
   source files live:

@@ -6,15 +6,23 @@ import "katex/dist/katex.min.css";
 import { cn } from "@/lib/utils";
 
 /**
- * Renders mixed prose + LaTeX. Recognises KaTeX-style delimiters:
+ * Renders mixed prose + LaTeX. Recognises four delimiter styles:
  *
- *   \(...\)   inline math
- *   \[...\]   block math
+ *   \(...\)   inline math (KaTeX-style)
+ *   \[...\]   block math  (KaTeX-style)
+ *   $...$     inline math (dollar-style; what CrewAI / Markdown agents emit)
+ *   $$...$$   block math  (dollar-style)
  *
  * Each segment is split out and rendered through KaTeX
  * (`renderToString`); plain prose stays untouched. Invalid math falls
  * back to the raw source in red rather than throwing — the validated
- * artifact path won't hit this, but unvalidated draft inputs might.
+ * artifact path won't hit this, but unvalidated draft inputs (like
+ * math_conversation turns from a raw LLM) often will.
+ *
+ * Dollar-delimited math is guarded against false positives ("$50 budget"
+ * has no closing $ on the same line and so doesn't match); the inline
+ * pattern requires a non-whitespace char inside the delimiters. `$$`
+ * is tried before single `$` so the block pattern wins on `$$x$$`.
  *
  * The companion validation endpoint is `/api/tools/validate-latex`,
  * which uses the same library to give the agent pre-render feedback.
@@ -25,7 +33,10 @@ type Segment =
   | { kind: "inline"; value: string }
   | { kind: "block"; value: string };
 
-const SEGMENT_RE = /\\\((.+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+// Order matters: $$ before $, otherwise the lazier $ pattern eats both
+// dollars and leaves an empty $-pair behind.
+const SEGMENT_RE =
+  /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\((.+?)\\\)|\$(\S(?:[^$\n]*?\S)?)\$/g;
 
 function splitSegments(source: string): Segment[] {
   const out: Segment[] = [];
@@ -36,9 +47,13 @@ function splitSegments(source: string): Segment[] {
       out.push({ kind: "prose", value: source.slice(cursor, start) });
     }
     if (match[1] !== undefined) {
-      out.push({ kind: "inline", value: match[1] });
+      out.push({ kind: "block", value: match[1] });    // $$...$$
     } else if (match[2] !== undefined) {
-      out.push({ kind: "block", value: match[2] });
+      out.push({ kind: "block", value: match[2] });    // \[...\]
+    } else if (match[3] !== undefined) {
+      out.push({ kind: "inline", value: match[3] });   // \(...\)
+    } else if (match[4] !== undefined) {
+      out.push({ kind: "inline", value: match[4] });   // $...$
     }
     cursor = start + match[0].length;
   }

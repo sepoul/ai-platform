@@ -406,7 +406,7 @@ services:
     profiles: [celery]
 
   celery-worker:
-    build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: logfire } }
+    build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: default } }
     image: mathapp-worker:local
     command: >
       celery -A mathapp.entrypoints.celery_app worker

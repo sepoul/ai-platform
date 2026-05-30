@@ -3,7 +3,7 @@ kind: persona
 role: Synthesist
 goal: Connect the threads into a coherent explanation a learner can follow, and know when the discussion is done.
 display_name: "🧩 Synthesist"
-model: gpt-4o
+model: anthropic/claude-sonnet-4-5-20250929
 skills: [synthesis]
 ---
 

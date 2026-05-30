@@ -277,6 +277,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/math-conversation/event-types/crew-chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * CrewChatEvent schema (for client codegen)
+         * @description Return a representative CrewChatEvent so the OpenAPI schema
+         *     carries the type and `gen:api` picks it up for typed FE
+         *     parsing. Not for live consumption — live events flow over
+         *     `/jobs/{id}/logs/stream` and are detected by JSON-parsing each
+         *     log line and matching the `event` discriminator.
+         */
+        get: operations["get_crew_chat_event_schema_math_conversation_event_types_crew_chat_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -332,6 +356,76 @@ export interface components {
              * @default []
              */
             fields: components["schemas"]["ParamSpec"][];
+        };
+        /**
+         * ConversationTurn
+         * @description A single agent move in the conversation.
+         *
+         *     Embedded in `MathConversationArtifact.turns` and mirrored on
+         *     `MathConversationState.turns` while the run is in flight. `latex`
+         *     and `figure` are inline — the math-ui `<Latex>` component and figure
+         *     renderer take these values directly.
+         */
+        ConversationTurn: {
+            /** Turn Index */
+            turn_index: number;
+            /** Agent Role */
+            agent_role: string;
+            /** Agent Persona */
+            agent_persona: string;
+            /** Content */
+            content: string;
+            /** Latex */
+            latex?: string | null;
+            /** Figure */
+            figure?: {
+                [key: string]: unknown;
+            } | null;
+            /** Tool Calls */
+            tool_calls?: components["schemas"]["ToolCallRecord"][];
+            /**
+             * Cost Usd
+             * @default 0
+             */
+            cost_usd: number;
+        };
+        /**
+         * CrewChatEvent
+         * @description One event in the live conversation stream.
+         *
+         *     Mirrors `docs/math_conversation.md` → Live visibility. Optional
+         *     fields are populated per event kind (e.g. `content` on `message`,
+         *     `tool_name` on `tool_call`).
+         */
+        CrewChatEvent: {
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "signed_in" | "is_typing" | "message" | "tool_call" | "tool_result" | "concluded" | "signed_out" | "status";
+            /** Agent Role */
+            agent_role?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Turn Index */
+            turn_index?: number | null;
+            /** Content */
+            content?: string | null;
+            /** Latex */
+            latex?: string | null;
+            /** Tool Name */
+            tool_name?: string | null;
+            /**
+             * Elapsed Seconds
+             * @default 0
+             */
+            elapsed_seconds: number;
+            /** Turns Used */
+            turns_used?: number | null;
+            /** Turns Budget */
+            turns_budget?: number | null;
+            /** Cost Usd */
+            cost_usd?: number | null;
         };
         /** EdgeResponse */
         EdgeResponse: {
@@ -446,7 +540,8 @@ export interface components {
         JobResultResponse: {
             /** Job Id */
             job_id: string;
-            result?: components["schemas"]["MathQAResult"] | null;
+            /** Result */
+            result?: (components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -471,7 +566,8 @@ export interface components {
             waiting_for?: string | null;
             /** Error Message */
             error_message?: string | null;
-            result?: components["schemas"]["MathQAResult"] | null;
+            /** Result */
+            result?: (components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -543,14 +639,110 @@ export interface components {
             source?: string | null;
         };
         /**
+         * MathConversationArtifact
+         * @description The whole brainstorm transcript, persisted once at end-of-run.
+         *
+         *     `seed_question` is the question the panel explored — pulled from a
+         *     source `math_qa` job's artifacts or wrapped from fresh input text.
+         *     `source_job_id` records provenance when seeded from a prior job.
+         */
+        MathConversationArtifact: {
+            /**
+             * Artifact Id
+             * Format: uuid
+             */
+            artifact_id?: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            artifact_type: "math_conversation";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Created By Job */
+            created_by_job?: string | null;
+            /** Source Job Id */
+            source_job_id?: string | null;
+            /** Seed Question */
+            seed_question: string;
+            /** Turns */
+            turns?: components["schemas"]["ConversationTurn"][];
+            /**
+             * Total Cost Usd
+             * @default 0
+             */
+            total_cost_usd: number;
+            /**
+             * Stop Reason
+             * @default max_turns
+             * @enum {string}
+             */
+            stop_reason: "max_turns" | "concluded";
+        };
+        /**
+         * MathConversationInput
+         * @description Typed submit input — a variant of the platform request union.
+         *
+         *     Exactly one of `source_job_id` (seed from a completed `math_qa` job)
+         *     or `question_text` (fresh question) must be set; the validator
+         *     rejects "both" and "neither" at the API boundary.
+         */
+        MathConversationInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            job_type: "math_conversation";
+            /**
+             * Source Job Id
+             * @description Seed from a completed math_qa job's artifacts.
+             */
+            source_job_id?: string | null;
+            /**
+             * Question Text
+             * @description Fresh question to brainstorm (when not seeding from a job).
+             */
+            question_text?: string | null;
+            /**
+             * Max Turns
+             * @description Hard cap on conversation turns.
+             * @default 12
+             */
+            max_turns: number;
+            /**
+             * Created By
+             * @description Submitting user.
+             */
+            created_by?: string | null;
+        };
+        /**
+         * MathConversationResult
+         * @description Typed result — a variant of the platform result union.
+         *
+         *     The single `conversation` artifact is resolved from `artifact_refs`
+         *     by the result endpoint's hydrator.
+         */
+        MathConversationResult: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            job_type: "math_conversation";
+            conversation?: components["schemas"]["MathConversationArtifact"] | null;
+        };
+        /**
          * MathQAInput
          * @description Typed submit input for a Math Q&A job — variant of the platform request union.
          */
         MathQAInput: {
             /**
-             * Job Type
-             * @default math_qa
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             job_type: "math_qa";
             /**
@@ -581,9 +773,8 @@ export interface components {
             /** Artifact Refs */
             artifact_refs?: string[];
             /**
-             * Job Type
-             * @default math_qa
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             job_type: "math_qa";
             question?: components["schemas"]["MathQuestionArtifact"] | null;
@@ -721,6 +912,8 @@ export interface components {
             /** Instructions */
             instructions?: string | null;
         };
+        /** RootModel[Annotated[Union[MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -746,6 +939,20 @@ export interface components {
              * @default []
              */
             resume_params: components["schemas"]["ParamSpec"][];
+        };
+        /**
+         * ToolCallRecord
+         * @description One tool invocation an agent made inside a turn.
+         */
+        ToolCallRecord: {
+            /** Tool Name */
+            tool_name: string;
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Result */
+            result?: string | null;
         };
         /**
          * UserComment
@@ -824,6 +1031,11 @@ export interface components {
             /** Job Type */
             job_type: string;
             /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
              * Submit Params
              * @default []
              */
@@ -849,6 +1061,8 @@ export type SchemaArtifactListResponse = components['schemas']['ArtifactListResp
 export type SchemaArtifactSummary = components['schemas']['ArtifactSummary'];
 export type SchemaArtifactTypeListResponse = components['schemas']['ArtifactTypeListResponse'];
 export type SchemaArtifactTypeSpec = components['schemas']['ArtifactTypeSpec'];
+export type SchemaConversationTurn = components['schemas']['ConversationTurn'];
+export type SchemaCrewChatEvent = components['schemas']['CrewChatEvent'];
 export type SchemaEdgeResponse = components['schemas']['EdgeResponse'];
 export type SchemaFigureArtifact = components['schemas']['FigureArtifact'];
 export type SchemaGateSpec = components['schemas']['GateSpec'];
@@ -858,6 +1072,9 @@ export type SchemaJobResultResponse = components['schemas']['JobResultResponse']
 export type SchemaJobStatusResponse = components['schemas']['JobStatusResponse'];
 export type SchemaLatexAnswerArtifact = components['schemas']['LatexAnswerArtifact'];
 export type SchemaLogEntry = components['schemas']['LogEntry'];
+export type SchemaMathConversationArtifact = components['schemas']['MathConversationArtifact'];
+export type SchemaMathConversationInput = components['schemas']['MathConversationInput'];
+export type SchemaMathConversationResult = components['schemas']['MathConversationResult'];
 export type SchemaMathQaInput = components['schemas']['MathQAInput'];
 export type SchemaMathQaResult = components['schemas']['MathQAResult'];
 export type SchemaMathQuestionArtifact = components['schemas']['MathQuestionArtifact'];
@@ -868,8 +1085,10 @@ export type SchemaPromptExecutionSummary = components['schemas']['PromptExecutio
 export type SchemaPromptListResponse = components['schemas']['PromptListResponse'];
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
+export type SchemaRootModelAnnotatedUnionMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
+export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
 export type SchemaUserComment = components['schemas']['UserComment'];
 export type SchemaUserCommentArtifact = components['schemas']['UserCommentArtifact'];
 export type SchemaValidationError = components['schemas']['ValidationError'];
@@ -985,7 +1204,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MathQAInput"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -1326,7 +1545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
+                    "application/json": components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
                 };
             };
             /** @description Validation Error */
@@ -1402,6 +1621,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_crew_chat_event_schema_math_conversation_event_types_crew_chat_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewChatEvent"];
                 };
             };
         };
