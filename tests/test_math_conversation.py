@@ -78,47 +78,127 @@ def test_input_max_turns_bounds():
 # T1 — graph runs to End for both input forms
 # ---------------------------------------------------------------------------
 
-def _patch_micro_crew(monkeypatch):
-    """Replace build_micro_crew so RunCrewStep doesn't import crewai in the
-    test env (the engine ships only in the worker[crewai] image)."""
+def _patch_panel(monkeypatch, *, conclude_after: int | None = None, content: str = "stub"):
+    """Replace `build_panel` / `build_turn_crew` so RunCrewStep doesn't import
+    crewai in the test env (the engine ships only in the worker[crewai] image).
+
+    The fake panel has a single Algebraist agent; the fake per-turn crew
+    returns `content` and zero cost. If `conclude_after` is set, the
+    panel's `ConcludeSignal` flips after that many calls to `kickoff` —
+    used to exercise the early-exit path.
+    """
     from types import SimpleNamespace
-    fake_output = SimpleNamespace(raw="micro stub", token_usage=SimpleNamespace(total_cost=0.0))
-    fake_crew = SimpleNamespace(kickoff=lambda: fake_output)
-    monkeypatch.setattr(
-        "mathai.math_conversation.workflow.build_micro_crew",
-        lambda seed, persona="algebraist": fake_crew,
+    from mathai.math_conversation.crew.crew import Panel
+    from mathai.math_conversation.crew.tools import ConcludeSignal
+
+    signal = ConcludeSignal()
+    fake_panel = Panel(
+        agents_by_name={"algebraist": object()},
+        display_by_name={"algebraist": "🧮 Algebraist"},
+        role_by_name={"algebraist": "Algebraist"},
+        conclude_signal=signal,
+        order=("algebraist",),
     )
+    fake_output = SimpleNamespace(raw=content, token_usage=SimpleNamespace(total_cost=0.0))
+    kickoff_count = {"n": 0}
+
+    def _kickoff():
+        kickoff_count["n"] += 1
+        if conclude_after is not None and kickoff_count["n"] >= conclude_after:
+            signal.fired = True
+            signal.reason = "test conclude"
+        return fake_output
+
+    fake_crew = SimpleNamespace(kickoff=_kickoff)
+    monkeypatch.setattr("mathai.math_conversation.workflow.build_panel", lambda: fake_panel)
+    monkeypatch.setattr(
+        "mathai.math_conversation.workflow.build_turn_crew",
+        lambda panel, persona_name, transcript, seed_question: fake_crew,
+    )
+    return signal, kickoff_count
 
 
 @pytest.mark.anyio
 async def test_graph_runs_to_end_with_question_text(monkeypatch):
-    _patch_micro_crew(monkeypatch)
+    _patch_panel(monkeypatch)
     state = MathConversationState()
-    deps = MathConversationDeps(question_text="What is a manifold?", max_turns=5)
+    deps = MathConversationDeps(question_text="What is a manifold?", max_turns=1)
     await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
     assert state.seed_question == "What is a manifold?"
-    assert state.max_turns == 5
+    assert state.max_turns == 1
     assert state.stop_reason == "max_turns"
-    assert len(state.turns) == 1 and state.turns[0].content == "micro stub"
+    assert len(state.turns) == 1 and state.turns[0].content == "stub"
 
 
 @pytest.mark.anyio
 async def test_graph_runs_to_end_with_source_job_id(monkeypatch):
-    _patch_micro_crew(monkeypatch)
+    _patch_panel(monkeypatch)
     jid = uuid4()
     state = MathConversationState()
-    deps = MathConversationDeps(source_job_id=jid)
+    deps = MathConversationDeps(source_job_id=jid, max_turns=1)
     await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
     assert state.source_job_id == jid
     assert state.stop_reason == "max_turns"
 
 
 @pytest.mark.anyio
-async def test_conclude_flag_sets_stop_reason():
+async def test_conclude_flag_at_entry_short_circuits_loop(monkeypatch):
+    """If a resumed checkpoint already has concluded=True, RunCrewStep
+    must skip the panel loop (the defensive guard) and let FinalizeStep
+    persist whatever turns are on state.
+    """
+    _, kickoff_count = _patch_panel(monkeypatch)
     state = MathConversationState(concluded=True)
-    deps = MathConversationDeps(question_text="x")
+    deps = MathConversationDeps(question_text="x", max_turns=3)
     await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
     assert state.stop_reason == "concluded"
+    assert kickoff_count["n"] == 0  # the loop never ran
+
+
+@pytest.mark.anyio
+async def test_panel_runs_to_max_turns_when_no_conclude(monkeypatch):
+    _patch_panel(monkeypatch)
+    state = MathConversationState()
+    deps = MathConversationDeps(question_text="x", max_turns=4)
+    await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
+    assert state.stop_reason == "max_turns"
+    assert len(state.turns) == 4
+    # Round-robin over a 1-persona panel keeps the same speaker; verify the
+    # indices come out 0..3 contiguous.
+    assert [t.turn_index for t in state.turns] == [0, 1, 2, 3]
+
+
+@pytest.mark.anyio
+async def test_panel_short_circuits_when_conclude_fires_mid_run(monkeypatch):
+    """The conclude tool is the design's polite-stop path. Flipping the
+    signal on the 2nd kickoff must terminate the loop before max_turns
+    and mark `state.concluded=True`.
+    """
+    _patch_panel(monkeypatch, conclude_after=2)
+    state = MathConversationState()
+    deps = MathConversationDeps(question_text="x", max_turns=10)
+    await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
+    assert state.concluded is True
+    assert state.stop_reason == "concluded"
+    assert len(state.turns) == 2  # broke on turn 1 (index 1)
+
+
+@pytest.mark.anyio
+async def test_panel_emits_signed_in_and_out_for_each_persona(monkeypatch):
+    """Roll call / roll out frame the conversation in the live event stream."""
+    _patch_panel(monkeypatch)
+    state = MathConversationState()
+    deps = MathConversationDeps(question_text="x", max_turns=1)
+    fake_logger = _FakeLogger()
+    deps.logger = fake_logger  # type: ignore[assignment]
+    await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
+    events = [CrewChatEvent.model_validate_json(m) for m in fake_logger.messages
+              if m.startswith("{") and '"event"' in m]
+    event_names = [e.event for e in events]
+    assert event_names[0] == "signed_in"
+    assert event_names[-1] == "signed_out"
+    assert "message" in event_names
+    assert "status" in event_names
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +308,14 @@ def test_artifact_registry_key():
 # ---------------------------------------------------------------------------
 
 class _FakeLogger:
-    """Captures emitted messages so we can assert the event sequence."""
+    """Captures emitted messages so we can assert the event sequence.
+
+    Crew-chat events arrive via `emit` (raw JSON). Plain `log.info(...)`
+    /`log.error(...)` calls (used by `RunCrewStep` for human-readable
+    progress) are prefixed so callers can filter them out by string
+    shape — crew events parse as JSON with an `event` key; the tagged
+    log lines don't.
+    """
 
     def __init__(self):
         self.job_id = "fake"
@@ -238,6 +325,18 @@ class _FakeLogger:
 
     async def emit(self, message: str, *, level: str = "info") -> None:
         self.messages.append(message)
+
+    async def info(self, message: str) -> None:
+        self.messages.append(f"[info] {message}")
+
+    async def error(self, message: str) -> None:
+        self.messages.append(f"[error] {message}")
+
+    async def warning(self, message: str) -> None:
+        self.messages.append(f"[warn] {message}")
+
+    async def debug(self, message: str) -> None:
+        self.messages.append(f"[debug] {message}")
 
     def for_stage(self, stage: str):
         return self

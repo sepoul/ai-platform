@@ -5,15 +5,16 @@ Graph:
 
 `SeedStep` resolves the input into a seed question (and, when seeding
 from a `math_qa` job, projects that job's artifacts into
-`state.seed_context`). `RunCrewStep` runs the CrewAI panel and
-accumulates turns. `FinalizeStep` assembles the single
-`MathConversationArtifact` and persists it.
+`state.seed_context`). `RunCrewStep` runs the multi-persona CrewAI
+panel as a round-robin turn loop until `conclude` is called or
+`max_turns` is reached, emitting `CrewChatEvent`s for live UI. The
+turn-loop shape (one single-task Crew per turn, owned by Python) is
+the design choice that lets us early-exit on conclude; see
+`crew/crew.py`. `FinalizeStep` assembles and persists the single
+`MathConversationArtifact`.
 
-v1 status: the node *bodies* for the crew run and seed hydration land in
-later tickets (T5/T6). This module establishes the graph topology, the
-`JobDefinition`, and end-of-run persistence so the domain registers and
-runs to End — the crew internals slot into `RunCrewStep` without
-changing this skeleton.
+`SeedStep` source-job artifact hydration is still TODO — when seeded
+from a `source_job_id` we record provenance only.
 """
 from __future__ import annotations
 
@@ -29,7 +30,12 @@ from mathai.math_conversation.artifacts import (
     ConversationTurn,
     MathConversationArtifact,
 )
-from mathai.math_conversation.crew.crew_builder import build_micro_crew
+from mathai.math_conversation.crew.callbacks import CrewChatEmitter
+from mathai.math_conversation.crew.crew import (
+    append_to_transcript,
+    build_panel,
+    build_turn_crew,
+)
 from mathai.math_conversation.models import MathConversationResult
 from mathai.math_conversation.state import MathConversationState
 
@@ -90,32 +96,70 @@ class RunCrewStep(BaseNode[MathConversationState, MathConversationDeps]):
         self, ctx: GraphRunContext[MathConversationState, MathConversationDeps]
     ) -> "FinalizeStep":
         log = ctx.deps.logger.for_stage("RunCrewStep")
-        # Micro T5/T6: ONE Algebraist agent answers the seed question in one
-        # task. The full panel (multi-persona + skills + conclude tool +
-        # turn loop) lands next; this proves the worker[crewai] image runs
-        # crewai end-to-end through to a persisted MathConversationArtifact.
-        # If something earlier set `concluded` (the conclude tool in the full
-        # T5 panel), exit without running the crew. Otherwise the micro path
-        # runs ONE Algebraist agent on the seed question; the multi-persona
-        # panel + turn loop + skills are still to come.
-        if not ctx.state.concluded:
-            persona = "algebraist"
-            await log.info(f"micro crew: kicking off {persona} on seed question")
-            crew = build_micro_crew(ctx.state.seed_question or "", persona=persona)
+
+        # Defensive: a resumed checkpoint may already carry concluded=True
+        # (a prior run flipped it via the conclude tool). Skip the loop —
+        # FinalizeStep will persist whatever turns are on state.
+        if ctx.state.concluded:
+            await log.info("entered with state.concluded=True; skipping panel loop")
+            ctx.state.stop_reason = "concluded"
+            return FinalizeStep()
+
+        panel = build_panel()
+        emitter = CrewChatEmitter(ctx.deps.logger, turns_budget=ctx.state.max_turns)
+
+        # Roll call — UI shows each panelist joining before the first turn.
+        for name in panel.order:
+            await emitter.emit_signed_in(panel.role_by_name[name], panel.display_by_name[name])
+
+        seed_question = ctx.state.seed_question or ""
+        transcript = ""
+        max_turns = ctx.state.max_turns
+        await log.info(f"panel ready: {len(panel.order)} personae, max_turns={max_turns}")
+
+        for turn_idx in range(max_turns):
+            persona_name = panel.order[turn_idx % len(panel.order)]
+            role = panel.role_by_name[persona_name]
+            display = panel.display_by_name[persona_name]
+
+            await emitter.emit_typing(role, display)
+            crew = build_turn_crew(panel, persona_name, transcript, seed_question)
             result = await asyncio.to_thread(crew.kickoff)
+
             content = str(getattr(result, "raw", result)).strip()
             cost = float(getattr(getattr(result, "token_usage", None), "total_cost", 0.0) or 0.0)
+
             ctx.state.turns.append(
                 ConversationTurn(
-                    turn_index=len(ctx.state.turns),
-                    agent_role=persona,
-                    agent_persona=persona,
+                    turn_index=turn_idx,
+                    agent_role=role,
+                    agent_persona=persona_name,
                     content=content,
                     cost_usd=cost,
                 )
             )
             ctx.state.cost_so_far += cost
-            await log.info(f"micro crew done: 1 turn, cost=${cost:.4f}, content_len={len(content)} chars")
+            transcript = append_to_transcript(transcript, role, content)
+
+            await emitter.emit_message(role, display, turn_idx, content, cost_usd=cost)
+            await emitter.emit_status(turns_used=turn_idx + 1, cost_usd=ctx.state.cost_so_far)
+
+            # Mirror the closure-captured signal into state so the
+            # checkpoint preserves the reason for resume / debugging.
+            if panel.conclude_signal.fired:
+                ctx.state.concluded = True
+                await emitter.emit_concluded(role, display, content=panel.conclude_signal.reason)
+                await log.info(
+                    f"panel concluded at turn {turn_idx}: {panel.conclude_signal.reason!r}"
+                )
+                break
+        else:
+            await log.info(f"panel reached max_turns={max_turns} without concluding")
+
+        # Roll out — UI shows the panel dispersing.
+        for name in panel.order:
+            await emitter.emit_signed_out(panel.role_by_name[name], panel.display_by_name[name])
+
         ctx.state.stop_reason = "concluded" if ctx.state.concluded else "max_turns"
         return FinalizeStep()
 

@@ -1,10 +1,13 @@
 """crewai-runtime smoke test — proves the worker[crewai] image runs CrewAI
 on Anthropic, end to end, without going through the platform job system.
 
-Use this to validate a fresh `worker-crewai` deploy before submitting a real
-`math_conversation` job. Builds the same micro 1-agent crew that
-`RunCrewStep` builds (Algebraist persona, Anthropic LLM via CrewAI's native
-provider), kicks it off on a seed question, prints the agent's reply.
+Use this to validate a fresh `worker-crewai` deploy before submitting a
+real `math_conversation` job. Builds the v1 panel
+(Algebraist + Visualist + Synthesist, sharing one `conclude` tool) and
+runs ONE turn with the Algebraist as a fast sanity check — proves the
+panel constructs, the per-turn Crew kicks off, Anthropic responds, and
+cost rolls up. Full multi-turn brainstorming is exercised by submitting
+a real job.
 
     docker compose --profile crewai run --rm worker-crewai \\
         python -m mathapp.entrypoints.crewai_smoke "what is a sheaf?"
@@ -18,7 +21,7 @@ import logging
 import os
 import sys
 
-from mathai.math_conversation.crew.crew_builder import build_micro_crew
+from mathai.math_conversation.crew.crew import build_panel, build_turn_crew
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -33,7 +36,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     logger.info("seed: %s", seed)
-    crew = build_micro_crew(seed)        # lazy-imports crewai
+    panel = build_panel()                      # lazy-imports crewai
+    crew = build_turn_crew(panel, "algebraist", transcript="", seed_question=seed)
     result = crew.kickoff()
     text = str(getattr(result, "raw", result)).strip()
     logger.info("agent reply (%d chars):\n%s", len(text), text)
