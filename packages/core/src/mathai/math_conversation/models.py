@@ -1,10 +1,13 @@
 """math_conversation data models — submit input, typed result, and the
 persona/skill specs the crew is built from.
 
-The crew runs on **OpenAI** models via CrewAI's native OpenAI provider
-(see `docs/math_conversation.md` → Dependency strategy): a deliberately
-different provider from `math_qa` (Anthropic via pydantic_ai), so the two
-domains share no LLM-SDK version constraint.
+The crew runs on **Anthropic** via CrewAI's native Anthropic provider
+(see `docs/math_conversation.md` → Dependency strategy). The two
+runtimes (default = pydantic_ai + Logfire, crewai = CrewAI) live in
+separate worker images, so they don't share an interpreter and don't
+share LLM-SDK version constraints — Anthropic on both sides is now
+viable. `PersonaSpec.model` is the per-persona override; defaults to
+`CREW_MODEL` env / `anthropic/claude-sonnet-4-5-20250929`.
 """
 from __future__ import annotations
 
@@ -63,7 +66,9 @@ class PersonaSpec(BaseModel):
     """A panel member, parsed from `instructions/math_conversation/personae/<name>.md`.
 
     Front-matter carries the structured fields; the Markdown body becomes
-    the agent's CrewAI `backstory`. `model` is an OpenAI model id.
+    the agent's CrewAI `backstory`. `model` is a CrewAI-style provider-prefixed
+    model id (e.g. `anthropic/claude-sonnet-4-5-20250929`) and is honored
+    per-persona by `build_agent`.
     """
     model_config = ConfigDict(extra="forbid")
 

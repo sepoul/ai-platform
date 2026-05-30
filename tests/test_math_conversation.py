@@ -426,7 +426,7 @@ def test_load_persona_algebraist():
     persona = load_persona("algebraist")
     assert persona.role == "Algebraist"
     assert persona.display_name == "🧮 Algebraist"
-    assert persona.model == "gpt-4o"
+    assert persona.model.startswith("anthropic/")
     assert persona.skills == ["symbolic-manipulation", "proof-checking"]
     assert persona.goal
     assert "rigor" in persona.body.lower()
@@ -477,7 +477,7 @@ def test_prompt_definitions_include_personae_and_skills():
     from mathai.math_conversation.registry import parse_persona
     reparsed = parse_persona(persona_entry.instructions, "algebraist")
     assert reparsed.skills == ["symbolic-manipulation", "proof-checking"]
-    assert reparsed.model == "gpt-4o"
+    assert reparsed.model.startswith("anthropic/")
 
 
 def test_discovered_skills_have_skill_kind():
