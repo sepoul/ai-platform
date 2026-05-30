@@ -7,8 +7,9 @@ All of this is CrewAI-free and needs no network — the crew internals
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -111,11 +112,65 @@ def _patch_panel(monkeypatch, *, conclude_after: int | None = None, content: str
 
     fake_crew = SimpleNamespace(kickoff=_kickoff)
     monkeypatch.setattr("mathai.math_conversation.workflow.build_panel", lambda: fake_panel)
+    # seed_context arrives as a keyword from RunCrewStep when source_job_id
+    # hydration populates state.seed_context; absorb it so the stub matches
+    # the real signature.
     monkeypatch.setattr(
         "mathai.math_conversation.workflow.build_turn_crew",
-        lambda panel, persona_name, transcript, seed_question: fake_crew,
+        lambda panel, persona_name, transcript, seed_question, *, seed_context=None: fake_crew,
     )
     return signal, kickoff_count
+
+
+def _seeded_artifact_service(tmp_path: Path, source_job_id: UUID, **fields):
+    """Build an ArtifactService with both math_qa + math_conversation
+    types registered, pre-populated with the math_qa artifacts a source
+    job would have produced. `fields` overrides per-artifact text:
+
+        question_text="...", answer_text="...", latex_source="...",
+        figure_spec={...}, topic="...", difficulty="...".
+
+    Omitted fields produce that artifact with reasonable defaults; pass
+    `<name>=None` to omit the artifact entirely (used to test partial
+    source-job artifact sets).
+    """
+    from mathai.math_qa.artifacts import (
+        MATH_QA_ARTIFACTS,
+        FigureArtifact,
+        GeneratedAnswerArtifact,
+        LatexAnswerArtifact,
+        MathQuestionArtifact,
+    )
+
+    repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
+    registry = {**MATH_QA_ARTIFACTS, **MATH_CONVERSATION_ARTIFACTS}
+    service = ArtifactService(repo, registry=registry)
+
+    sid = str(source_job_id)
+    if fields.get("question_text", "What is a group?") is not None:
+        service.put(MathQuestionArtifact(
+            created_by_job=sid,
+            question_text=fields.get("question_text", "What is a group?"),
+            topic=fields.get("topic"),
+            difficulty=fields.get("difficulty"),
+        ))
+    if fields.get("answer_text", "A group is a set with...") is not None:
+        service.put(GeneratedAnswerArtifact(
+            created_by_job=sid,
+            answer_text=fields.get("answer_text", "A group is a set with..."),
+        ))
+    if fields.get("latex_source", "G = \\langle a, b \\rangle") is not None:
+        service.put(LatexAnswerArtifact(
+            created_by_job=sid,
+            latex_source=fields.get("latex_source", "G = \\langle a, b \\rangle"),
+        ))
+    if fields.get("figure_spec", {"template": "group-table"}) is not None:
+        service.put(FigureArtifact(
+            created_by_job=sid,
+            template="group-table",
+            spec=fields.get("figure_spec", {"template": "group-table"}),
+        ))
+    return service
 
 
 @pytest.mark.anyio
@@ -131,14 +186,116 @@ async def test_graph_runs_to_end_with_question_text(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_graph_runs_to_end_with_source_job_id(monkeypatch):
+async def test_graph_runs_to_end_with_source_job_id(monkeypatch, tmp_path: Path):
     _patch_panel(monkeypatch)
     jid = uuid4()
     state = MathConversationState()
-    deps = MathConversationDeps(source_job_id=jid, max_turns=1)
+    deps = MathConversationDeps(
+        source_job_id=jid,
+        max_turns=1,
+        artifact_api=_seeded_artifact_service(tmp_path, jid),
+    )
     await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
     assert state.source_job_id == jid
+    assert state.seed_question == "What is a group?"
     assert state.stop_reason == "max_turns"
+
+
+# ---------------------------------------------------------------------------
+# SeedStep hydration — the source_job_id path projects a prior math_qa
+# job's artifacts into state.seed_context so the panel can refine the
+# single-shot answer instead of starting from scratch.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_seedstep_hydrates_full_seed_context_from_source_job(monkeypatch, tmp_path: Path):
+    _patch_panel(monkeypatch)
+    jid = uuid4()
+    state = MathConversationState()
+    deps = MathConversationDeps(
+        source_job_id=jid,
+        max_turns=1,
+        artifact_api=_seeded_artifact_service(
+            tmp_path,
+            jid,
+            question_text="Define homotopy.",
+            answer_text="A homotopy is a continuous deformation...",
+            latex_source="H: X \\times [0,1] \\to Y",
+            topic="topology",
+            difficulty="intermediate",
+        ),
+    )
+    await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
+    assert state.seed_question == "Define homotopy."
+    assert state.seed_context is not None
+    assert state.seed_context["answer"] == "A homotopy is a continuous deformation..."
+    assert state.seed_context["latex"] == "H: X \\times [0,1] \\to Y"
+    assert state.seed_context["topic"] == "topology"
+    assert state.seed_context["difficulty"] == "intermediate"
+    assert state.seed_context["figure"] == {"template": "group-table"}  # default fixture figure
+
+
+@pytest.mark.anyio
+async def test_seedstep_errors_when_artifact_api_missing_for_source_job_path():
+    """source_job_id without an artifact_api is a wiring bug — the worker
+    bootstrap must inject the platform's ArtifactService. Loud-fail is
+    correct; silent fallback would hide the misconfiguration.
+    """
+    state = MathConversationState()
+    deps = MathConversationDeps(source_job_id=uuid4(), max_turns=1)  # no artifact_api
+    with pytest.raises(RuntimeError, match="artifact_api is required"):
+        await SeedStep().run(_FakeContext(state=state, deps=deps))
+
+
+@pytest.mark.anyio
+async def test_seedstep_errors_when_source_job_has_no_math_question(monkeypatch, tmp_path: Path):
+    """A panel without the original question has nothing to anchor on —
+    fail explicitly rather than silently brainstorming about nothing.
+    """
+    jid = uuid4()
+    state = MathConversationState()
+    deps = MathConversationDeps(
+        source_job_id=jid,
+        max_turns=1,
+        artifact_api=_seeded_artifact_service(tmp_path, jid, question_text=None),
+    )
+    with pytest.raises(RuntimeError, match="no math_question artifact"):
+        await SeedStep().run(_FakeContext(state=state, deps=deps))
+
+
+@pytest.mark.anyio
+async def test_seedstep_hydrates_partial_seed_context_when_optional_artifacts_missing(
+    monkeypatch, tmp_path: Path,
+):
+    """Missing latex / figure / answer are tolerated (set to None in
+    seed_context); only the question is required.
+    """
+    _patch_panel(monkeypatch)
+    jid = uuid4()
+    state = MathConversationState()
+    deps = MathConversationDeps(
+        source_job_id=jid,
+        max_turns=1,
+        artifact_api=_seeded_artifact_service(
+            tmp_path, jid,
+            answer_text=None, latex_source=None, figure_spec=None,
+        ),
+    )
+    await math_conversation_graph.run(SeedStep(), state=state, deps=deps)
+    assert state.seed_question == "What is a group?"
+    assert state.seed_context["answer"] is None
+    assert state.seed_context["latex"] is None
+    assert state.seed_context["figure"] is None
+
+
+@dataclass
+class _FakeContext:
+    """Minimal stand-in for `GraphRunContext` so SeedStep failure paths
+    can be exercised without a full `math_conversation_graph.run(...)`
+    (which would otherwise swallow the raise inside the engine).
+    """
+    state: MathConversationState
+    deps: MathConversationDeps
 
 
 @pytest.mark.anyio
@@ -386,6 +543,27 @@ async def test_emitter_tool_events_use_raw_name():
     events = _events(logger)
     assert [e.event for e in events] == ["tool_call", "tool_result"]
     assert all(e.tool_name == "validate_latex" for e in events)
+
+
+def test_crew_chat_event_schema_endpoint_round_trips():
+    """The schema-export endpoint is the only reason `CrewChatEvent`
+    appears in the OpenAPI schema. If this breaks, `gen:api` stops
+    surfacing the type and the math-ui chat parser falls back to
+    hand-authored types — silent FE drift. Tested as a real HTTP call so
+    the round-trip (FastAPI → response_model → JSON → parse) is real.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from mathai.math_conversation.api import make_math_conversation_router
+
+    app = FastAPI()
+    app.include_router(make_math_conversation_router())
+    client = TestClient(app)
+    resp = client.get("/math-conversation/event-types/crew-chat")
+    assert resp.status_code == 200
+    event = CrewChatEvent.model_validate(resp.json())
+    assert event.event == "signed_in"
+    assert event.agent_role == "Algebraist"
 
 
 def test_friendly_tool_name_map():

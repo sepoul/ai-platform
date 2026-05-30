@@ -3,28 +3,27 @@
 Graph:
     SeedStep → RunCrewStep → FinalizeStep → End
 
-`SeedStep` resolves the input into a seed question (and, when seeding
-from a `math_qa` job, projects that job's artifacts into
-`state.seed_context`). `RunCrewStep` runs the multi-persona CrewAI
-panel as a round-robin turn loop until `conclude` is called or
-`max_turns` is reached, emitting `CrewChatEvent`s for live UI. The
-turn-loop shape (one single-task Crew per turn, owned by Python) is
-the design choice that lets us early-exit on conclude; see
-`crew/crew.py`. `FinalizeStep` assembles and persists the single
-`MathConversationArtifact`.
-
-`SeedStep` source-job artifact hydration is still TODO — when seeded
-from a `source_job_id` we record provenance only.
+`SeedStep` resolves the input into a seed question. When seeded from a
+prior `math_qa` job, it hydrates that job's artifacts (question +
+answer + latex + figure) into `state.seed_context` so the panel can
+react to the single-shot answer rather than starting from scratch.
+`RunCrewStep` runs the multi-persona CrewAI panel as a round-robin
+turn loop until `conclude` is called or `max_turns` is reached,
+emitting `CrewChatEvent`s for live UI. The turn-loop shape (one
+single-task Crew per turn, owned by Python) is the design choice that
+lets us early-exit on conclude; see `crew/crew.py`. `FinalizeStep`
+assembles and persists the single `MathConversationArtifact`.
 """
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
+from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.runtime.worker_log import NullLogger, WorkerLogger
 from mathai.math_conversation.artifacts import (
     ConversationTurn,
@@ -55,11 +54,16 @@ class MathConversationDeps:
     Exactly one of `source_job_id` / `question_text` is set (enforced by
     `MathConversationInput`). `logger` is bound to this job_id by the
     deps_factory; it defaults to `NullLogger` outside the runner (tests).
+    `artifact_api` is the platform-shared service used by `SeedStep` to
+    hydrate a source math_qa job's artifacts; it is required only for
+    the `source_job_id` path and may be `None` for question_text-only
+    runs and unit tests.
     """
     source_job_id: Optional[UUID] = None
     question_text: Optional[str] = None
     max_turns: int = 12
     logger: WorkerLogger = field(default_factory=NullLogger)
+    artifact_api: Optional[ArtifactService] = None
 
 
 # ---------------------------------------------------------------------------
@@ -76,15 +80,85 @@ class SeedStep(BaseNode[MathConversationState, MathConversationDeps]):
     ) -> "RunCrewStep":
         log = ctx.deps.logger.for_stage("SeedStep")
         ctx.state.max_turns = ctx.deps.max_turns
+
         if ctx.deps.question_text:
             ctx.state.seed_question = ctx.deps.question_text
             await log.info(f"seeded from fresh question ({len(ctx.deps.question_text)} chars)")
-        else:
-            # Seeding from a prior math_qa job — artifact hydration lands
-            # in T6. For now record provenance so the graph runs to End.
-            ctx.state.source_job_id = ctx.deps.source_job_id
-            await log.info(f"seeding from source job {ctx.deps.source_job_id} (hydration: T6)")
+            return RunCrewStep()
+
+        # source_job_id path — hydrate the prior math_qa job's artifacts.
+        # MathConversationInput's `exactly_one_source` validator means this
+        # branch implies source_job_id is set; assert for clarity.
+        assert ctx.deps.source_job_id is not None, "Input validator must guarantee one source"
+        if ctx.deps.artifact_api is None:
+            raise RuntimeError(
+                "artifact_api is required to hydrate from source_job_id; "
+                "the worker bootstrap should wire it into MathConversationDeps."
+            )
+
+        ctx.state.source_job_id = ctx.deps.source_job_id
+        await log.info(f"hydrating from source math_qa job {ctx.deps.source_job_id}")
+
+        source_artifacts = _load_source_artifacts(ctx.deps.artifact_api, ctx.deps.source_job_id)
+        question = source_artifacts.get("math_question")
+        if question is None:
+            raise RuntimeError(
+                f"Source job {ctx.deps.source_job_id} has no math_question artifact; "
+                "can't seed a conversation without the original question."
+            )
+
+        ctx.state.seed_question = question.question_text
+        ctx.state.seed_context = _project_seed_context(source_artifacts)
+        present = sorted(k for k, v in ctx.state.seed_context.items() if v is not None)
+        await log.info(f"hydrated source job: question + {present}")
         return RunCrewStep()
+
+
+def _load_source_artifacts(
+    artifact_api: ArtifactService, source_job_id: UUID
+) -> dict[str, Any]:
+    """Return `{artifact_type: BaseArtifact}` for every artifact the
+    source math_qa job produced.
+
+    Scans the workspace artifact index and filters by `created_by_job`.
+    O(N) for now; the platform's `list_by_type`-style index work
+    (NEXT_BEST_STEPS §9) will replace this when it lands.
+    """
+    sid = str(source_job_id)
+    try:
+        ids = artifact_api.repo.list_ids()
+    except Exception:
+        ids = []
+    by_type: dict[str, Any] = {}
+    for raw_id in ids:
+        try:
+            artifact = artifact_api.get(raw_id)
+        except Exception:
+            continue
+        if str(artifact.created_by_job) != sid:
+            continue
+        # First wins — defensive against duplicate types on one job.
+        by_type.setdefault(artifact.artifact_type, artifact)
+    return by_type
+
+
+def _project_seed_context(source_artifacts: dict[str, Any]) -> dict[str, Any]:
+    """Project the math_qa artifact bundle into the panel's seed context.
+
+    Only the fields the panel actually conditions on are projected. The
+    artifact-type names mirror `mathai.math_qa.artifacts` discriminators.
+    """
+    answer = source_artifacts.get("ai_answer")
+    latex = source_artifacts.get("latex_answer")
+    figure = source_artifacts.get("figure")
+    question = source_artifacts.get("math_question")
+    return {
+        "answer": answer.answer_text if answer is not None else None,
+        "latex": latex.latex_source if latex is not None else None,
+        "figure": figure.spec if figure is not None else None,
+        "topic": question.topic if question is not None else None,
+        "difficulty": question.difficulty if question is not None else None,
+    }
 
 
 @dataclass
@@ -123,7 +197,13 @@ class RunCrewStep(BaseNode[MathConversationState, MathConversationDeps]):
             display = panel.display_by_name[persona_name]
 
             await emitter.emit_typing(role, display)
-            crew = build_turn_crew(panel, persona_name, transcript, seed_question)
+            crew = build_turn_crew(
+                panel,
+                persona_name,
+                transcript,
+                seed_question,
+                seed_context=ctx.state.seed_context,
+            )
             result = await asyncio.to_thread(crew.kickoff)
 
             content = str(getattr(result, "raw", result)).strip()

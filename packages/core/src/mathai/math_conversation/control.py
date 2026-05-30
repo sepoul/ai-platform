@@ -10,6 +10,7 @@ from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.domain import BootstrapContext, ControlDomain
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.result_fetcher import hydrate_artifact_refs
+from mathai.math_conversation.api import make_math_conversation_router
 from mathai.math_conversation.artifacts import (
     MATH_CONVERSATION_ARTIFACTS,
     MathConversationArtifact,
@@ -52,5 +53,10 @@ def register_control(ctx: BootstrapContext) -> ControlDomain:
     return ControlDomain(
         name="math_conversation",
         job_controls=[build_math_conversation_control(workspace_client)],
+        # Schema-export router: surfaces CrewChatEvent into OpenAPI so the
+        # math-ui chat parser can derive the type from `gen:api` instead
+        # of hand-authoring it. Not for live consumption — live events
+        # ride the existing `/jobs/{id}/logs/stream` SSE.
+        routers=[make_math_conversation_router()],
         artifact_types=list(MATH_CONVERSATION_ARTIFACTS.values()),
     )

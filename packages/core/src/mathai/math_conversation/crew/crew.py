@@ -22,7 +22,7 @@ keeping the rest of the module safe to import from any runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from mathai.math_conversation.crew.personae import build_agent
 from mathai.math_conversation.crew.tools import ConcludeSignal, build_conclude_tool
@@ -86,17 +86,37 @@ def append_to_transcript(transcript: str, role: str, content: str) -> str:
     return f"{transcript}\n\n{block}" if transcript.strip() else block
 
 
-def build_task_description(role: str, seed_question: str, transcript: str) -> str:
+def build_task_description(
+    role: str,
+    seed_question: str,
+    transcript: str,
+    seed_context: Optional[dict] = None,
+) -> str:
     """Compose the per-turn task description for `role`.
 
-    Always includes the seed question. The transcript is omitted on
-    turn 1 (empty), included from turn 2 onward.
+    Always includes the seed question. When `seed_context` carries
+    fields from a prior math_qa job (answer / latex), they're included
+    so the panel can react to and refine that single-shot answer rather
+    than start from scratch. The transcript is omitted on turn 1
+    (empty), included from turn 2 onward.
     """
     parts = [
         f"You are the {role} on a small panel discussing a math problem.",
         "",
         f"Seed question:\n{seed_question}",
     ]
+    if seed_context:
+        prior_answer = seed_context.get("answer")
+        prior_latex = seed_context.get("latex")
+        if prior_answer:
+            parts.extend([
+                "",
+                "A prior single-shot answer to react to (not authoritative — "
+                "build on it, refine it, or push back):",
+                prior_answer,
+            ])
+        if prior_latex:
+            parts.extend(["", "LaTeX of the prior answer:", prior_latex])
     if transcript.strip():
         parts.extend(["", "Conversation so far:", transcript])
     parts.extend([
@@ -113,6 +133,8 @@ def build_turn_crew(
     persona_name: str,
     transcript: str,
     seed_question: str,
+    *,
+    seed_context: Optional[dict] = None,
 ) -> Any:
     """Return a one-agent, one-task `crewai.Crew` for the next turn.
 
@@ -125,7 +147,7 @@ def build_turn_crew(
     agent = panel.agents_by_name[persona_name]
     role = panel.role_by_name[persona_name]
     task = crewai.Task(
-        description=build_task_description(role, seed_question, transcript),
+        description=build_task_description(role, seed_question, transcript, seed_context=seed_context),
         expected_output=(
             "Your contribution to the panel, in your voice. One focused "
             "point. If the discussion has fully covered the ground, call "

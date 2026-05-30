@@ -50,11 +50,15 @@ def build_math_conversation_execution(workspace_client) -> JobExecution:
         job_id = payload.get("_job_id")
         logger: WorkerLogger = WorkerLogger(job_id) if job_id else NullLogger()
         source_raw = payload.get("source_job_id")
+        # artifact_api is required only when SeedStep hydrates from a
+        # source_job_id; passing it unconditionally keeps deps stateless
+        # and lets the question_text path ignore it.
         return MathConversationDeps(
             source_job_id=UUID(str(source_raw)) if source_raw else None,
             question_text=payload.get("question_text"),
             max_turns=int(payload.get("max_turns", 12)),
             logger=logger,
+            artifact_api=artifact_api,
         )
 
     def _persist(job_id: str, state: MathConversationState) -> list[UUID]:
