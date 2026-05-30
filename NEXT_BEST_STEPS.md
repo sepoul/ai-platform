@@ -472,6 +472,69 @@ Supabase Storage object metadata works for simple cases; if we end up
 storing metadata-heavy artifacts we should switch to native metadata
 and drop the sidecars. Decision deferred until a real perf signal.
 
+## 8. `math_conversation` v1.x follow-ups 📝 open
+
+v1 shipped on `feat/conversation-panel` (multi-persona panel + turn
+loop + conclude tool + `source_job_id` hydration; see
+[docs/math_conversation.md](docs/math_conversation.md) §What ships in
+v1). These are the deliberate v1 deferrals that should land before the
+feature graduates.
+
+### 8a. Fill in the five skill bodies
+
+[instructions/math_conversation/skills/*.md](instructions/math_conversation/skills/)
+currently ship one-line stub bodies (the loader, tool-allowlist
+plumbing, and registry round-trip all work — the *content* is the
+todo). An authoring pass per skill: heuristics, 2–3 few-shot examples
+from real algebraist / visualist / synthesist moves. Cheap and
+high-leverage; the panel quality is bounded by these today.
+
+### 8b. Real-image smoke for crewai's anthropic 0.73 + Claude Sonnet 4.5
+
+`packages/worker[crewai]` resolves `anthropic==0.73.0` (older than the
+default runtime's 0.105) because crewai 1.14.6 pins it. Verified
+locally that `uv pip compile` resolves cleanly; not yet verified that
+`crewai.LLM(model="anthropic/claude-sonnet-4-5-20250929")` actually
+talks to the live API through that SDK. Run the smoke entrypoint
+(`python -m mathapp.entrypoints.crewai_smoke "<question>"`) inside the
+built `mathapp-worker-crewai` image on first deploy; the test passes
+or we fall back to `anthropic` as a direct extras dep.
+
+### 8c. OTLP → Logfire crew traces
+
+The crewai runtime can't load the Logfire SDK (otel-sdk <1.35 pin
+clashes with logfire's >=1.39), but `crewai[anthropic]` does ship
+`opentelemetry-exporter-otlp` — and Logfire is an OTLP collector. Wire
+direct OTLP export from the crewai worker to the same Logfire project
+so the panel runs land alongside math_qa traces. Today crew progress
+is observable only via the `CrewChatEvent` SSE stream.
+
+### 8d. Per-runtime Celery routing
+
+The single Celery pool today registers all domains (default runtime).
+A `math_conversation` job enqueued to celery would hit a worker that
+can't run it. Two-pool design: queue per runtime, worker per pool
+(EXTRA=default vs EXTRA=crewai). Only matters once we move off the
+polling backend in prod.
+
+### 8e. `list_by_type` / `list_by_job` indexed lookups
+
+`SeedStep`'s `_load_source_artifacts` scans every artifact id and
+filters by `created_by_job` — same O(N) shape the artifacts router
+already uses inline (§9 of this doc). Centralize as a platform
+`ArtifactService.list_by_job(job_id)` (or upgrade to a real index)
+when artifact volume justifies it. SeedStep gets the speedup for free.
+
+### 8f. v2 deferrals (not yet planned)
+
+For visibility — items from the design's "does NOT ship in v1" that
+have no current ticket: a manager-led / hierarchical CrewAI process
+(replaces sequential round-robin once the artifact contract has soak
+time), cross-conversation memory, incremental per-turn persistence
+(would require a new "streaming artifact" semantic on
+`PersistencePolicy`), mid-run human-in-the-loop (`human_input=True` on
+tasks). Open these as their own §N when there's a use case.
+
 ---
 
 ## Frontend (`math-ui/`)
@@ -666,3 +729,30 @@ and
 truly have no domain assumptions, and move them under
 `math-ui/components/platform/workflow/` once the directory split
 lands.
+
+### Frontend §9. `math_conversation` v1.x FE follow-ups 📝 open
+
+v1 chat surface shipped on `feat/conversation-panel` (lib/domains/
+math-conversation, components/conversation, app/math-conversation/*,
+math-qa job page CTA — see backend §8 for the matching BE
+follow-ups). These are the FE-side deferrals:
+
+- **Promote `ConversationBubble` to `components/library/`** when a
+  second domain wants chat-shaped output. Today it lives under
+  `components/conversation/` per AGENTS.md ("if a pattern repeats, put
+  it in `components/library/`"); v1 has one consumer.
+- **Render `ConversationTurn.figure` on turns.** The shape is plumbed
+  (turn carries an optional `figure: FigureSpec`) but no panel skill
+  produces figures yet; when one does, drop a `<Figure>` from
+  `@/components/library` into the bubble.
+- **Workflow stepper for the conversation page.** `/math-conversation/[jobId]`
+  shows only the chat view; the math_qa page also renders a
+  `WorkflowJobRunner` stepper. The panel's three nodes (Seed /
+  RunCrew / Finalize) are uninteresting compared to the per-turn
+  bubbles, so we skipped it — revisit if users ask "where are we in
+  the run?"
+- **CrewChatEvent → richer rendering.** `tool_call` / `tool_result`
+  events currently fall through to no UI; the `friendly_tool_name`
+  map exists in `callbacks.py` for this. Light pass: render a tiny
+  "{display} is checking the LaTeX…" line beneath the typing
+  indicator. Defer until skill bodies actually exercise tools (BE §8a).

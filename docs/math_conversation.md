@@ -377,27 +377,60 @@ completes; runaway cost is gated by `max_turns` alone.
 
 ---
 
-## What ships in v1
+## What ships in v1 ✅
 
-- New `math_conversation` `JobDefinition` and the 3-node graph
-  above.
+Everything in this list landed on `feat/conversation-panel`:
+
+- `math_conversation` `JobDefinition` + the 3-node graph above
+  (Seed → RunCrew → Finalize).
 - `MathConversationArtifact`, `ConversationTurn`, `CrewChatEvent`.
 - Persona/skill loaders extending the prompt registry with a
   `kind` discriminator.
-- Three personae with real prompts; skill bodies as stubs.
-- Native CrewAI Anthropic LLM wiring and `conclude` tool.
-- math-ui chat renderer + submit/CTA entry points.
-- Day-0 CrewAI install + Anthropic burn-in done.
+- Three personae with real prompts (skill bodies are stubs — see
+  v1.x follow-ups below).
+- Native CrewAI Anthropic LLM wiring; the multi-persona panel +
+  round-robin turn loop + `conclude` tool that lets any panelist
+  end the discussion early.
+- `SeedStep` artifact hydration: a `source_job_id` from a completed
+  `math_qa` job projects question + answer + latex + figure into the
+  panel's seed context, so the panel refines a single-shot answer
+  rather than starting from scratch.
+- math-ui chat renderer + submit + a "Run conversation on this
+  answer" CTA on completed math_qa job pages.
+- Slim per-image runtime: `packages/worker[crewai]` drops
+  `pydantic-ai-slim` entirely and brings `crewai[anthropic]` instead;
+  `packages/worker[default]` is unchanged. See §Dependency strategy.
+- `CrewChatEvent` exposed in OpenAPI for typed FE codegen (via a
+  small schema-export endpoint on the math_conversation domain).
 
-What does **not** ship in v1:
+## Post-v1 follow-ups
 
-- Filled-in skill bodies (deferred to a follow-up authoring pass).
-- A manager-agent / hierarchical CrewAI process (sequential
-  turn-order in v1; manager-led delegation is a later iteration
-  once the artifact contract has soak time).
-- Cross-conversation memory.
-- Incremental per-turn persistence.
-- Mid-run human-in-the-loop (`human_input=True` on tasks).
+Tracked in detail in
+[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md) — backend §8 and
+Frontend §9. Short list:
 
-The ordering, milestones, and acceptance criteria are tracked in
-[`NEXT_BEST_STEPS.md`](../NEXT_BEST_STEPS.md).
+- **§8a** Fill in the five skill bodies (stubs today).
+- **§8b** Smoke-test crewai's anthropic 0.73 with Claude Sonnet 4.5
+  inside the built image on first deploy.
+- **§8c** OTLP → Logfire export for crew traces (currently observable
+  only via the SSE `CrewChatEvent` stream).
+- **§8d** Per-runtime Celery routing (today's single Celery pool runs
+  only the default runtime).
+- **§8e** Indexed `list_by_job` so SeedStep hydration isn't O(N).
+- **§8f** v2 deferrals (no current ticket): manager-led panel,
+  cross-conversation memory, per-turn persistence, mid-run HITL.
+- **Frontend §9** Chat-bubble library promotion, `ConversationTurn.figure`
+  rendering when a skill produces one, optional workflow stepper on
+  the conversation page, tool_call/tool_result event rendering.
+
+What does **not** ship in v1 (architectural choices, not deferrals):
+
+- A manager-agent / hierarchical CrewAI process — sequential
+  turn-order is the v1 choice; manager-led delegation is a later
+  iteration once the artifact contract has soak time.
+- Cross-conversation memory — each conversation is hermetic
+  (`Crew(memory=False)`).
+- Incremental per-turn persistence — the artifact is minted once at
+  end-of-run; mid-run state lives only in the event stream.
+- Mid-run human-in-the-loop — the job has no review gate
+  (`JobControl.gates=[]`).
