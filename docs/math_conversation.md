@@ -411,12 +411,17 @@ Frontend §9. Short list:
 
 - **§8a** Fill in the five skill bodies (stubs today).
 - **§8b** Smoke-test crewai's anthropic 0.73 with Claude Sonnet 4.5
-  inside the built image on first deploy.
+  inside the built image on first deploy. Host-side smoke already
+  passed (`.venv-crewai` mirrors the image's deps); the in-image
+  check remains.
 - **§8c** OTLP → Logfire export for crew traces (currently observable
   only via the SSE `CrewChatEvent` stream).
 - **§8d** Per-runtime Celery routing (today's single Celery pool runs
   only the default runtime).
 - **§8e** Indexed `list_by_job` so SeedStep hydration isn't O(N).
+- **§8g** Per-turn cost surfacing — crewai+anthropic doesn't populate
+  `result.token_usage.total_cost`, so `cost_usd` always reads `$0`;
+  compute from `input_tokens`/`output_tokens` × a Claude price table.
 - **§8f** v2 deferrals (no current ticket): manager-led panel,
   cross-conversation memory, per-turn persistence, mid-run HITL.
 - **Frontend §9** Chat-bubble library promotion, `ConversationTurn.figure`

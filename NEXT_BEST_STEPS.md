@@ -525,6 +525,29 @@ already uses inline (§9 of this doc). Centralize as a platform
 `ArtifactService.list_by_job(job_id)` (or upgrade to a real index)
 when artifact volume justifies it. SeedStep gets the speedup for free.
 
+### 8g. Per-turn cost surfacing for crewai+anthropic
+
+`ConversationTurn.cost_usd` and `MathConversationArtifact.total_cost_usd`
+always show `$0.0000` because `crewai.LLM` + the anthropic SDK doesn't
+populate `result.token_usage.total_cost` (crewai's cost computation
+ships pricing tables for some providers but not anthropic's modern
+Claude models). The API call really happens; the wrapper just can't
+read a dollar figure off the response shape.
+
+Two viable fixes:
+
+- Compute cost ourselves from `result.token_usage.{input_tokens,
+  output_tokens}` × a hard-coded Claude Sonnet 4.5 price table in
+  `workflow.py:RunCrewStep`. Cheap; goes stale if Anthropic changes
+  prices.
+- Pull it from Anthropic's invoice API. More robust, requires
+  additional credentials.
+
+Token counts are already on the response — verified in the smoke
+output (`{'input_tokens': 1016, 'output_tokens': 77, ...}`). The
+narrow fix is the price-table approach; ~30 LOC including a single
+Claude pricing constant.
+
 ### 8f. v2 deferrals (not yet planned)
 
 For visibility — items from the design's "does NOT ship in v1" that
