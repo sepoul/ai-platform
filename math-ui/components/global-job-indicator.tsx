@@ -14,10 +14,12 @@ const DONE_DISPLAY_MS = 5000;
 
 const JOB_LABELS: Record<ActiveJobType, string> = {
   math_qa: "Math Q&A",
+  math_conversation: "Math Conversation",
 };
 
 const JOB_LINKS: Record<ActiveJobType, (entry: ActiveJobEntry) => string> = {
   math_qa: (e) => (e.entityId ? `/math-qa/${e.entityId}` : "/"),
+  math_conversation: (e) => (e.entityId ? `/math-conversation/${e.entityId}` : "/"),
 };
 
 interface DoneEntry {

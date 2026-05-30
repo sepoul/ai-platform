@@ -1,7 +1,7 @@
 const STORAGE_KEY = "mathai:active-jobs";
 const MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
-export type ActiveJobType = "math_qa";
+export type ActiveJobType = "math_qa" | "math_conversation";
 export type ActiveJobStatus = "running" | "waiting_input";
 
 export interface ActiveJobEntry {
