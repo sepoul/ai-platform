@@ -51,7 +51,51 @@ class ArtifactService:
         return self._hydrate(self.repo.get(str(artifact_id)))
 
     def get_many(self, ids: Iterable[UUID | str]) -> list[BaseArtifact]:
-        return [self.get(i) for i in ids]
+        """Batch-hydrate by id. One round-trip on Supabase (was: one
+        per id). Preserves input order and raises `ObjectNotFound`
+        listing every missing id — same fail-loud contract as the
+        prior per-id loop, so callers that rely on "all-or-nothing"
+        keep working.
+        """
+        from ai_platform.workspace.storage.exceptions import ObjectNotFound
+
+        str_ids = [str(i) for i in ids]
+        if not str_ids:
+            return []
+        payloads = self.repo.get_many(str_ids)
+        by_id = {p["artifact_id"]: p for p in payloads}
+        missing = [i for i in str_ids if i not in by_id]
+        if missing:
+            raise ObjectNotFound(f"Artifacts not found: {missing}")
+        return [self._hydrate(by_id[i]) for i in str_ids]
+
+    # ---- Batched list_* — single round-trip on Supabase ----
+    # Replaces the old `for raw_id in repo.list_ids(): self.get(raw_id)`
+    # pattern that did one round-trip per artifact. Unknown
+    # `artifact_type` discriminators are skipped (resilient to a
+    # registered-and-then-removed domain) rather than raising, which
+    # mirrors the artifacts router's prior loop behavior.
+
+    def list_all(self, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_all(limit=limit))
+
+    def list_by_type(self, artifact_type: str, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_by_type(artifact_type, limit=limit))
+
+    def list_by_job(self, job_id: UUID | str, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_by_job(str(job_id), limit=limit))
+
+    def _hydrate_many(self, payloads: list[dict]) -> list[BaseArtifact]:
+        out: list[BaseArtifact] = []
+        for raw in payloads:
+            try:
+                out.append(self._hydrate(raw))
+            except ValueError:
+                # Unknown artifact_type (e.g. a domain was unregistered
+                # after the row was written). Skip silently to match the
+                # router's existing resilience contract.
+                continue
+        return out
 
     def _hydrate(self, raw: dict) -> BaseArtifact:
         artifact_type = raw.get("artifact_type")

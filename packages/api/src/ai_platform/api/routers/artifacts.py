@@ -81,34 +81,32 @@ def make_artifacts_router(
         limit: int = Query(default=100, ge=1, le=500),
         service: ArtifactService = Depends(get_artifact_service),
     ):
+        # Push the filter into the repo so Supabase resolves the whole
+        # listing in one round-trip (used to be: list_ids() + get(id)
+        # per row — 1 query per artifact). `job_id` wins over
+        # `artifact_type` when both are provided; if both are needed,
+        # the secondary filter happens client-side (rare combo).
         try:
-            ids = service.repo.list_ids()
+            if job_id is not None:
+                artifacts = service.list_by_job(job_id, limit=limit)
+                if artifact_type is not None:
+                    artifacts = [a for a in artifacts if a.artifact_type == artifact_type]
+            elif artifact_type is not None:
+                artifacts = service.list_by_type(artifact_type, limit=limit)
+            else:
+                artifacts = service.list_all(limit=limit)
         except ObjectNotFound:
-            ids = []
+            artifacts = []
 
-        rows: list[ArtifactSummary] = []
-        for raw_id in ids:
-            try:
-                artifact = service.get(raw_id)
-            except (ObjectNotFound, ValueError):
-                # Skip rows we can't hydrate (unknown artifact_type, etc.)
-                # — keeps the index resilient when a domain is removed.
-                continue
-            if job_id is not None and artifact.created_by_job != job_id:
-                continue
-            if artifact_type is not None and artifact.artifact_type != artifact_type:
-                continue
-            rows.append(
-                ArtifactSummary(
-                    artifact_id=artifact.artifact_id,
-                    artifact_type=artifact.artifact_type,
-                    created_at=artifact.created_at,
-                    created_by_job=artifact.created_by_job,
-                )
+        rows = [
+            ArtifactSummary(
+                artifact_id=artifact.artifact_id,
+                artifact_type=artifact.artifact_type,
+                created_at=artifact.created_at,
+                created_by_job=artifact.created_by_job,
             )
-            if len(rows) >= limit:
-                break
-
+            for artifact in artifacts
+        ]
         return ArtifactListResponse(artifacts=rows, total=len(rows))
 
     @router.get("/{artifact_id}", response_model=ArtifactResponse)

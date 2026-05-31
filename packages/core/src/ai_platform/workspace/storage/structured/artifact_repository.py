@@ -57,8 +57,53 @@ class _ArtifactStoreMixin(SingleStoreMixin[Dict[str, Any], ArtifactStore]):
             raise ObjectNotFound(f"Artifact not found: {artifact_id}")
         return store.items[artifact_id]
 
+    def get_many(self, artifact_ids: list[str]) -> list[dict]:
+        """Single blob read + set-lookup. Missing ids are silently
+        dropped; the service layer raises on count mismatch (mirrors
+        the Supabase behavior).
+        """
+        store = self._load_store()
+        return [store.items[aid] for aid in artifact_ids if aid in store.items]
+
     def list_ids(self) -> list[str]:
         return self.list_canonicals()
+
+    # ---- Batched list_* (mirror SupabaseArtifactRepository) ----
+    # Single-blob backends pay one blob read regardless of which list
+    # method is called, so all three iterate `_load_store().items`
+    # in memory. Filters are applied client-side; the store is small
+    # enough that this matches what Supabase does with WHERE clauses.
+
+    def list_all(self, *, limit: int | None = None) -> list[dict]:
+        payloads = self._sorted_payloads()
+        return payloads[:limit] if limit is not None else payloads
+
+    def list_by_type(self, artifact_type: str, *, limit: int | None = None) -> list[dict]:
+        out = [p for p in self._sorted_payloads() if p.get("artifact_type") == artifact_type]
+        return out[:limit] if limit is not None else out
+
+    def list_by_job(self, job_id: str, *, limit: int | None = None) -> list[dict]:
+        # `created_by_job` is stored as a string (UUID-shaped); compare
+        # via `str()` so callers can pass either str or UUID without us
+        # caring about type.
+        target = str(job_id)
+        out = [
+            p for p in self._sorted_payloads()
+            if (p.get("created_by_job") is not None and str(p["created_by_job"]) == target)
+        ]
+        return out[:limit] if limit is not None else out
+
+    def _sorted_payloads(self) -> list[dict]:
+        """All payloads, newest-first by `created_at` (matches the
+        Supabase ORDER BY). Falls back to insertion order if any row
+        is missing the timestamp.
+        """
+        items = self._load_store().items
+        return sorted(
+            items.values(),
+            key=lambda p: p.get("created_at") or "",
+            reverse=True,
+        )
 
 
 class B2ArtifactRepository(_ArtifactStoreMixin, B2CanonicalRepository):

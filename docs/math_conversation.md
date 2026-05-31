@@ -418,7 +418,8 @@ Frontend §9. Short list:
   only via the SSE `CrewChatEvent` stream).
 - **§8d** Per-runtime Celery routing (today's single Celery pool runs
   only the default runtime).
-- **§8e** Indexed `list_by_job` so SeedStep hydration isn't O(N).
+- **§8e** ✅ `ArtifactService.list_by_job` — SeedStep hydration is now
+  one Supabase query (shipped alongside Perf §9 batched listing).
 - **§8g** Per-turn cost surfacing — crewai+anthropic doesn't populate
   `result.token_usage.total_cost`, so `cost_usd` always reads `$0`;
   compute from `input_tokens`/`output_tokens` × a Claude price table.

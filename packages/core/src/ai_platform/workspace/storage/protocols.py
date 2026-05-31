@@ -56,13 +56,55 @@ class ArtifactRepository(Protocol):
     Hydration into typed `BaseArtifact` subclasses is the service
     layer's responsibility (see `ArtifactService`), not the
     repository's — that keeps backends domain-agnostic.
+
+    The three `list_*` shapes all return raw payload dicts so the
+    repository never has to know about `BaseArtifact` subclasses.
+    Backends that can push filters into storage (Supabase: JSONB
+    expressions on `payload->>'artifact_type'` / `created_by_job`)
+    should do so; single-blob backends (local, B2) filter in memory
+    over the one cached store blob. The hot path is `GET /artifacts`
+    and `SeedStep._load_source_artifacts` — both used to walk
+    `list_ids()` and call `get()` per artifact (one round-trip each).
     """
 
     def put(self, artifact_id: str, payload: dict) -> None: ...
 
     def get(self, artifact_id: str) -> dict: ...
 
-    def list_ids(self) -> list[str]: ...
+    def get_many(self, artifact_ids: list[str]) -> list[dict]:
+        """Batch-fetch by id. One round-trip on Supabase
+        (`WHERE artifact_id = ANY(%s)`); set-lookup on single-blob
+        backends. Order of the returned list is NOT guaranteed to
+        match the input — `ArtifactService.get_many` indexes by id
+        and re-orders, and is the contract callers should depend on.
+        Missing ids are silently dropped at this layer; the service
+        layer compares counts and raises `ObjectNotFound` to preserve
+        the previous fail-loud semantics.
+        """
+        ...
+
+    def list_ids(self) -> list[str]:
+        """Return every artifact id. Cheap on single-blob backends;
+        kept for legacy callers (tests, migrate_backend). Prefer
+        `list_all` / `list_by_type` / `list_by_job` in router and
+        service code — those return payloads in one round-trip.
+        """
+        ...
+
+    def list_all(self, *, limit: int | None = None) -> list[dict]:
+        """All artifact payloads, newest-first. Single query on
+        Supabase; one blob read on local / B2. `limit` lets callers
+        bound DB load on large stores.
+        """
+        ...
+
+    def list_by_type(self, artifact_type: str, *, limit: int | None = None) -> list[dict]:
+        """Payloads whose `artifact_type` discriminator matches."""
+        ...
+
+    def list_by_job(self, job_id: str, *, limit: int | None = None) -> list[dict]:
+        """Payloads whose `created_by_job` matches `job_id`."""
+        ...
 
 
 class PromptRepository(Protocol):

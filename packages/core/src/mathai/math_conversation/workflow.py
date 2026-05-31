@@ -120,23 +120,19 @@ def _load_source_artifacts(
     """Return `{artifact_type: BaseArtifact}` for every artifact the
     source math_qa job produced.
 
-    Scans the workspace artifact index and filters by `created_by_job`.
-    O(N) for now; the platform's `list_by_type`-style index work
-    (NEXT_BEST_STEPS §9) will replace this when it lands.
+    Uses `artifact_api.list_by_job` which pushes the filter into
+    storage — single SQL query on Supabase (was: scan-all-ids +
+    one-get-per-id, an N+1 over the whole artifacts table). The single
+    `math_qa` job seeding a conversation produces ≤5 artifacts
+    (question, answer, latex, figure, optional comment), so iterating
+    the result for the first-of-type collapse is constant-time.
     """
-    sid = str(source_job_id)
     try:
-        ids = artifact_api.repo.list_ids()
+        artifacts = artifact_api.list_by_job(source_job_id)
     except Exception:
-        ids = []
+        artifacts = []
     by_type: dict[str, Any] = {}
-    for raw_id in ids:
-        try:
-            artifact = artifact_api.get(raw_id)
-        except Exception:
-            continue
-        if str(artifact.created_by_job) != sid:
-            continue
+    for artifact in artifacts:
         # First wins — defensive against duplicate types on one job.
         by_type.setdefault(artifact.artifact_type, artifact)
     return by_type
