@@ -53,6 +53,34 @@ class ArtifactService:
     def get_many(self, ids: Iterable[UUID | str]) -> list[BaseArtifact]:
         return [self.get(i) for i in ids]
 
+    # ---- Batched list_* — single round-trip on Supabase ----
+    # Replaces the old `for raw_id in repo.list_ids(): self.get(raw_id)`
+    # pattern that did one round-trip per artifact. Unknown
+    # `artifact_type` discriminators are skipped (resilient to a
+    # registered-and-then-removed domain) rather than raising, which
+    # mirrors the artifacts router's prior loop behavior.
+
+    def list_all(self, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_all(limit=limit))
+
+    def list_by_type(self, artifact_type: str, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_by_type(artifact_type, limit=limit))
+
+    def list_by_job(self, job_id: UUID | str, *, limit: int | None = None) -> list[BaseArtifact]:
+        return self._hydrate_many(self.repo.list_by_job(str(job_id), limit=limit))
+
+    def _hydrate_many(self, payloads: list[dict]) -> list[BaseArtifact]:
+        out: list[BaseArtifact] = []
+        for raw in payloads:
+            try:
+                out.append(self._hydrate(raw))
+            except ValueError:
+                # Unknown artifact_type (e.g. a domain was unregistered
+                # after the row was written). Skip silently to match the
+                # router's existing resilience contract.
+                continue
+        return out
+
     def _hydrate(self, raw: dict) -> BaseArtifact:
         artifact_type = raw.get("artifact_type")
         cls = self.registry.get(artifact_type)

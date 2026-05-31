@@ -277,6 +277,57 @@ class SupabaseArtifactRepository:
             rows = conn.execute("SELECT artifact_id FROM artifacts ORDER BY created_at DESC").fetchall()
         return [r[0] for r in rows]
 
+    def list_all(self, *, limit: int | None = None) -> list[dict]:
+        """Single SELECT, payloads only. Replaces the previous
+        `list_ids → get(id)` loop that did one round-trip per artifact.
+        """
+        sql = "SELECT payload FROM artifacts ORDER BY created_at DESC"
+        params: list[Any] = []
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [r[0] for r in rows]
+
+    def list_by_type(self, artifact_type: str, *, limit: int | None = None) -> list[dict]:
+        """Filters on the JSONB `artifact_type` discriminator. Without
+        a functional index on `(payload->>'artifact_type')` this is a
+        seq-scan; fine at current scale (sub-1000 rows), worth a
+        functional index when the table grows.
+        """
+        sql = (
+            "SELECT payload FROM artifacts "
+            "WHERE payload->>'artifact_type' = %s "
+            "ORDER BY created_at DESC"
+        )
+        params: list[Any] = [artifact_type]
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [r[0] for r in rows]
+
+    def list_by_job(self, job_id: str, *, limit: int | None = None) -> list[dict]:
+        """Filters on the JSONB `created_by_job` field. Same scan
+        caveat as `list_by_type`. Hot path: `SeedStep` hydrates a
+        source `math_qa` job's artifacts via this call (used to
+        scan-all-then-filter).
+        """
+        sql = (
+            "SELECT payload FROM artifacts "
+            "WHERE payload->>'created_by_job' = %s "
+            "ORDER BY created_at DESC"
+        )
+        params: list[Any] = [job_id]
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [r[0] for r in rows]
+
 
 # ---------------------------------------------------------------------------
 # Prompts

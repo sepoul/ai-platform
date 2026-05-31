@@ -517,13 +517,13 @@ can't run it. Two-pool design: queue per runtime, worker per pool
 (EXTRA=default vs EXTRA=crewai). Only matters once we move off the
 polling backend in prod.
 
-### 8e. `list_by_type` / `list_by_job` indexed lookups
+### 8e. `list_by_type` / `list_by_job` indexed lookups ✅ done
 
-`SeedStep`'s `_load_source_artifacts` scans every artifact id and
-filters by `created_by_job` — same O(N) shape the artifacts router
-already uses inline (§9 of this doc). Centralize as a platform
-`ArtifactService.list_by_job(job_id)` (or upgrade to a real index)
-when artifact volume justifies it. SeedStep gets the speedup for free.
+Landed with Perf §9. `ArtifactService.list_by_job(job_id)` is now a
+single query on Supabase (JSONB filter on `payload->>'created_by_job'`);
+SeedStep just calls it. Same `list_*` family added to the artifacts
+router. DB-side functional index left for later (current row count
+makes the seq-scan invisible).
 
 ### 8g. Per-turn cost surfacing for crewai+anthropic
 
@@ -695,27 +695,28 @@ OpenAPI shapes. See
 [prompt_registry.md](docs/prompt_registry.md) for the backend
 model.
 
-### Perf §9. Artifacts list — fix the N+1 against Supabase 📝 open
+### Perf §9. Artifacts list — fix the N+1 against Supabase ✅ done
 
-`GET /artifacts` takes ~5s TTFB consistently (cold + warm) for an 11 KB
-payload. Confirmed in code: `SupabaseArtifactRepository` only exposes
-`put` / `get` / `list_ids` — so the caller (`ArtifactService.list`)
-reads ids, then `get(id)` per artifact. One round-trip per artifact.
+`GET /artifacts` was `list_ids() → get(id) per row` — one Supabase
+round-trip per artifact, ~5s TTFB on warm cache. Fixed at the service
+layer (no schema / index changes):
 
-The original reason `list_ids` was the only list shape: artifacts are a
-discriminated union, and mixed-type batch hydration is awkward — the
-service needs the type to know which `BaseArtifact` subclass to validate
-against. The safe fix:
+- `ArtifactRepository` Protocol gained `list_all` / `list_by_type` /
+  `list_by_job`, all with optional `limit`. Single-blob backends
+  (local, B2) iterate the existing cached `_load_store().items` in
+  memory; Supabase runs one SQL per method, with JSONB filters
+  (`payload->>'artifact_type'` / `payload->>'created_by_job'`).
+- `ArtifactService` exposes typed versions that hydrate to
+  `BaseArtifact` subclasses and silently skip unknown discriminators
+  (preserves the router's prior resilience contract).
+- `GET /artifacts` branches on filter and calls the matching method
+  once: no more per-row hydration.
+- `SeedStep._load_source_artifacts` (math_conversation, §8e below)
+  uses `list_by_job` so seeding from a math_qa job is a single query.
 
-  - Add `list_by_type(artifact_type) -> list[dict]` to the repo
-    (Supabase + local + b2; touch the protocol in `storage/protocols.py`
-    too). Within a single type, the model class is fixed → safe hydration
-    in `ArtifactService` with one query. This is what the panel actually
-    wants (it already groups by type tab).
-  - Optional follow-up: `list_all() -> list[dict]` that returns raw
-    payloads, dispatched via the `artifact_type` discriminator at the
-    service layer. Strictly an "All" tab nice-to-have; per-type already
-    covers the hot path.
+Followup if needed at scale: functional indexes on
+`(payload->>'artifact_type')` and `(payload->>'created_by_job')` —
+trivial migration once row counts make the seq-scan visible.
   - Add `?limit/offset` (and an `artifact_type=` query param) on
     `GET /artifacts` so the panel pulls a page per tab instead of
     everything. Pairs with §10 to halve the React render cost too.
