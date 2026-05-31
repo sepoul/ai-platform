@@ -71,6 +71,18 @@ class ArtifactRepository(Protocol):
 
     def get(self, artifact_id: str) -> dict: ...
 
+    def get_many(self, artifact_ids: list[str]) -> list[dict]:
+        """Batch-fetch by id. One round-trip on Supabase
+        (`WHERE artifact_id = ANY(%s)`); set-lookup on single-blob
+        backends. Order of the returned list is NOT guaranteed to
+        match the input — `ArtifactService.get_many` indexes by id
+        and re-orders, and is the contract callers should depend on.
+        Missing ids are silently dropped at this layer; the service
+        layer compares counts and raises `ObjectNotFound` to preserve
+        the previous fail-loud semantics.
+        """
+        ...
+
     def list_ids(self) -> list[str]:
         """Return every artifact id. Cheap on single-blob backends;
         kept for legacy callers (tests, migrate_backend). Prefer

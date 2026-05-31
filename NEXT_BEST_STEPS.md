@@ -714,6 +714,15 @@ layer (no schema / index changes):
 - `SeedStep._load_source_artifacts` (math_conversation, §8e below)
   uses `list_by_job` so seeding from a math_qa job is a single query.
 
+Also folded in: `ArtifactRepository.get_many(ids)` — `_fetch_result`
+(both math_qa and math_conversation) used to walk
+`get_many([id1, id2, …])` as one-`get`-per-id. Now a single
+`SELECT … WHERE artifact_id = ANY(%s)` on Supabase, set-lookup on
+single-blob backends. Service preserves the input-order +
+fail-loud-on-missing contract via a re-index pass; missing ids
+surface in a single `ObjectNotFound` listing them all (was: first
+missing id raised, hiding the rest).
+
 Followup if needed at scale: functional indexes on
 `(payload->>'artifact_type')` and `(payload->>'created_by_job')` —
 trivial migration once row counts make the seq-scan visible.

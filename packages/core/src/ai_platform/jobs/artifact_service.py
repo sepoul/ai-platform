@@ -51,7 +51,23 @@ class ArtifactService:
         return self._hydrate(self.repo.get(str(artifact_id)))
 
     def get_many(self, ids: Iterable[UUID | str]) -> list[BaseArtifact]:
-        return [self.get(i) for i in ids]
+        """Batch-hydrate by id. One round-trip on Supabase (was: one
+        per id). Preserves input order and raises `ObjectNotFound`
+        listing every missing id — same fail-loud contract as the
+        prior per-id loop, so callers that rely on "all-or-nothing"
+        keep working.
+        """
+        from ai_platform.workspace.storage.exceptions import ObjectNotFound
+
+        str_ids = [str(i) for i in ids]
+        if not str_ids:
+            return []
+        payloads = self.repo.get_many(str_ids)
+        by_id = {p["artifact_id"]: p for p in payloads}
+        missing = [i for i in str_ids if i not in by_id]
+        if missing:
+            raise ObjectNotFound(f"Artifacts not found: {missing}")
+        return [self._hydrate(by_id[i]) for i in str_ids]
 
     # ---- Batched list_* — single round-trip on Supabase ----
     # Replaces the old `for raw_id in repo.list_ids(): self.get(raw_id)`

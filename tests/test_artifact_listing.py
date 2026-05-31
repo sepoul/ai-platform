@@ -124,6 +124,81 @@ def test_list_by_job_accepts_uuid_or_str(repo, service: ArtifactService):
 
 
 # ---------------------------------------------------------------------------
+# Repo + Service — get_many batching
+# ---------------------------------------------------------------------------
+
+def test_repo_get_many_empty_input_returns_empty(repo):
+    assert repo.get_many([]) == []
+
+
+def test_repo_get_many_returns_existing_skips_missing(repo, service: ArtifactService):
+    """Repo layer silently drops missing ids — the service is what
+    raises on count mismatch (preserves the prior fail-loud contract
+    at one consistent layer).
+    """
+    a = _TypeA(value="hello")
+    service.put(a)
+    payloads = repo.get_many([str(a.artifact_id), "nonexistent-id"])
+    assert len(payloads) == 1
+    assert payloads[0]["value"] == "hello"
+
+
+def test_service_get_many_collapses_to_one_round_trip(service: ArtifactService):
+    """End-to-end happy path — gets typed BaseArtifact back, single
+    repo call regardless of how many ids."""
+    a = _TypeA(value="a")
+    b = _TypeB(score=2.0)
+    service.put(a)
+    service.put(b)
+    items = service.get_many([a.artifact_id, b.artifact_id])
+    assert {x.artifact_type for x in items} == {"type_a", "type_b"}
+
+
+def test_service_get_many_preserves_input_order(service: ArtifactService):
+    """Locked-in contract from the prior implementation: callers may
+    rely on `out[i].artifact_id == ids[i]`. Batched DB queries don't
+    guarantee order, so the service re-indexes by id and re-emits in
+    input order.
+    """
+    a = _TypeA(value="a")
+    b = _TypeA(value="b")
+    c = _TypeA(value="c")
+    for art in (a, b, c):
+        service.put(art)
+    out = service.get_many([c.artifact_id, a.artifact_id, b.artifact_id])
+    assert [x.value for x in out] == ["c", "a", "b"]
+
+
+def test_service_get_many_raises_on_missing_listing_all_missing(service: ArtifactService):
+    """The ObjectNotFound message lists every missing id so callers
+    can surface a useful error (was implicit in the per-id loop: first
+    missing id raised; now we report them all in one go).
+    """
+    from ai_platform.workspace.storage.exceptions import ObjectNotFound
+
+    a = _TypeA(value="exists")
+    service.put(a)
+    missing_id = str(uuid4())
+    other_missing = str(uuid4())
+    with pytest.raises(ObjectNotFound) as exc:
+        service.get_many([a.artifact_id, missing_id, other_missing])
+    assert missing_id in str(exc.value)
+    assert other_missing in str(exc.value)
+
+
+def test_service_get_many_empty_input_returns_empty(service: ArtifactService):
+    assert service.get_many([]) == []
+
+
+def test_service_get_many_accepts_uuid_or_str(service: ArtifactService):
+    a = _TypeA(value="x")
+    service.put(a)
+    # Mixed UUID + str inputs — service does the str() coercion.
+    out = service.get_many([a.artifact_id, str(a.artifact_id)])
+    assert len(out) == 2  # same id twice; both resolve
+
+
+# ---------------------------------------------------------------------------
 # Service — typed hydration + unknown-type resilience
 # ---------------------------------------------------------------------------
 

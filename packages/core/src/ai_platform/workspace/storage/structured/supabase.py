@@ -272,6 +272,20 @@ class SupabaseArtifactRepository:
             raise ObjectNotFound(f"Artifact not found: {artifact_id}")
         return row[0]
 
+    def get_many(self, artifact_ids: list[str]) -> list[dict]:
+        """Single SQL fetch via `ANY(%s)`. Replaces the previous
+        per-id loop in `ArtifactService.get_many` (one round-trip per
+        ref). Order is unspecified; the service re-indexes.
+        """
+        if not artifact_ids:
+            return []
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM artifacts WHERE artifact_id = ANY(%s)",
+                (list(artifact_ids),),
+            ).fetchall()
+        return [r[0] for r in rows]
+
     def list_ids(self) -> list[str]:
         with self._pool.connection() as conn:
             rows = conn.execute("SELECT artifact_id FROM artifacts ORDER BY created_at DESC").fetchall()

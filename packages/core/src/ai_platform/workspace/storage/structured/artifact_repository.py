@@ -57,6 +57,14 @@ class _ArtifactStoreMixin(SingleStoreMixin[Dict[str, Any], ArtifactStore]):
             raise ObjectNotFound(f"Artifact not found: {artifact_id}")
         return store.items[artifact_id]
 
+    def get_many(self, artifact_ids: list[str]) -> list[dict]:
+        """Single blob read + set-lookup. Missing ids are silently
+        dropped; the service layer raises on count mismatch (mirrors
+        the Supabase behavior).
+        """
+        store = self._load_store()
+        return [store.items[aid] for aid in artifact_ids if aid in store.items]
+
     def list_ids(self) -> list[str]:
         return self.list_canonicals()
 
