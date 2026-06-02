@@ -13,6 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable
 
+import logging
+
+from ai_platform.bundle import build_record
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.domain import (
     BootstrapContext,
@@ -22,6 +25,9 @@ from ai_platform.jobs.domain import (
 from ai_platform.runtime.registry import register_job_control
 from ai_platform.jobs.execution_policy import JobControl, JobExecution
 from ai_platform.workspace.bootstrap import WorkspaceBootstrap
+
+
+_logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fastapi import APIRouter
@@ -61,8 +67,19 @@ def register_control_domains(
 ) -> ControlBootstrap:
     """Call each domain's `register_control()` and aggregate (API process).
 
-    Side effect: each JobControl is registered on the platform's global
-    control registry so router factories can discover it.
+    Side effects:
+    1. Each JobControl is registered on the platform's global control
+       registry so router factories can discover it.
+    2. Each ControlDomain is auto-deployed to the JobDefinition catalog
+       via `ws.job_definition_service.deploy(...)` — idempotent upsert.
+       After boot the catalog mirrors what's in code; a friend's
+       additional `POST /job-definitions` deploy is additive.
+
+       The auto-deploy is best-effort: if the JobDefinitionService is
+       unavailable (older WorkspaceBootstrap, test that bypasses
+       storage, …) the registration still completes. Routing today
+       still consumes the in-memory registry, so a deploy-time
+       failure doesn't break the API.
     """
     ctx = _ctx(ws)
     out = ControlBootstrap()
@@ -78,7 +95,42 @@ def register_control_domains(
             artifact_type = artifact_cls.model_fields["artifact_type"].default
             if artifact_type is not None:
                 out.artifact_owners[artifact_type] = domain.name
+
+        _auto_deploy_to_catalog(domain, ws)
     return out
+
+
+def _auto_deploy_to_catalog(domain, ws: WorkspaceBootstrap) -> None:
+    """Upsert each of `domain`'s JobControls into the JobDefinition catalog.
+
+    Failures are logged + swallowed: the platform's in-memory routing
+    still works without the catalog, and we don't want a bad DB
+    connection to block API boot. Bundle deploy from a friend's repo
+    surfaces errors through the API's HTTP response — that's the
+    enforced path; this one is convenience.
+    """
+    service = getattr(ws, "job_definition_service", None)
+    if service is None:
+        return  # Older bootstrap shape; nothing to do.
+    if not domain.code_entrypoint:
+        # Domain didn't self-describe — skip rather than guess a wrong
+        # entrypoint into the catalog.
+        return
+    for control in domain.job_controls:
+        try:
+            record = build_record(
+                control,
+                runtime=domain.runtime_selector,
+                code_entrypoint=domain.code_entrypoint,
+                artifact_types=tuple(domain.artifact_types),
+            )
+            service.deploy(record)
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            _logger.warning(
+                "Auto-deploy to JobDefinition catalog failed for %s: %s",
+                control.name,
+                exc,
+            )
 
 
 def register_execution_domains(
