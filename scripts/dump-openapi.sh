@@ -12,6 +12,6 @@ OUT="${1:-/dev/stdout}"
 
 "$PY" -c "
 import json, sys
-from mathapp.entrypoints.api import app
+from ai_platform.entrypoints.api import app
 sys.stdout.write(json.dumps(app.openapi(), indent=2))
 " > "$OUT"

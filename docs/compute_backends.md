@@ -29,7 +29,7 @@ repo. Queue-based backends push the work; poll backends are no-op
 (workers will discover the record on their next tick anyway).
 
 **`start_worker`** is the long-running consumer entrypoint
-(`python -m mathapp.entrypoints.worker` calls it). Poll backends own the loop
+(`python -m ai_platform.entrypoints.worker` calls it). Poll backends own the loop
 here. Backends that have their own CLI raise `NotImplementedError`
 with a message pointing at the right entrypoint instead of silently
 running an empty process.
@@ -99,7 +99,7 @@ To finish it:
 3. In `CeleryComputeBackend.enqueue`, replace the `NotImplementedError`
    with `run_job.delay(job_id)`.
 4. Operators run `celery -A execution.celery_app worker` instead of
-   `python -m mathapp.entrypoints.worker`. `start_worker` stays
+   `python -m ai_platform.entrypoints.worker`. `start_worker` stays
    `NotImplementedError` — the message redirects them.
 
 ## Adding another backend

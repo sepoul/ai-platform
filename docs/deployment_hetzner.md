@@ -376,7 +376,7 @@ so you can flip back).
 ### Status
 
 Wiring is in place as of 2026-05-12: `celery[redis]>=5.4` is in
-`packages/core/pyproject.toml`, `packages/worker/src/mathapp/entrypoints/celery_app.py`
+`packages/core/pyproject.toml`, `packages/worker/src/ai_platform/entrypoints/celery_app.py`
 defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
 `run_job.delay(job_id)`. The compose `celery` profile adds `redis`
 and `celery-worker`.
@@ -409,7 +409,7 @@ services:
     build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: default } }
     image: aiplatform-worker:local
     command: >
-      celery -A mathapp.entrypoints.celery_app worker
+      celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
     environment:

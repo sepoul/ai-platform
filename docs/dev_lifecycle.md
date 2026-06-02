@@ -62,7 +62,7 @@ backend without re-running codegen.
 ## What lives where
 
 - **OpenAPI source of truth:** `mathapp/scripts/dump-openapi.sh` —
-  imports `mathapp.entrypoints.api:app` and prints `app.openapi()`.
+  imports `ai_platform.entrypoints.api:app` and prints `app.openapi()`.
   Used by both the math-ui codegen pipeline and any external consumer.
 - **Generated TypeScript types:** `math-ui/lib/api/schema.d.ts`. **Do
   not hand-edit.**

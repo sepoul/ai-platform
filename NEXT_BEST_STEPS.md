@@ -326,11 +326,11 @@ get_all / delete against an in-memory fake `CanonicalRepository` would
 lock the contract before more domains inherit from it. Especially
 relevant now that every artifact type routes through this mixin.
 
-## 4. Move `src/scripts/` into `mathapp.scripts`
+## 4. Move `src/scripts/` into `ai_platform.scripts`
 
 `src/scripts/{deploy_prompts,generate_workflow_specs}.py` are runtime
-entrypoints — same role as `mathapp.entrypoints.{api,worker}` but for
-one-shot CLI tasks. They belong under `mathapp.scripts` so the runtime
+entrypoints — same role as `ai_platform.entrypoints.{api,worker}` but for
+one-shot CLI tasks. They belong under `ai_platform.scripts` so the runtime
 shell owns all entrypoints in one place. Touches `scripts/deploy-prompts.sh`
 and any docs referencing the old paths.
 
@@ -496,7 +496,7 @@ default runtime's 0.105) because crewai 1.14.6 pins it. Verified
 locally that `uv pip compile` resolves cleanly; not yet verified that
 `crewai.LLM(model="anthropic/claude-sonnet-4-5-20250929")` actually
 talks to the live API through that SDK. Run the smoke entrypoint
-(`python -m mathapp.entrypoints.crewai_smoke "<question>"`) inside the
+(`python -m ai_platform.entrypoints.crewai_smoke "<question>"`) inside the
 built `aiplatform-worker-crewai` image on first deploy; the test passes
 or we fall back to `anthropic` as a direct extras dep.
 

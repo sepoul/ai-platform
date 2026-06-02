@@ -1,6 +1,6 @@
 """Tests for per-runtime worker isolation.
 
-Runtime is scoped at the domain level (mathapp.composition_root): a
+Runtime is scoped at the domain level (ai_platform.composition_root): a
 worker serves one runtime (WORKER_RUNTIME), imports only that runtime's
 domains, and so its registered job set already contains only its jobs —
 which it claims, leaving other runtimes' jobs PENDING for their pool.
@@ -95,7 +95,7 @@ def test_default_runtime_constant_and_env():
 # ---------------------------------------------------------------------------
 
 def test_composition_root_partitions_domains_by_runtime():
-    from mathapp.composition_root import (
+    from ai_platform.composition_root import (
         control_registers,
         execution_registers_all,
         execution_registers_for_runtime,

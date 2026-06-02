@@ -6,7 +6,7 @@ inverting the layering. Before this module existed, `jobs.bootstrap`
 had to import from `api.dependencies`, creating a `jobs → api` edge
 inside the platform.
 
-The composition root (e.g. `mathapp.entrypoints.api`) calls
+The composition root (e.g. `ai_platform.entrypoints.api`) calls
 `init_platform()` once at startup. Routers consume the singletons via
 FastAPI `Depends(get_*)`. Tests bypass `init_platform` and override
 the dependencies directly via `app.dependency_overrides[get_*]`.

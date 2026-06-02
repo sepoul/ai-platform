@@ -292,7 +292,7 @@ Resolution: **per-runtime worker pools** (see
 [`ai_platform/jobs/runtimes.py`](../src/ai_platform/jobs/runtimes.py)).
 A *runtime* is an isolated dependency environment. Runtime is scoped at
 the **domain** level: the import manifest in
-[`composition_root.py`](../src/mathapp/composition_root.py)
+[`composition_root.py`](../src/ai_platform/composition_root.py)
 (`runtime → domain modules`) is the single source of truth. There is no
 per-job runtime field — you can't read one without importing the module
 that may crash on a slim env. A worker serves one runtime
@@ -333,7 +333,7 @@ OTLP-to-Logfire as a follow-up.
 (verified: otel-sdk 1.34.1, anthropic 0.73, crewai 1.14.6, pydantic-graph
 1.104; no pydantic-ai-slim, no logfire); `pytest tests/` stays green; a
 trivial native Anthropic CrewAI agent completes one call via the smoke
-entrypoint `python -m mathapp.entrypoints.crewai_smoke "<question>"`.
+entrypoint `python -m ai_platform.entrypoints.crewai_smoke "<question>"`.
 
 CrewAI memory features (long-term, entity, contextual) are **off**
 for v1 (`Crew(memory=False)`). Each conversation is hermetic. This

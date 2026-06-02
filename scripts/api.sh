@@ -11,4 +11,4 @@ HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
 
 echo "backend=$BACKEND data=${LOCAL_DATA_DIR:-<default>} → http://$HOST:$PORT"
-exec "$PY" -u -m uvicorn mathapp.entrypoints.api:app --host "$HOST" --port "$PORT" "$@"
+exec "$PY" -u -m uvicorn ai_platform.entrypoints.api:app --host "$HOST" --port "$PORT" "$@"

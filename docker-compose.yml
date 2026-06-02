@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile.api   # control plane: core + FastAPI, NO engine
     image: aiplatform-api:local
     command: >
-      python -u -m uvicorn mathapp.entrypoints.api:app
+      python -u -m uvicorn ai_platform.entrypoints.api:app
       --host 0.0.0.0
       --port 8000
     environment:
@@ -62,7 +62,7 @@ services:
         EXTRA: default   # default runtime: pydantic_ai + Anthropic + Logfire (otel >=1.39)
     image: aiplatform-worker:local
     command: >
-      python -u -m mathapp.entrypoints.worker
+      python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
     environment:
       BACKEND: ${BACKEND:-local}
@@ -104,7 +104,7 @@ services:
         EXTRA: crewai
     image: aiplatform-worker-crewai:local
     command: >
-      python -u -m mathapp.entrypoints.worker
+      python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
     environment:
       WORKER_RUNTIME: crewai
@@ -159,7 +159,7 @@ services:
         EXTRA: default   # celery worker is an execution context → default runtime (pydantic_ai stack)
     image: aiplatform-worker:local
     command: >
-      celery -A mathapp.entrypoints.celery_app worker
+      celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
     environment:

@@ -113,11 +113,11 @@ Phase 1 is landed as green increments (the leak fixes come first, while
   views over `JobDefinition`. Zero behavior change; boundary tested.
 - **Phase 1a — review-as-data (done, `d30c40b`).** Leak #2 fixed; API no
   longer touches the state model.
-- **Phase 1b — workflow descriptor (done).** `mathapp.entrypoints.gen_workflows`
+- **Phase 1b — workflow descriptor (done).** `ai_platform.entrypoints.gen_workflows`
   introspects each graph and parks `{job_type: descriptor}` as `workflows.json`
   in the blob store; the workflows router serves it (optional — empty until
   generated). Leak #1 fixed; the API no longer imports `pydantic_graph`.
-  **Deploy step:** run `python -m mathapp.entrypoints.gen_workflows` (engine
+  **Deploy step:** run `python -m ai_platform.entrypoints.gen_workflows` (engine
   context) after deploy / graph changes.
 - **Phase 1c — invert ownership.** Done as green sub-steps using the
   `.control` / `.execution` views as a bridge (each side migrates while
@@ -218,7 +218,7 @@ Phase 1 is landed as green increments (the leak fixes come first, while
 
   **Namespace packages** (delete `__init__.py` at these split roots; keep on
   leaves): `ai_platform`, `ai_platform.jobs`, `ai_platform.ai`, `mathai`,
-  `mathai.<domain>`, `mathapp`, `mathapp.entrypoints`.
+  `mathai.<domain>`, `mathapp`, `ai_platform.entrypoints`.
 
   **Pre-step:** verify `mathai/<d>/tools.py` and `mathai/<d>/crew/*` import
   footprint — if they pull `pydantic_ai`/`crewai`, they belong in worker, not core.
