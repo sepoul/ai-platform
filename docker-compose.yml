@@ -54,13 +54,30 @@ services:
       retries: 5
     restart: unless-stopped
 
-  worker:
+  # Virgin platform worker — build-only service. Build with:
+  #   docker compose --profile build build aiplatform-worker
+  # before bringing up `worker` / `worker-crewai`, because those build
+  # FROM this image. Production pulls the equivalent GHCR image at
+  # deploy time and never builds locally.
+  aiplatform-worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
-      args:
-        EXTRA: default   # default runtime: pydantic_ai + Anthropic + Logfire (otel >=1.39)
     image: aiplatform-worker:local
+    profiles: [build]
+    command: ["true"]   # not meant to run; the image is the artifact
+
+  worker:
+    # Domain-bound worker (math-qa). Built FROM aiplatform-worker:local
+    # via Dockerfile.worker-domain. Requires `aiplatform-worker:local`
+    # to exist locally first (see comment on the service above).
+    build:
+      context: .
+      dockerfile: Dockerfile.worker-domain
+      args:
+        DOMAIN: math-qa
+        PLATFORM_IMAGE: aiplatform-worker:local
+    image: aiplatform-worker-mathqa:local
     command: >
       python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -97,12 +114,16 @@ services:
   # `docker compose up` doesn't build/run it.
   # See ai_platform/jobs/runtimes.py and docs/math_conversation.md.
   worker-crewai:
+    # Domain-bound worker (math-conversation). Built FROM
+    # aiplatform-worker:local via Dockerfile.worker-domain. Same
+    # platform-base requirement as `worker`.
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: Dockerfile.worker-domain
       args:
-        EXTRA: crewai
-    image: aiplatform-worker-crewai:local
+        DOMAIN: math-conversation
+        PLATFORM_IMAGE: aiplatform-worker:local
+    image: aiplatform-worker-mathconversation:local
     command: >
       python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -152,12 +173,15 @@ services:
     profiles: [celery]
 
   celery-worker:
+    # Celery worker uses the math-qa-bound image (default runtime
+    # stack). Same build base as `worker`.
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: Dockerfile.worker-domain
       args:
-        EXTRA: default   # celery worker is an execution context → default runtime (pydantic_ai stack)
-    image: aiplatform-worker:local
+        DOMAIN: math-qa
+        PLATFORM_IMAGE: aiplatform-worker:local
+    image: aiplatform-worker-mathqa:local
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info

@@ -1,16 +1,21 @@
-# Execution-plane image (aiplatform-worker). The base ships only
-# pydantic_graph (the platform graph framework). EXTRA selects the
-# runtime, and each runtime pulls its domain package, which pulls its
-# LLM stack:
-#   EXTRA=default  → mathai-math-qa[execution]
-#                    (pydantic_ai + Anthropic + Logfire, otel >=1.39)
-#   EXTRA=crewai   → mathai-math-conversation[execution]
-#                    (CrewAI[anthropic], otel <1.35; no logfire)
-# The two are mutually exclusive over the otel-sdk pin; each runs as
-# its own image. (Phase B of the platform/domain split will move to a
-# "virgin platform" image that ships zero domain source and pulls the
-# domain at deploy time — for now, both domain pkgs are baked in and
-# `${EXTRA}` decides which one's deps actually get installed.)
+# Virgin execution-plane image (aiplatform-worker). Ships ONLY the
+# platform: core + worker base + pydantic_graph (the graph framework
+# every runtime needs). No domain source on disk, no runtime-specific
+# LLM stack installed.
+#
+# A domain-bound worker image (aiplatform-worker-mathqa,
+# aiplatform-worker-mathconversation, …) chains on top via
+# Dockerfile.worker-domain: builds the domain's wheel and pip-installs
+# it INTO this image, pulling its [execution] extras. The platform
+# image is published once per CI run; each domain image is one short
+# Dockerfile that depends on it.
+#
+# Why no EXTRA arg here anymore: the previous shape baked ONE domain
+# in at platform-image build time, mixing platform and domain
+# concerns. The new shape keeps them strictly separated — a tenant
+# deploying their own domain layers it on top of the published
+# `aiplatform-worker:latest` without needing the platform repo.
+#
 # See docs/control_execution_split.md and ai_platform/jobs/runtimes.py.
 FROM python:3.13-slim
 
@@ -24,18 +29,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Only the execution plane's source + shared core + both domain pkgs +
-# repo-root data. (No api source — true per-image isolation.) Both
-# domain pkgs are copied so `packages/worker[<EXTRA>]`'s path-source
-# can resolve the package the chosen extra pulls. Only one's
-# `[execution]` extra is actually installed (see below), so only its
-# LLM stack reaches site-packages.
-COPY packages/core               /app/packages/core
-COPY packages/worker             /app/packages/worker
-COPY packages/math-qa            /app/packages/math-qa
-COPY packages/math-conversation  /app/packages/math-conversation
-COPY instructions                /app/instructions
-COPY supabase                    /app/supabase
+# Only the platform's source — no math packages here. The repo-root
+# `instructions/` directory is copied so a domain that ships its
+# Markdown prompts under a known path (today's convention) can still
+# resolve them via `find_ancestor_containing("instructions")` after
+# the domain wheel installs on top.
+COPY packages/core   /app/packages/core
+COPY packages/worker /app/packages/worker
+COPY instructions    /app/instructions
+COPY supabase        /app/supabase
 
-ARG EXTRA=default
-RUN uv pip install --system --no-cache -e "packages/worker[${EXTRA}]"
+# Editable install: no extras. The platform image carries only what
+# every runtime needs.
+RUN uv pip install --system --no-cache -e packages/worker
