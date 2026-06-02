@@ -299,6 +299,100 @@ def test_get_job_definition_by_id_404s_if_missing(api_client):
     assert resp.status_code == 404
 
 
+def test_register_control_domains_auto_deploys_to_catalog(
+    tmp_path: Path, service: JobDefinitionService, toy_control: JobControl
+):
+    """Boot path: register_control_domains should upsert each domain's
+    JobControls into the catalog as a side effect. After API boot, a
+    caller hitting `/job-definitions` should see the platform's own
+    domains without anyone having explicitly POSTed.
+    """
+    from ai_platform.jobs.bootstrap import register_control_domains
+    from ai_platform.jobs.artifact_service import ArtifactService
+    from ai_platform.jobs.domain import BootstrapContext, ControlDomain
+    from ai_platform.workspace.storage.structured.artifact_repository import (
+        LocalArtifactRepository,
+    )
+    from ai_platform.workspace.bootstrap import WorkspaceBootstrap
+    from unittest.mock import MagicMock
+
+    # Synthetic ControlDomain that self-describes its runtime + entrypoint.
+    def fake_register_control(ctx: BootstrapContext) -> ControlDomain:
+        return ControlDomain(
+            name="toy",
+            job_controls=[toy_control],
+            artifact_types=[_ToyArtifact],
+            runtime_selector="default",
+            code_entrypoint="mathai.toy.execution:register_execution",
+        )
+
+    artifact_repo = LocalArtifactRepository(
+        LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts")
+    )
+    ws = WorkspaceBootstrap(
+        backend="local",
+        platform_client=MagicMock(),
+        executor=MagicMock(),
+        artifact_service=ArtifactService(artifact_repo, registry={}),
+        job_definition_service=service,
+        root_dir=str(tmp_path),
+    )
+
+    register_control_domains([fake_register_control], ws)
+    rows = service.list()
+    assert len(rows) == 1
+    assert rows[0].name == "toy"
+    assert rows[0].runtime_selector == "default"
+    assert rows[0].code_entrypoint == "mathai.toy.execution:register_execution"
+
+
+def test_register_control_domains_swallows_catalog_errors(
+    tmp_path: Path, toy_control: JobControl
+):
+    """The auto-deploy is best-effort: a catalog write failure must
+    not abort API boot, because the in-memory routing still works
+    without the catalog row.
+    """
+    from ai_platform.jobs.bootstrap import register_control_domains
+    from ai_platform.jobs.artifact_service import ArtifactService
+    from ai_platform.jobs.domain import BootstrapContext, ControlDomain
+    from ai_platform.workspace.storage.structured.artifact_repository import (
+        LocalArtifactRepository,
+    )
+    from ai_platform.workspace.bootstrap import WorkspaceBootstrap
+    from unittest.mock import MagicMock
+
+    def fake_register_control(ctx: BootstrapContext) -> ControlDomain:
+        return ControlDomain(
+            name="toy",
+            job_controls=[toy_control],
+            artifact_types=[],
+            runtime_selector="default",
+            code_entrypoint="mathai.toy.execution:register_execution",
+        )
+
+    # Service that always errors on deploy.
+    bad_service = MagicMock()
+    bad_service.deploy.side_effect = RuntimeError("DB unreachable")
+
+    artifact_repo = LocalArtifactRepository(
+        LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts")
+    )
+    ws = WorkspaceBootstrap(
+        backend="local",
+        platform_client=MagicMock(),
+        executor=MagicMock(),
+        artifact_service=ArtifactService(artifact_repo, registry={}),
+        job_definition_service=bad_service,
+        root_dir=str(tmp_path),
+    )
+
+    # Must not raise — the in-memory registration still completes.
+    out = register_control_domains([fake_register_control], ws)
+    assert "toy" in out.job_controls
+    assert bad_service.deploy.called
+
+
 def test_bundle_helper_posts_to_api(api_client, toy_control: JobControl, monkeypatch):
     """End-to-end: the bundle helper builds + POSTs through real
     httpx machinery (we patch the URL into the api_client fixture's
