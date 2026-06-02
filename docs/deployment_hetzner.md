@@ -271,7 +271,7 @@ ssh root@mathapp-prod 'cd /srv/mathapp && infra/hetzner/scripts/redeploy.sh'
 `redeploy.sh` runs `docker compose -f docker-compose.yml -f
 docker-compose.prod.yml --profile ui --profile crewai pull && up -d`,
 then prunes dangling images. The compose override pins each service to
-its split image (`aiplatform-api`, `aiplatform-worker`, `aiplatform-worker-crewai`)
+its split image (`aiplatform-api`, `aiplatform-worker` (virgin), `aiplatform-worker-mathqa`, `aiplatform-worker-mathconversation`)
 at `:latest` (or `${IMAGE_TAG}` if exported) — no build happens on the box.
 
 **Both workers run simultaneously.** The `worker` container serves the
@@ -407,7 +407,7 @@ services:
 
   celery-worker:
     build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: default } }
-    image: aiplatform-worker:local
+    image: aiplatform-worker-mathqa:local
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info

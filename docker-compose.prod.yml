@@ -19,13 +19,21 @@ services:
     image: ghcr.io/sepoul/aiplatform-api:${IMAGE_TAG:-latest}
 
   worker:
-    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    # Was `aiplatform-worker:latest` (the math-qa-baked-in image).
+    # After Phase B, that name now refers to the VIRGIN platform
+    # worker. The domain-bound image is built by
+    # Dockerfile.worker-domain FROM aiplatform-worker + math-qa wheel.
+    image: ghcr.io/sepoul/aiplatform-worker-mathqa:${IMAGE_TAG:-latest}
 
   worker-crewai:
-    image: ghcr.io/sepoul/aiplatform-worker-crewai:${IMAGE_TAG:-latest}
+    # Was `aiplatform-worker-crewai`. Same Phase B shape — the
+    # math-conversation domain image chains on top of the virgin
+    # `aiplatform-worker`.
+    image: ghcr.io/sepoul/aiplatform-worker-mathconversation:${IMAGE_TAG:-latest}
 
   celery-worker:
-    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    # Celery worker uses the default-runtime image (math-qa stack).
+    image: ghcr.io/sepoul/aiplatform-worker-mathqa:${IMAGE_TAG:-latest}
 
   math-ui:
     image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}

@@ -1,0 +1,57 @@
+# Domain-bound worker image — chains on top of the virgin
+# aiplatform-worker image. Two stages:
+#
+#   1. `build` — installs setuptools + builds a wheel from the
+#      domain package's source. Stays minimal (no platform deps).
+#   2. final — FROM the published aiplatform-worker, copies the wheel
+#      in, and `pip install` the wheel with its `[execution]` extra.
+#      That extra is where the domain pulls its LLM stack (pydantic_ai
+#      / Logfire for math-qa; crewai[anthropic] for math-conversation).
+#      Per-domain isolation is now a property of the IMAGE, not just
+#      the EXTRA: the platform image is identical for every domain;
+#      the domain image is the platform + this one wheel + its deps.
+#
+# Build args:
+#   DOMAIN — the package directory under `packages/` to install
+#            (e.g. `math-qa`, `math-conversation`). The directory must
+#            contain a buildable pyproject with an `[execution]` extra.
+#   PLATFORM_IMAGE — the FROM tag. Defaults to the latest published
+#                    virgin worker image.
+#
+# Example:
+#   docker build -f Dockerfile.worker-domain \
+#                --build-arg DOMAIN=math-qa \
+#                -t aiplatform-worker-mathqa:local .
+#
+# A tenant deploying their own domain runs the same Dockerfile against
+# their own `packages/<their-domain>` directory.
+
+ARG PLATFORM_IMAGE=ghcr.io/sepoul/aiplatform-worker:latest
+
+# ---- Stage 1: build the domain wheel ----
+FROM python:3.13-slim AS build
+
+ARG DOMAIN
+RUN if [ -z "$DOMAIN" ]; then echo "DOMAIN build-arg is required" >&2; exit 1; fi
+
+RUN pip install --no-cache-dir build
+
+WORKDIR /src
+COPY packages/${DOMAIN} /src
+# Build a wheel — keeps the install step in the final stage to a
+# single `pip install <wheel>`, no source tree on the image.
+RUN python -m build --wheel --no-isolation 2>/dev/null || python -m build --wheel
+
+# ---- Stage 2: install on the virgin platform ----
+FROM ${PLATFORM_IMAGE}
+
+ARG DOMAIN
+# The wheel filename includes the package's normalized distribution
+# name (e.g. mathai_math_qa-0.1.0-py3-none-any.whl). Glob it.
+COPY --from=build /src/dist/*.whl /tmp/
+
+# Install with the `[execution]` extra. The platform image already has
+# `aiplatform-core` editable-installed, so transitive `aiplatform-core`
+# deps resolve from there. We use a tiny shell wrapper because pip needs
+# the wheel path and the `[execution]` suffix in one argument.
+RUN sh -c 'wheel=$(ls /tmp/*.whl) && /bin/uv pip install --system --no-cache "${wheel}[execution]" && rm -f /tmp/*.whl'
