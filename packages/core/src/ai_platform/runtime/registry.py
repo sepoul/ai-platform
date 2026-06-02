@@ -17,6 +17,7 @@ from typing import Optional
 
 from ai_platform.compute.base import ComputeBackend
 from ai_platform.jobs.artifact_service import ArtifactService
+from ai_platform.jobs.artifact_type_service import ArtifactTypeService
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.jobs.job_definition_service import JobDefinitionService
@@ -28,6 +29,7 @@ _executor: Optional[GraphJobExecutor] = None
 _compute: Optional[ComputeBackend] = None
 _artifact_service: Optional[ArtifactService] = None
 _job_definition_service: Optional[JobDefinitionService] = None
+_artifact_type_service: Optional[ArtifactTypeService] = None
 # Control-plane only: the API serves submission/result/status from these.
 # Execution objects never enter the API process (see control/execution split).
 _job_controls: dict[str, JobControl] = {}
@@ -39,13 +41,16 @@ def init_platform(
     compute: ComputeBackend,
     artifact_service: ArtifactService,
     job_definition_service: JobDefinitionService | None = None,
+    artifact_type_service: ArtifactTypeService | None = None,
 ) -> None:
-    global _platform_client, _executor, _compute, _artifact_service, _job_definition_service
+    global _platform_client, _executor, _compute, _artifact_service
+    global _job_definition_service, _artifact_type_service
     _platform_client = platform_client
     _executor = executor
     _compute = compute
     _artifact_service = artifact_service
     _job_definition_service = job_definition_service
+    _artifact_type_service = artifact_type_service
 
 
 def register_job_control(control: JobControl) -> None:
@@ -86,3 +91,11 @@ def get_job_definition_service() -> JobDefinitionService:
             "JobDefinitionService not initialized — pass it to init_platform()"
         )
     return _job_definition_service
+
+
+def get_artifact_type_service() -> ArtifactTypeService:
+    if _artifact_type_service is None:
+        raise RuntimeError(
+            "ArtifactTypeService not initialized — pass it to init_platform()"
+        )
+    return _artifact_type_service

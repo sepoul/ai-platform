@@ -39,6 +39,9 @@ import httpx
 
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.execution_policy import JobControl
+from ai_platform.workspace.storage.structured.artifact_type_repository import (
+    ArtifactTypeRecord,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     GateSpec,
     JobDefinitionRecord,
@@ -111,6 +114,56 @@ def deploy_job_control(
     )
     response.raise_for_status()
     return JobDefinitionRecord.model_validate(response.json())
+
+
+def build_artifact_type_record(
+    artifact_cls: type[BaseArtifact],
+    *,
+    domain: str,
+    version: str = "1.0.0",
+) -> Optional[ArtifactTypeRecord]:
+    """Derive an ArtifactTypeRecord from a BaseArtifact subclass.
+
+    Returns `None` when the class has no `artifact_type` discriminator
+    default (i.e. abstract). Pure function — no I/O. Tests + the auto-
+    deploy path both use this so the on-disk shape stays consistent.
+    """
+    field = artifact_cls.model_fields.get("artifact_type")
+    if field is None:
+        return None
+    name = field.default
+    if not isinstance(name, str) or not name:
+        return None
+    return ArtifactTypeRecord(
+        id=ArtifactTypeRecord.make_id(name, version),
+        name=name,
+        version=version,
+        domain=domain,
+        class_name=artifact_cls.__name__,
+        json_schema=artifact_cls.model_json_schema(),
+    )
+
+
+def deploy_artifact_type(
+    artifact_cls: type[BaseArtifact],
+    *,
+    domain: str,
+    version: str = "1.0.0",
+    api_url: str = DEFAULT_API_URL,
+) -> ArtifactTypeRecord:
+    """Build the record and POST it to `/artifact-types`."""
+    record = build_artifact_type_record(artifact_cls, domain=domain, version=version)
+    if record is None:
+        raise ValueError(
+            f"{artifact_cls.__name__} has no `artifact_type` discriminator default"
+        )
+    response = httpx.post(
+        f"{api_url.rstrip('/')}/artifact-types",
+        json=record.model_dump(mode="json"),
+        timeout=_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    return ArtifactTypeRecord.model_validate(response.json())
 
 
 def deploy_control(
