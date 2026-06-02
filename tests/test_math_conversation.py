@@ -362,19 +362,13 @@ async def test_panel_emits_signed_in_and_out_for_each_persona(monkeypatch):
 # T1 — job definition: deps_factory, persist, fetch_result
 # ---------------------------------------------------------------------------
 
-class _Workspace:
-    def __init__(self, store):
-        self.artifact_store = store
-
-
 @pytest.fixture
 def job_def(tmp_path: Path):
     """Returns (execution, control, store) — deps_factory/persist live on the
     execution plane, fetch_result on the control plane."""
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
-    ws = _Workspace(store)
-    return build_math_conversation_execution(ws), build_math_conversation_control(ws), store
+    return build_math_conversation_execution(store), build_math_conversation_control(store), store
 
 
 def test_deps_factory_parses_payload(job_def):
@@ -687,7 +681,7 @@ def conversation_client(tmp_path: Path):
 
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     store = ArtifactService(repo, registry=MATH_CONVERSATION_ARTIFACTS)
-    job_control = build_math_conversation_control(_Workspace(store))
+    job_control = build_math_conversation_control(store)
 
     fake_executor = MagicMock()
     fake_compute = MagicMock()

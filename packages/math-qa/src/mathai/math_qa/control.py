@@ -20,12 +20,9 @@ from mathai.math_qa.artifacts import (
 )
 from mathai.math_qa.gates import MATH_QA_GATES
 from mathai.math_qa.models import MathQAInput, MathQAResult
-from mathai.workspace.client import MathWorkspaceClient
 
 
-def build_math_qa_control(workspace_client) -> JobControl:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-
+def build_math_qa_control(artifact_api: ArtifactService) -> JobControl:
     def _fetch_result(record) -> MathQAResult:
         artifacts = hydrate_artifact_refs(record, artifact_api)
         question = next((a for a in artifacts if isinstance(a, MathQuestionArtifact)), None)
@@ -53,12 +50,8 @@ def build_math_qa_control(workspace_client) -> JobControl:
 
 
 def register_control(ctx: BootstrapContext) -> ControlDomain:
-    workspace_client = MathWorkspaceClient.from_artifact_service(
-        artifact_service=ctx.artifact_service,
-        platform_client=ctx.platform_client,
-    )
     return ControlDomain(
         name="math_qa",
-        job_controls=[build_math_qa_control(workspace_client)],
+        job_controls=[build_math_qa_control(ctx.artifact_service)],
         artifact_types=list(MATH_QA_ARTIFACTS.values()),
     )

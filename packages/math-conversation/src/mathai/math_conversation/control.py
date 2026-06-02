@@ -19,12 +19,9 @@ from mathai.math_conversation.models import (
     MathConversationInput,
     MathConversationResult,
 )
-from mathai.workspace.client import MathWorkspaceClient
 
 
-def build_math_conversation_control(workspace_client) -> JobControl:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-
+def build_math_conversation_control(artifact_api: ArtifactService) -> JobControl:
     def _fetch_result(record) -> MathConversationResult:
         artifacts = hydrate_artifact_refs(record, artifact_api)
         conversation = next(
@@ -46,13 +43,9 @@ def build_math_conversation_control(workspace_client) -> JobControl:
 
 
 def register_control(ctx: BootstrapContext) -> ControlDomain:
-    workspace_client = MathWorkspaceClient.from_artifact_service(
-        artifact_service=ctx.artifact_service,
-        platform_client=ctx.platform_client,
-    )
     return ControlDomain(
         name="math_conversation",
-        job_controls=[build_math_conversation_control(workspace_client)],
+        job_controls=[build_math_conversation_control(ctx.artifact_service)],
         # Schema-export router: surfaces CrewChatEvent into OpenAPI so the
         # math-ui chat parser can derive the type from `gen:api` instead
         # of hand-authoring it. Not for live consumption — live events

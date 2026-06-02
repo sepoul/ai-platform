@@ -230,10 +230,10 @@ def test_math_qa_persist_mints_three_artifacts(tmp_path: Path):
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     artifact_store = ArtifactService(repo, registry=MATH_QA_ARTIFACTS)
 
-    class _Workspace:
-        def __init__(self, store): self.artifact_store = store
-
-    job_def = build_math_qa_execution(_Workspace(artifact_store))
+    from unittest.mock import MagicMock
+    platform_client_stub = MagicMock()  # only `prompt_registry` is read; None-tolerant
+    platform_client_stub.prompt_registry = None
+    job_def = build_math_qa_execution(artifact_store, platform_client_stub)
 
     from mathai.math_qa.artifacts import LatexAnswerArtifact
     from mathai.math_qa.models import LatexAnswer
@@ -278,10 +278,7 @@ def test_math_qa_fetch_result_hydrates_typed_result(tmp_path: Path):
     repo = LocalArtifactRepository(LocalRepositoryConfig(root_dir=str(tmp_path), prefix="artifacts"))
     artifact_store = ArtifactService(repo, registry=MATH_QA_ARTIFACTS)
 
-    class _Workspace:
-        def __init__(self, store): self.artifact_store = store
-
-    job_def = build_math_qa_control(_Workspace(artifact_store))
+    job_def = build_math_qa_control(artifact_store)
 
     q = MathQuestionArtifact(question_text="2+2", topic="arithmetic")
     a = GeneratedAnswerArtifact(answer_text="4", confidence=0.9)

@@ -15,8 +15,9 @@ import logging
 import os
 import sys
 
-from mathai.workspace.client import MathWorkspaceClient
 from ai_platform.ai.prompts.registry import PROMPT_DEFINITIONS
+from ai_platform.workspace.client import PlatformClient
+from ai_platform.workspace.storage.backends import make_backend
 from ai_platform.workspace.storage.exceptions import ObjectNotFound
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
@@ -44,9 +45,9 @@ def main() -> None:
     if args.data_dir:
         os.environ["LOCAL_DATA_DIR"] = args.data_dir
 
-    client = MathWorkspaceClient.create(backend=args.backend, root_dir=args.data_dir)
-
-    svc = getattr(client.platform_client, "prompt_registry", None)
+    backend = make_backend(args.backend, root_dir=args.data_dir)
+    platform_client = PlatformClient.from_backend(backend)
+    svc = getattr(platform_client, "prompt_registry", None)
     if svc is None:
         logger.error("Prompt registry not available on this client")
         sys.exit(1)
