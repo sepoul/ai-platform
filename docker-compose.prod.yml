@@ -16,16 +16,16 @@
 
 services:
   api:
-    image: ghcr.io/sepoul/mathapp-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-api:${IMAGE_TAG:-latest}
 
   worker:
-    image: ghcr.io/sepoul/mathapp-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
 
   worker-crewai:
-    image: ghcr.io/sepoul/mathapp-worker-crewai:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker-crewai:${IMAGE_TAG:-latest}
 
   celery-worker:
-    image: ghcr.io/sepoul/mathapp-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
 
   math-ui:
     image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}

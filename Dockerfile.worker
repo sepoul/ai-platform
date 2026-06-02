@@ -1,4 +1,4 @@
-# Execution-plane image (mathapp-execution-plane). The base ships only
+# Execution-plane image (aiplatform-worker). The base ships only
 # pydantic_graph (the platform graph framework). EXTRA selects the
 # runtime, and each runtime pulls its domain package, which pulls its
 # LLM stack:

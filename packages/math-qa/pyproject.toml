@@ -7,9 +7,9 @@ requires-python = ">=3.13"
 # Control-plane-only deps. The control module (`mathai.math_qa.control`) is
 # imported by the API at boot to register the JobControl + artifact types;
 # it must stay engine-free, so we don't pull pydantic_ai / pydantic_graph
-# here. The platform's `mathapp-core` covers everything control-side needs.
+# here. The platform's `aiplatform-core` covers everything control-side needs.
 dependencies = [
-    "mathapp-core",
+    "aiplatform-core",
 ]
 
 [project.optional-dependencies]
@@ -35,4 +35,4 @@ namespaces = true
 # Path (not workspace) so the package resolves locally during dev / editable
 # install. Production installs from a built wheel where this section is
 # ignored.
-mathapp-core = { path = "../core", editable = true }
+aiplatform-core = { path = "../core", editable = true }

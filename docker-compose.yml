@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api   # control plane: core + FastAPI, NO engine
-    image: mathapp-api:local
+    image: aiplatform-api:local
     command: >
       python -u -m uvicorn mathapp.entrypoints.api:app
       --host 0.0.0.0
@@ -60,7 +60,7 @@ services:
       dockerfile: Dockerfile.worker
       args:
         EXTRA: default   # default runtime: pydantic_ai + Anthropic + Logfire (otel >=1.39)
-    image: mathapp-worker:local
+    image: aiplatform-worker:local
     command: >
       python -u -m mathapp.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -102,7 +102,7 @@ services:
       dockerfile: Dockerfile.worker
       args:
         EXTRA: crewai
-    image: mathapp-worker-crewai:local
+    image: aiplatform-worker-crewai:local
     command: >
       python -u -m mathapp.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -157,7 +157,7 @@ services:
       dockerfile: Dockerfile.worker
       args:
         EXTRA: default   # celery worker is an execution context → default runtime (pydantic_ai stack)
-    image: mathapp-worker:local
+    image: aiplatform-worker:local
     command: >
       celery -A mathapp.entrypoints.celery_app worker
       --loglevel=info

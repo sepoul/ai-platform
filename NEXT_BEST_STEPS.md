@@ -497,7 +497,7 @@ locally that `uv pip compile` resolves cleanly; not yet verified that
 `crewai.LLM(model="anthropic/claude-sonnet-4-5-20250929")` actually
 talks to the live API through that SDK. Run the smoke entrypoint
 (`python -m mathapp.entrypoints.crewai_smoke "<question>"`) inside the
-built `mathapp-worker-crewai` image on first deploy; the test passes
+built `aiplatform-worker-crewai` image on first deploy; the test passes
 or we fall back to `anthropic` as a direct extras dep.
 
 ### 8c. OTLP → Logfire crew traces

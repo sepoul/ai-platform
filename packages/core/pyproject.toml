@@ -1,5 +1,5 @@
 [project]
-name = "mathapp-core"
+name = "aiplatform-core"
 version = "0.1.0"
 description = "Shared platform: the JobRecord boundary, storage + compute backends, job types, and domain schemas. No web framework, no AI engine."
 requires-python = ">=3.13"

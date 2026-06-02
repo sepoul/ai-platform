@@ -1,4 +1,4 @@
-# Control-plane image (mathapp-control-plane): job creation / exploration /
+# Control-plane image (aiplatform-api): job creation / exploration /
 # artifact lookup. Installs core + api + every domain package CONTROL-side
 # only — the worker package and the AI engine (pydantic_graph / pydantic_ai
 # / crewai) are not in this image. Each domain package's `[execution]`
