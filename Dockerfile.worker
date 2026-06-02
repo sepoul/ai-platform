@@ -1,10 +1,16 @@
 # Execution-plane image (mathapp-execution-plane). The base ships only
-# pydantic_graph (the platform graph framework). EXTRA selects the runtime,
-# and each runtime brings its own LLM stack so the image is slim:
-#   EXTRA=default  pydantic_ai + Anthropic + Logfire (otel >=1.39) — math_qa
-#   EXTRA=crewai   CrewAI[anthropic] (otel <1.35; no logfire) — math_conversation
-# The two are mutually exclusive over the otel-sdk pin, so each runs as
-# its own image with its own dependency tree.
+# pydantic_graph (the platform graph framework). EXTRA selects the
+# runtime, and each runtime pulls its domain package, which pulls its
+# LLM stack:
+#   EXTRA=default  → mathai-math-qa[execution]
+#                    (pydantic_ai + Anthropic + Logfire, otel >=1.39)
+#   EXTRA=crewai   → mathai-math-conversation[execution]
+#                    (CrewAI[anthropic], otel <1.35; no logfire)
+# The two are mutually exclusive over the otel-sdk pin; each runs as
+# its own image. (Phase B of the platform/domain split will move to a
+# "virgin platform" image that ships zero domain source and pulls the
+# domain at deploy time — for now, both domain pkgs are baked in and
+# `${EXTRA}` decides which one's deps actually get installed.)
 # See docs/control_execution_split.md and ai_platform/jobs/runtimes.py.
 FROM python:3.13-slim
 
@@ -18,12 +24,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Only the execution plane's source + shared core + repo-root data. (No api
-# source — true per-image isolation.)
-COPY packages/core   /app/packages/core
-COPY packages/worker /app/packages/worker
-COPY instructions    /app/instructions
-COPY supabase        /app/supabase
+# Only the execution plane's source + shared core + both domain pkgs +
+# repo-root data. (No api source — true per-image isolation.) Both
+# domain pkgs are copied so `packages/worker[<EXTRA>]`'s path-source
+# can resolve the package the chosen extra pulls. Only one's
+# `[execution]` extra is actually installed (see below), so only its
+# LLM stack reaches site-packages.
+COPY packages/core               /app/packages/core
+COPY packages/worker             /app/packages/worker
+COPY packages/math-qa            /app/packages/math-qa
+COPY packages/math-conversation  /app/packages/math-conversation
+COPY instructions                /app/instructions
+COPY supabase                    /app/supabase
 
 ARG EXTRA=default
 RUN uv pip install --system --no-cache -e "packages/worker[${EXTRA}]"

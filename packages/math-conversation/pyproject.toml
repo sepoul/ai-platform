@@ -1,0 +1,37 @@
+[project]
+name = "mathai-math-conversation"
+version = "0.1.0"
+description = "math_conversation domain — multi-persona CrewAI panel that brainstorms a math question turn by turn, producing one MathConversationArtifact transcript. Ships in the `crewai` worker runtime."
+requires-python = ">=3.13"
+
+# Control-plane-only deps. `mathai.math_conversation.control` and the
+# schema-export router (`mathai.math_conversation.api`) are imported by
+# the API; both stay engine-free (no crewai, no pydantic_graph at module
+# top). The platform's `mathapp-core` covers everything control-side
+# needs.
+dependencies = [
+    "mathapp-core",
+]
+
+[project.optional-dependencies]
+# Execution-side deps — pulled by `packages/worker[crewai]`. crewai[anthropic]
+# brings the CrewAI engine + an anthropic SDK pinned to crewai's
+# preference (older but Claude-API-compatible). NO Logfire here:
+# crewai pins opentelemetry-sdk <1.35 and Logfire needs >=1.39, so the
+# two runtime stacks cannot share an interpreter. The package boundary
+# enforces that — installing `[execution]` here in a venv that also
+# installed math-qa[execution] would error on the otel-sdk pin.
+execution = [
+    "crewai[anthropic]>=1.14.5,<1.15",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.uv.sources]
+mathapp-core = { path = "../core", editable = true }

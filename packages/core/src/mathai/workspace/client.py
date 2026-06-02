@@ -7,8 +7,15 @@ from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.workspace.client import PlatformClient
 from ai_platform.workspace.storage.backends import make_backend
 from ai_platform.workspace.storage.exceptions import ObjectNotFound
-from mathai.math_qa.artifacts import MATH_QA_ARTIFACTS
 from mathai.workspace.artifacts.service import MathArtifactService
+
+# NOTE: `MATH_QA_ARTIFACTS` is imported lazily inside `.create()` below.
+# That import used to live at module top, which made this file unimportable
+# from any environment that didn't have the math-qa package installed —
+# e.g. the crewai-runtime worker, which serves only math_conversation and
+# (since the physical-domain split) doesn't ship math-qa. Pushing the
+# import inside `.create()` preserves the script-side convenience without
+# coupling cross-domain imports.
 
 load_dotenv()
 
@@ -61,7 +68,13 @@ class MathWorkspaceClient:
         """Standalone construction for scripts/tests that don't go
         through the platform bootstrap. Builds its own ArtifactService
         with the math registry.
+
+        Imports `MATH_QA_ARTIFACTS` lazily (see module header) so this
+        module stays importable in environments that don't ship the
+        math-qa package.
         """
+        from mathai.math_qa.artifacts import MATH_QA_ARTIFACTS
+
         b = make_backend(backend, root_dir=kwargs.get("root_dir"))
         platform_client = PlatformClient.from_backend(b)
         artifact_service = ArtifactService(b.artifact_repo, registry=MATH_QA_ARTIFACTS)
