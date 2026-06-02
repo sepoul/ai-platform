@@ -21,6 +21,9 @@ from typing import Protocol
 from uuid import UUID
 
 from ai_platform.ai.prompts.models import Prompt, PromptExecution
+from ai_platform.workspace.storage.structured.job_definition_repository import (
+    JobDefinitionRecord,
+)
 from ai_platform.workspace.storage.structured.job_repository import (
     JobRecord,
     JobStatus,
@@ -119,3 +122,34 @@ class PromptExecutionRepository(Protocol):
     def put(self, execution: PromptExecution) -> PromptExecution: ...
 
     def list(self, *, limit: int | None = None) -> list[PromptExecution]: ...
+
+
+class JobDefinitionRepository(Protocol):
+    """Catalog of deployed JobDefinitions.
+
+    Keyed `(name, version)` via the synthetic `id = "{name}@{version}"`.
+    Bundle deploy writes here; API + worker consume (post-cutover) the
+    same rows to discover what jobs exist.
+    """
+
+    def put(self, record: JobDefinitionRecord) -> JobDefinitionRecord:
+        """Upsert by `id`. Re-deploying replaces the payload + bumps
+        `deployed_at`. Returns the post-write record so callers see
+        the canonical timestamp.
+        """
+        ...
+
+    def get(self, definition_id: str) -> JobDefinitionRecord: ...
+
+    def list(self, *, runtime_selector: str | None = None) -> list[JobDefinitionRecord]:
+        """Every deployed definition, newest-first. Optional filter by
+        `runtime_selector` for the worker-boot hot path (one query
+        instead of fetch-all-then-filter).
+        """
+        ...
+
+    def get_by_name(self, name: str) -> JobDefinitionRecord:
+        """Latest-deployed record matching `name`. Raises ObjectNotFound
+        if no version has been deployed.
+        """
+        ...

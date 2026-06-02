@@ -472,6 +472,52 @@ Supabase Storage object metadata works for simple cases; if we end up
 storing metadata-heavy artifacts we should switch to native metadata
 and drop the sidecars. Decision deferred until a real perf signal.
 
+## 7p. Platform/domain split — Phase C (bundle deploy substrate) ⚙️ in progress
+
+The "give the code to my friend" track. Where we are:
+
+- **Phase A** ✅ (PR #3) — domain code lives in per-runtime packages
+  (`packages/math-qa/`, `packages/math-conversation/`); platform
+  packages are domain-free.
+- **Phase A.5** ✅ (PR #4) — platform vocabulary renamed
+  (`mathapp-*` → `aiplatform-*`, `mathapp.*` → `ai_platform.*`,
+  `mathai.workspace.*` facade deleted).
+- **Phase B** ✅ (PR #5) — virgin worker image + chained domain images
+  built FROM it via `Dockerfile.worker-domain`. The platform image is
+  the same artifact regardless of domain.
+- **Phase C, slice 1** ✅ (this PR) — JobDefinition catalog. Bundle
+  deploy can now push a JobControl into the platform via
+  `POST /job-definitions`; `aiplatform.bundle.deploy_control(...)` is
+  the Python entrypoint a domain repo calls. Records are stored
+  (Supabase / local / B2) but **routing still goes through the
+  in-memory `_job_controls` dict** — the catalog is a parallel
+  artifact for now.
+- **Phase C, slice 2** 📝 open — cutover. `make_jobs_router` reads the
+  discriminated submit/result union from the catalog instead of from
+  in-code registration. Workers on boot pull their JobExecution
+  references from `runtime_selector` queries against the catalog.
+  Composition_root drops from "the source of truth" to "the bootstrap
+  seed" (and is eventually retired when wheel upload lands).
+- **Phase C, slice 3** 📝 open — ArtifactType catalog. Mirror of the
+  JobDefinition shape; lets a tenant register new artifact types
+  without baking them into the platform image.
+- **Phase C, slice 4** 📝 open — Code package upload. The
+  `code_entrypoint` string currently resolves against the in-image
+  source tree (Phase B baked the domain wheel in). Slice 4 publishes
+  domain wheels independently (GHCR's Python registry or PyPI), and
+  the worker pip-installs the wheel at runtime from the
+  JobDefinition's `code_entrypoint` package coordinate. After this,
+  `Dockerfile.worker-domain` is no longer needed for a tenant — they
+  bring the wheel; the platform installs it on the virgin image.
+- **Phase D** 📝 open — `aiplatform deploy` CLI + a `bundle.toml`
+  manifest. The Python `deploy_control` is the substrate; the CLI is
+  the user-facing one-liner ("give your friend the repo, `aiplatform
+  deploy` is what they run").
+
+The "PlatformSession" object (the SparkSession-shaped runtime API for
+domain code) is its own track — not part of Phase C. Surfaces after
+the bundle-deploy + cutover work is done.
+
 ## 8. `math_conversation` v1.x follow-ups 📝 open
 
 v1 shipped on `feat/conversation-panel` (multi-persona panel + turn
