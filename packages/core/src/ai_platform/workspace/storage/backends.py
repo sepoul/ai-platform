@@ -34,6 +34,7 @@ from ai_platform.workspace.storage.blobs.supabase import (
 )
 from ai_platform.workspace.storage.protocols import (
     ArtifactRepository,
+    ArtifactTypeRepository,
     JobDefinitionRepository,
     JobRepository,
     PromptExecutionRepository,
@@ -43,6 +44,10 @@ from ai_platform.workspace.storage.blobs.base import FileRepository
 from ai_platform.workspace.storage.structured.artifact_repository import (
     B2ArtifactRepository,
     LocalArtifactRepository,
+)
+from ai_platform.workspace.storage.structured.artifact_type_repository import (
+    B2ArtifactTypeRepository,
+    LocalArtifactTypeRepository,
 )
 from ai_platform.workspace.storage.structured.b2 import B2RepositoryConfig
 from ai_platform.workspace.storage.structured.job_definition_repository import (
@@ -56,6 +61,7 @@ from ai_platform.workspace.storage.structured.job_repository import (
 from ai_platform.workspace.storage.structured.local import LocalRepositoryConfig
 from ai_platform.workspace.storage.structured.supabase import (
     SupabaseArtifactRepository,
+    SupabaseArtifactTypeRepository,
     SupabaseJobDefinitionRepository,
     SupabaseJobRepository,
     SupabasePromptExecutionRepository,
@@ -74,6 +80,7 @@ class Backend(Protocol):
     prompt_repo: PromptRepository
     prompt_execution_repo: PromptExecutionRepository
     job_definition_repo: JobDefinitionRepository
+    artifact_type_repo: ArtifactTypeRepository
 
 
 class LocalBackend:
@@ -96,6 +103,9 @@ class LocalBackend:
         )
         self.job_definition_repo: JobDefinitionRepository = LocalJobDefinitionRepository(
             cfg("job_definitions")
+        )
+        self.artifact_type_repo: ArtifactTypeRepository = LocalArtifactTypeRepository(
+            cfg("artifact_types")
         )
 
 
@@ -138,6 +148,9 @@ class B2Backend:
         self.job_definition_repo: JobDefinitionRepository = B2JobDefinitionRepository(
             cfg("job_definitions"), bucket=bucket
         )
+        self.artifact_type_repo: ArtifactTypeRepository = B2ArtifactTypeRepository(
+            cfg("artifact_types"), bucket=bucket
+        )
 
 
 class SupabaseBackend:
@@ -168,6 +181,9 @@ class SupabaseBackend:
             self._pool
         )
         self.job_definition_repo: JobDefinitionRepository = SupabaseJobDefinitionRepository(
+            self._pool
+        )
+        self.artifact_type_repo: ArtifactTypeRepository = SupabaseArtifactTypeRepository(
             self._pool
         )
 

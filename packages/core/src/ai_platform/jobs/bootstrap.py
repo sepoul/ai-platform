@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Iterable
 
 import logging
 
-from ai_platform.bundle import build_record
+from ai_platform.bundle import build_artifact_type_record, build_record
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.domain import (
     BootstrapContext,
@@ -97,6 +97,7 @@ def register_control_domains(
                 out.artifact_owners[artifact_type] = domain.name
 
         _auto_deploy_to_catalog(domain, ws)
+        _auto_deploy_artifact_types(domain, ws)
     return out
 
 
@@ -129,6 +130,33 @@ def _auto_deploy_to_catalog(domain, ws: WorkspaceBootstrap) -> None:
             _logger.warning(
                 "Auto-deploy to JobDefinition catalog failed for %s: %s",
                 control.name,
+                exc,
+            )
+
+
+def _auto_deploy_artifact_types(domain, ws: WorkspaceBootstrap) -> None:
+    """Upsert each of `domain`'s BaseArtifact subclasses into the
+    ArtifactType catalog. Same best-effort posture as the JobDefinition
+    auto-deploy: a catalog write failure must not block API boot.
+
+    Mirrors what bundle deploy would push if the domain were uploaded
+    from a friend's repo, so the catalog converges on the same set of
+    rows regardless of which path registered them.
+    """
+    service = getattr(ws, "artifact_type_service", None)
+    if service is None:
+        return
+    for artifact_cls in domain.artifact_types:
+        try:
+            record = build_artifact_type_record(artifact_cls, domain=domain.name)
+            if record is None:
+                # Skipped: no `artifact_type` discriminator on the class.
+                continue
+            service.deploy(record)
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            _logger.warning(
+                "Auto-deploy to ArtifactType catalog failed for %s: %s",
+                artifact_cls.__name__,
                 exc,
             )
 

@@ -21,6 +21,9 @@ from typing import Protocol
 from uuid import UUID
 
 from ai_platform.ai.prompts.models import Prompt, PromptExecution
+from ai_platform.workspace.storage.structured.artifact_type_repository import (
+    ArtifactTypeRecord,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     JobDefinitionRecord,
 )
@@ -153,3 +156,21 @@ class JobDefinitionRepository(Protocol):
         if no version has been deployed.
         """
         ...
+
+
+class ArtifactTypeRepository(Protocol):
+    """Catalog of deployed ArtifactTypes (BaseArtifact subclasses).
+
+    Same shape as [[JobDefinitionRepository]]: keyed `(name, version)`
+    via `id = "{name}@{version}"`. Bundle deploy writes here; future
+    SDK / worker code reads the JSON Schema to (de)serialize payloads
+    without a static Python import.
+    """
+
+    def put(self, record: ArtifactTypeRecord) -> ArtifactTypeRecord: ...
+
+    def get(self, type_id: str) -> ArtifactTypeRecord: ...
+
+    def list(self, *, domain: str | None = None) -> list[ArtifactTypeRecord]: ...
+
+    def get_by_name(self, name: str) -> ArtifactTypeRecord: ...

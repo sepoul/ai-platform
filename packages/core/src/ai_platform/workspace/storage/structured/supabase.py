@@ -25,6 +25,9 @@ from ai_platform.workspace.storage.exceptions import (
     ObjectNotFound,
     OptimisticConcurrencyError,
 )
+from ai_platform.workspace.storage.structured.artifact_type_repository import (
+    ArtifactTypeRecord,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     JobDefinitionRecord,
 )
@@ -503,3 +506,79 @@ class SupabaseJobDefinitionRepository:
         if row is None:
             raise ObjectNotFound(f"No JobDefinition named: {name}")
         return JobDefinitionRecord.model_validate(row[0])
+
+
+# ---------------------------------------------------------------------------
+# Artifact types
+# ---------------------------------------------------------------------------
+
+class SupabaseArtifactTypeRepository:
+    """Postgres-backed ArtifactType catalog. Mirror of the JobDefinition
+    repo: single-row-per-(name,version), upserted on `id`. Schema lives in
+    `supabase/migrations/0004_artifact_types.sql`.
+    """
+
+    def __init__(self, pool: ConnectionPool):
+        self._pool = pool
+
+    def put(self, record: ArtifactTypeRecord) -> ArtifactTypeRecord:
+        with self._pool.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO artifact_types
+                    (id, name, version, domain, class_name, payload, deployed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, now())
+                ON CONFLICT (id) DO UPDATE SET
+                    name        = EXCLUDED.name,
+                    version     = EXCLUDED.version,
+                    domain      = EXCLUDED.domain,
+                    class_name  = EXCLUDED.class_name,
+                    payload     = EXCLUDED.payload,
+                    deployed_at = now()
+                """,
+                (
+                    record.id,
+                    record.name,
+                    record.version,
+                    record.domain,
+                    record.class_name,
+                    Jsonb(json.loads(record.model_dump_json())),
+                ),
+            )
+        return self.get(record.id)
+
+    def get(self, type_id: str) -> ArtifactTypeRecord:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT payload FROM artifact_types WHERE id = %s",
+                (type_id,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"ArtifactType not found: {type_id}")
+        return ArtifactTypeRecord.model_validate(row[0])
+
+    def list(self, *, domain: str | None = None) -> list[ArtifactTypeRecord]:
+        sql = "SELECT payload FROM artifact_types"
+        params: list[Any] = []
+        if domain is not None:
+            sql += " WHERE domain = %s"
+            params.append(domain)
+        sql += " ORDER BY deployed_at DESC"
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [ArtifactTypeRecord.model_validate(r[0]) for r in rows]
+
+    def get_by_name(self, name: str) -> ArtifactTypeRecord:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT payload FROM artifact_types
+                WHERE name = %s
+                ORDER BY deployed_at DESC
+                LIMIT 1
+                """,
+                (name,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"No ArtifactType named: {name}")
+        return ArtifactTypeRecord.model_validate(row[0])
