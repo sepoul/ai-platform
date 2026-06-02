@@ -1,27 +1,26 @@
 [project]
 name = "mathapp-execution-plane"
 version = "0.1.0"
-description = "Execution plane (worker): per-runtime job implementation. The base ships only pydantic_graph (the platform graph framework all runtimes need); each runtime's LLM stack lives in its own extra. The two extras are mutually exclusive — each runs as its own worker image, so no shared interpreter, no shared SDK pins."
+description = "Execution plane (worker): virgin runtime. The base ships only pydantic_graph (the platform graph framework all runtimes need). Each runtime extra pulls a domain package, which in turn pulls its own LLM stack. The two extras are mutually exclusive over the otel-sdk pin — each runs as its own worker image, so no shared interpreter, no shared SDK pins."
 requires-python = ">=3.13"
 dependencies = [
     "mathapp-core",
     "python-dotenv",
-    # The platform graph framework — both runtimes need it. Direct dep
-    # (previously transitive via pydantic-ai-slim, but pydantic-ai-slim
-    # itself is now per-runtime).
+    # The platform graph framework — both runtimes need it (job_runner imports
+    # `End` from pydantic_graph). Direct dep so the worker base resolves
+    # without depending on which runtime extra is picked.
     "pydantic-graph>=1.58.0",
 ]
 
 [project.optional-dependencies]
-# default runtime: pydantic_ai + Anthropic SDK + Logfire (otel >=1.39).
-# Used by math_qa. Image: `Dockerfile.worker --build-arg EXTRA=default`.
-default = ["pydantic-ai-slim[anthropic,duckduckgo,logfire]>=1.58.0"]
-# crewai runtime: multi-agent panel + Anthropic SDK (otel <1.35). Used by
-# math_conversation. Image: `Dockerfile.worker --build-arg EXTRA=crewai`.
-# crewai[anthropic] is safe here because this is a separate image — the
-# historical clash with pydantic-ai-slim was about sharing one interpreter,
-# which per-image isolation eliminates.
-crewai = ["crewai[anthropic]>=1.14.5,<1.15"]
+# default runtime: math_qa domain + its execution-side LLM stack (pydantic_ai
+# + Anthropic + Logfire, otel >=1.39). Image:
+# `Dockerfile.worker --build-arg EXTRA=default`.
+default = ["mathai-math-qa[execution]"]
+# crewai runtime: math_conversation domain + its execution-side LLM stack
+# (CrewAI[anthropic], otel <1.35; no Logfire). Image:
+# `Dockerfile.worker --build-arg EXTRA=crewai`.
+crewai = ["mathai-math-conversation[execution]"]
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -32,5 +31,9 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-# Path (not workspace) so the worker image installs from just core + itself.
+# Path (not workspace) so the worker image installs from just core + the
+# domain package it serves. mathapp-core is always pulled; the domain
+# pkgs are pulled only by the extras above.
 mathapp-core = { path = "../core", editable = true }
+mathai-math-qa = { path = "../math-qa", editable = true }
+mathai-math-conversation = { path = "../math-conversation", editable = true }

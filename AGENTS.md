@@ -20,15 +20,28 @@ regenerate-and-typecheck loop.
 
 Layering:
 
-- `ai_platform.*` — generic platform: jobs, workflows, prompts,
-  artifacts, compute. **Never imports from a domain.**
-- `mathai.*` — the `math_qa` domain. Plugs into the platform via
-  `Domain.register()`.
+- `ai_platform.*` (in `packages/core/`) — generic platform: jobs,
+  workflows, prompts, artifacts, compute. **Never imports from a
+  domain.**
+- `mathai.*` — every domain ships in its own package under `packages/`:
+  - `packages/math-qa/` contributes `mathai.math_qa.*` (default runtime).
+  - `packages/math-conversation/` contributes `mathai.math_conversation.*`
+    (crewai runtime).
+  - `packages/core/` contributes `mathai.workspace.*` (cross-domain
+    facade — `MathWorkspaceClient`, `MathArtifactService`).
+  Each domain plugs into the platform via `Domain.register()`. The
+  three contribute to the `mathai` PEP-420 namespace; nothing imports
+  a domain across the boundary at module load.
 - `math-ui/lib/platform/` — generic platform primitives in TS.
 - `math-ui/lib/domains/<domain>/` — domain-specific TS shapes/clients.
 
 If you're tempted to put something domain-specific in `ai_platform`
-or vice versa, stop and reconsider.
+or vice versa, stop and reconsider. If you're tempted to import one
+domain from another (e.g. `from mathai.math_qa.* import X` inside
+`mathai.math_conversation.*`), absolutely stop — that breaks the
+slim-runtime isolation. Any cross-domain need belongs in
+`mathai.workspace.*` (cross-domain facade) or, more likely, in
+`ai_platform.*` (truly platform-tier).
 
 ---
 

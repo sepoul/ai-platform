@@ -1,13 +1,22 @@
 [project]
 name = "mathapp-control-plane"
 version = "0.1.0"
-description = "Control plane (API): job creation, exploration, artifact lookup. Depends on core + FastAPI; never the execution engine."
+description = "Control plane (API): job creation, exploration, artifact lookup. Depends on core + FastAPI + every domain's control-plane surface (engine-free); never the execution engine."
 requires-python = ">=3.13"
 dependencies = [
     "mathapp-core",
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
     "python-multipart",
+    # Domain packages — control-side only. The API imports each domain's
+    # `control` module at boot to register schemas (composition_root). Each
+    # domain's heavy LLM stack lives in its package's `[execution]` extra,
+    # which we deliberately do NOT pull here — the API stays engine-free.
+    # When the platform/domain deploy story matures, the API will discover
+    # domains via the catalog instead of static imports; for now these
+    # deps mirror what was already implicitly required.
+    "mathai-math-qa",
+    "mathai-math-conversation",
 ]
 
 [build-system]
@@ -19,7 +28,9 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-# Path (not workspace) so a service installs standalone from just core + itself
-# — the api image never needs the worker package present. Still resolves inside
-# the workspace for dev `uv sync`.
+# Path (not workspace) so a service installs standalone from core + the
+# domain packages it needs. The api image never needs the worker package
+# present. Still resolves inside the workspace for dev `uv sync`.
 mathapp-core = { path = "../core", editable = true }
+mathai-math-qa = { path = "../math-qa", editable = true }
+mathai-math-conversation = { path = "../math-conversation", editable = true }

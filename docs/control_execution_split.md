@@ -192,12 +192,15 @@ Phase 1 is landed as green increments (the leak fixes come first, while
     deps: core + fastapi + uvicorn + python-multipart.
   - **worker (execution)** — `ai_platform/jobs/{job_runner,worker_loop}`,
     `ai_platform/ai/{providers,run_context}`, `mathapp/entrypoints/{worker,
-    celery_app,gen_workflows,crewai_smoke}`. **No domain code** (all in
-    core). deps: core + `pydantic-graph` (the platform graph framework,
-    needed by every runtime). Each runtime's LLM stack lives in its own
-    extra: `[default]` = `pydantic-ai-slim[anthropic,duckduckgo,logfire]`
-    (math_qa); `[crewai]` = `crewai[anthropic]` (math_conversation, no
-    Logfire). Mutually exclusive — each runs as its own image.
+    celery_app,gen_workflows,crewai_smoke}`. **No domain code** — every
+    domain ships in its own package now (`packages/math-qa/`,
+    `packages/math-conversation/`). The worker's `[default]` extra
+    installs `mathai-math-qa[execution]`, which transitively pulls
+    pydantic-ai-slim[anthropic,duckduckgo,logfire]; `[crewai]` installs
+    `mathai-math-conversation[execution]`, which transitively pulls
+    crewai[anthropic]. Worker base ships only `pydantic-graph` (needed
+    by both runtimes). The two extras stay mutually exclusive over the
+    otel-sdk pin — each runs as its own image.
 
   Isolation between runtimes is enforced by three mechanisms, NOT by where
   source files live:
