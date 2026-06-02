@@ -336,6 +336,7 @@ def test_register_control_domains_auto_deploys_to_catalog(
         artifact_service=ArtifactService(artifact_repo, registry={}),
         job_definition_service=service,
         artifact_type_service=MagicMock(),
+        code_package_service=MagicMock(),
         root_dir=str(tmp_path),
     )
 
@@ -386,6 +387,7 @@ def test_register_control_domains_swallows_catalog_errors(
         artifact_service=ArtifactService(artifact_repo, registry={}),
         job_definition_service=bad_service,
         artifact_type_service=MagicMock(),
+        code_package_service=MagicMock(),
         root_dir=str(tmp_path),
     )
 

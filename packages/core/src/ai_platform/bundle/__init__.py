@@ -37,10 +37,15 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from pathlib import Path
+
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.workspace.storage.structured.artifact_type_repository import (
     ArtifactTypeRecord,
+)
+from ai_platform.workspace.storage.structured.code_package_repository import (
+    CodePackageRecord,
 )
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     GateSpec,
@@ -164,6 +169,37 @@ def deploy_artifact_type(
     )
     response.raise_for_status()
     return ArtifactTypeRecord.model_validate(response.json())
+
+
+def deploy_code_package(
+    wheel_path: str | Path,
+    *,
+    name: str,
+    version: str = "1.0.0",
+    runtime_selector: str,
+    api_url: str = DEFAULT_API_URL,
+) -> CodePackageRecord:
+    """Upload a `.whl` to `/code-packages` as multipart.
+
+    Pure HTTP — no Python install on the calling side. The platform
+    stores the bytes via its FileRepository and records a
+    `CodePackageRecord`. Idempotent on `(name, version)` — re-uploading
+    overwrites both blob and row.
+    """
+    path = Path(wheel_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Wheel not found: {path}")
+    with path.open("rb") as fh:
+        files = {"wheel": (path.name, fh, "application/octet-stream")}
+        data = {"name": name, "version": version, "runtime_selector": runtime_selector}
+        response = httpx.post(
+            f"{api_url.rstrip('/')}/code-packages",
+            files=files,
+            data=data,
+            timeout=_TIMEOUT_SECONDS,
+        )
+    response.raise_for_status()
+    return CodePackageRecord.model_validate(response.json())
 
 
 def deploy_control(

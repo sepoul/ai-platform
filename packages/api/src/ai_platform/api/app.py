@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_platform.api.routers import artifact_types as platform_artifact_types
+from ai_platform.api.routers import code_packages as platform_code_packages
 from ai_platform.api.routers import job_definitions as platform_job_definitions
 from ai_platform.api.routers import prompts as platform_prompts
 from ai_platform.api.routers import workflows as platform_workflows
@@ -44,6 +45,7 @@ def build_api(
         workspace.artifact_service,
         workspace.job_definition_service,
         workspace.artifact_type_service,
+        workspace.code_package_service,
     )
 
     app = FastAPI(title=title)
@@ -66,6 +68,7 @@ def build_api(
     app.include_router(make_job_runs_router(domains.job_controls), tags=["Platform / Jobs"])
     app.include_router(platform_job_definitions.router, tags=["Platform / Job Definitions"])
     app.include_router(platform_artifact_types.router, tags=["Platform / Artifact Types"])
+    app.include_router(platform_code_packages.router, tags=["Platform / Code Packages"])
     app.include_router(platform_workflows.router, tags=["Platform / Workflows"])
     app.include_router(platform_prompts.router, tags=["Platform / Prompts"])
     app.include_router(

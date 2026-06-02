@@ -28,6 +28,9 @@ from ai_platform.workspace.storage.exceptions import (
 from ai_platform.workspace.storage.structured.artifact_type_repository import (
     ArtifactTypeRecord,
 )
+from ai_platform.workspace.storage.structured.code_package_repository import (
+    CodePackageRecord,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     JobDefinitionRecord,
 )
@@ -582,3 +585,86 @@ class SupabaseArtifactTypeRepository:
         if row is None:
             raise ObjectNotFound(f"No ArtifactType named: {name}")
         return ArtifactTypeRecord.model_validate(row[0])
+
+
+# ---------------------------------------------------------------------------
+# Code packages
+# ---------------------------------------------------------------------------
+
+class SupabaseCodePackageRepository:
+    """Postgres-backed CodePackage catalog. Bytes live in the file
+    repository; this row carries the pointer + integrity metadata.
+    Schema in `supabase/migrations/0005_code_packages.sql`.
+    """
+
+    def __init__(self, pool: ConnectionPool):
+        self._pool = pool
+
+    def put(self, record: CodePackageRecord) -> CodePackageRecord:
+        with self._pool.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO code_packages
+                    (id, name, version, runtime_selector, filename,
+                     blob_id, sha256, size_bytes, payload, deployed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                ON CONFLICT (id) DO UPDATE SET
+                    name             = EXCLUDED.name,
+                    version          = EXCLUDED.version,
+                    runtime_selector = EXCLUDED.runtime_selector,
+                    filename         = EXCLUDED.filename,
+                    blob_id          = EXCLUDED.blob_id,
+                    sha256           = EXCLUDED.sha256,
+                    size_bytes       = EXCLUDED.size_bytes,
+                    payload          = EXCLUDED.payload,
+                    deployed_at      = now()
+                """,
+                (
+                    record.id,
+                    record.name,
+                    record.version,
+                    record.runtime_selector,
+                    record.filename,
+                    record.blob_id,
+                    record.sha256,
+                    record.size_bytes,
+                    Jsonb(json.loads(record.model_dump_json())),
+                ),
+            )
+        return self.get(record.id)
+
+    def get(self, package_id: str) -> CodePackageRecord:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT payload FROM code_packages WHERE id = %s",
+                (package_id,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"CodePackage not found: {package_id}")
+        return CodePackageRecord.model_validate(row[0])
+
+    def list(self, *, runtime_selector: str | None = None) -> list[CodePackageRecord]:
+        sql = "SELECT payload FROM code_packages"
+        params: list[Any] = []
+        if runtime_selector is not None:
+            sql += " WHERE runtime_selector = %s"
+            params.append(runtime_selector)
+        sql += " ORDER BY deployed_at DESC"
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [CodePackageRecord.model_validate(r[0]) for r in rows]
+
+    def get_by_name(self, name: str) -> CodePackageRecord:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT payload FROM code_packages
+                WHERE name = %s
+                ORDER BY deployed_at DESC
+                LIMIT 1
+                """,
+                (name,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"No CodePackage named: {name}")
+        return CodePackageRecord.model_validate(row[0])

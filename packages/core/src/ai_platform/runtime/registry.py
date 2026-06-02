@@ -18,6 +18,7 @@ from typing import Optional
 from ai_platform.compute.base import ComputeBackend
 from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.artifact_type_service import ArtifactTypeService
+from ai_platform.jobs.code_package_service import CodePackageService
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.jobs.job_definition_service import JobDefinitionService
@@ -30,6 +31,7 @@ _compute: Optional[ComputeBackend] = None
 _artifact_service: Optional[ArtifactService] = None
 _job_definition_service: Optional[JobDefinitionService] = None
 _artifact_type_service: Optional[ArtifactTypeService] = None
+_code_package_service: Optional[CodePackageService] = None
 # Control-plane only: the API serves submission/result/status from these.
 # Execution objects never enter the API process (see control/execution split).
 _job_controls: dict[str, JobControl] = {}
@@ -42,15 +44,17 @@ def init_platform(
     artifact_service: ArtifactService,
     job_definition_service: JobDefinitionService | None = None,
     artifact_type_service: ArtifactTypeService | None = None,
+    code_package_service: CodePackageService | None = None,
 ) -> None:
     global _platform_client, _executor, _compute, _artifact_service
-    global _job_definition_service, _artifact_type_service
+    global _job_definition_service, _artifact_type_service, _code_package_service
     _platform_client = platform_client
     _executor = executor
     _compute = compute
     _artifact_service = artifact_service
     _job_definition_service = job_definition_service
     _artifact_type_service = artifact_type_service
+    _code_package_service = code_package_service
 
 
 def register_job_control(control: JobControl) -> None:
@@ -99,3 +103,11 @@ def get_artifact_type_service() -> ArtifactTypeService:
             "ArtifactTypeService not initialized — pass it to init_platform()"
         )
     return _artifact_type_service
+
+
+def get_code_package_service() -> CodePackageService:
+    if _code_package_service is None:
+        raise RuntimeError(
+            "CodePackageService not initialized — pass it to init_platform()"
+        )
+    return _code_package_service
