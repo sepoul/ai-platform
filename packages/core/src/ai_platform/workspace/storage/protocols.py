@@ -24,6 +24,9 @@ from ai_platform.ai.prompts.models import Prompt, PromptExecution
 from ai_platform.workspace.storage.structured.artifact_type_repository import (
     ArtifactTypeRecord,
 )
+from ai_platform.workspace.storage.structured.code_package_repository import (
+    CodePackageRecord,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     JobDefinitionRecord,
 )
@@ -174,3 +177,21 @@ class ArtifactTypeRepository(Protocol):
     def list(self, *, domain: str | None = None) -> list[ArtifactTypeRecord]: ...
 
     def get_by_name(self, name: str) -> ArtifactTypeRecord: ...
+
+
+class CodePackageRepository(Protocol):
+    """Catalog of installable code packages (wheels) keyed `(name, version)`.
+
+    Bytes live in the FileRepository under the `code_packages` prefix;
+    rows here carry the pointer + integrity metadata. Worker install
+    (a follow-up slice) reads this catalog to know what to pip-install
+    before resolving a JobDefinition's `code_entrypoint`.
+    """
+
+    def put(self, record: CodePackageRecord) -> CodePackageRecord: ...
+
+    def get(self, package_id: str) -> CodePackageRecord: ...
+
+    def list(self, *, runtime_selector: str | None = None) -> list[CodePackageRecord]: ...
+
+    def get_by_name(self, name: str) -> CodePackageRecord: ...

@@ -35,6 +35,7 @@ from ai_platform.workspace.storage.blobs.supabase import (
 from ai_platform.workspace.storage.protocols import (
     ArtifactRepository,
     ArtifactTypeRepository,
+    CodePackageRepository,
     JobDefinitionRepository,
     JobRepository,
     PromptExecutionRepository,
@@ -50,6 +51,10 @@ from ai_platform.workspace.storage.structured.artifact_type_repository import (
     LocalArtifactTypeRepository,
 )
 from ai_platform.workspace.storage.structured.b2 import B2RepositoryConfig
+from ai_platform.workspace.storage.structured.code_package_repository import (
+    B2CodePackageRepository,
+    LocalCodePackageRepository,
+)
 from ai_platform.workspace.storage.structured.job_definition_repository import (
     B2JobDefinitionRepository,
     LocalJobDefinitionRepository,
@@ -62,6 +67,7 @@ from ai_platform.workspace.storage.structured.local import LocalRepositoryConfig
 from ai_platform.workspace.storage.structured.supabase import (
     SupabaseArtifactRepository,
     SupabaseArtifactTypeRepository,
+    SupabaseCodePackageRepository,
     SupabaseJobDefinitionRepository,
     SupabaseJobRepository,
     SupabasePromptExecutionRepository,
@@ -81,6 +87,7 @@ class Backend(Protocol):
     prompt_execution_repo: PromptExecutionRepository
     job_definition_repo: JobDefinitionRepository
     artifact_type_repo: ArtifactTypeRepository
+    code_package_repo: CodePackageRepository
 
 
 class LocalBackend:
@@ -106,6 +113,9 @@ class LocalBackend:
         )
         self.artifact_type_repo: ArtifactTypeRepository = LocalArtifactTypeRepository(
             cfg("artifact_types")
+        )
+        self.code_package_repo: CodePackageRepository = LocalCodePackageRepository(
+            cfg("code_packages")
         )
 
 
@@ -151,6 +161,9 @@ class B2Backend:
         self.artifact_type_repo: ArtifactTypeRepository = B2ArtifactTypeRepository(
             cfg("artifact_types"), bucket=bucket
         )
+        self.code_package_repo: CodePackageRepository = B2CodePackageRepository(
+            cfg("code_packages"), bucket=bucket
+        )
 
 
 class SupabaseBackend:
@@ -184,6 +197,9 @@ class SupabaseBackend:
             self._pool
         )
         self.artifact_type_repo: ArtifactTypeRepository = SupabaseArtifactTypeRepository(
+            self._pool
+        )
+        self.code_package_repo: CodePackageRepository = SupabaseCodePackageRepository(
             self._pool
         )
 

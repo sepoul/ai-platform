@@ -292,6 +292,7 @@ def test_register_control_domains_auto_deploys_artifact_types(
         artifact_service=ArtifactService(artifact_repo, registry={}),
         job_definition_service=MagicMock(),  # JobDefinition path is its own test
         artifact_type_service=service,
+        code_package_service=MagicMock(),
         root_dir=str(tmp_path),
     )
 
@@ -355,6 +356,7 @@ def test_register_control_domains_swallows_artifact_type_errors(
         artifact_service=ArtifactService(artifact_repo, registry={}),
         job_definition_service=MagicMock(),
         artifact_type_service=bad,
+        code_package_service=MagicMock(),
         root_dir=str(tmp_path),
     )
 
