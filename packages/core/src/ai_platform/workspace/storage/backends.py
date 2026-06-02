@@ -34,6 +34,7 @@ from ai_platform.workspace.storage.blobs.supabase import (
 )
 from ai_platform.workspace.storage.protocols import (
     ArtifactRepository,
+    JobDefinitionRepository,
     JobRepository,
     PromptExecutionRepository,
     PromptRepository,
@@ -44,6 +45,10 @@ from ai_platform.workspace.storage.structured.artifact_repository import (
     LocalArtifactRepository,
 )
 from ai_platform.workspace.storage.structured.b2 import B2RepositoryConfig
+from ai_platform.workspace.storage.structured.job_definition_repository import (
+    B2JobDefinitionRepository,
+    LocalJobDefinitionRepository,
+)
 from ai_platform.workspace.storage.structured.job_repository import (
     B2JobRepository,
     LocalJobRepository,
@@ -51,6 +56,7 @@ from ai_platform.workspace.storage.structured.job_repository import (
 from ai_platform.workspace.storage.structured.local import LocalRepositoryConfig
 from ai_platform.workspace.storage.structured.supabase import (
     SupabaseArtifactRepository,
+    SupabaseJobDefinitionRepository,
     SupabaseJobRepository,
     SupabasePromptExecutionRepository,
     SupabasePromptRepository,
@@ -67,6 +73,7 @@ class Backend(Protocol):
     artifact_repo: ArtifactRepository
     prompt_repo: PromptRepository
     prompt_execution_repo: PromptExecutionRepository
+    job_definition_repo: JobDefinitionRepository
 
 
 class LocalBackend:
@@ -86,6 +93,9 @@ class LocalBackend:
         self.prompt_repo: PromptRepository = LocalPromptRepository(cfg("prompts"))
         self.prompt_execution_repo: PromptExecutionRepository = LocalPromptExecutionRepository(
             cfg("prompt_executions")
+        )
+        self.job_definition_repo: JobDefinitionRepository = LocalJobDefinitionRepository(
+            cfg("job_definitions")
         )
 
 
@@ -125,6 +135,9 @@ class B2Backend:
         self.prompt_execution_repo: PromptExecutionRepository = B2PromptExecutionRepository(
             cfg("prompt_executions"), bucket=bucket
         )
+        self.job_definition_repo: JobDefinitionRepository = B2JobDefinitionRepository(
+            cfg("job_definitions"), bucket=bucket
+        )
 
 
 class SupabaseBackend:
@@ -152,6 +165,9 @@ class SupabaseBackend:
         self.artifact_repo: ArtifactRepository = SupabaseArtifactRepository(self._pool)
         self.prompt_repo: PromptRepository = SupabasePromptRepository(self._pool)
         self.prompt_execution_repo: PromptExecutionRepository = SupabasePromptExecutionRepository(
+            self._pool
+        )
+        self.job_definition_repo: JobDefinitionRepository = SupabaseJobDefinitionRepository(
             self._pool
         )
 

@@ -12,6 +12,7 @@ from typing import Optional
 
 from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.graph_execution import GraphJobExecutor
+from ai_platform.jobs.job_definition_service import JobDefinitionService
 from ai_platform.workspace.client import PlatformClient
 from ai_platform.workspace.storage.backends import LocalBackend, make_backend
 
@@ -24,6 +25,7 @@ class WorkspaceBootstrap:
     platform_client: PlatformClient
     executor: GraphJobExecutor
     artifact_service: ArtifactService  # shared across domains; types added by register_*_domains
+    job_definition_service: JobDefinitionService  # catalog of deployed JobDefinitions
     root_dir: Optional[str]           # only meaningful when backend == "local"
 
 
@@ -34,5 +36,6 @@ def bootstrap_workspace() -> WorkspaceBootstrap:
         platform_client=PlatformClient.from_backend(backend),
         executor=GraphJobExecutor(backend.job_repo),
         artifact_service=ArtifactService(backend.artifact_repo, registry={}),
+        job_definition_service=JobDefinitionService(backend.job_definition_repo),
         root_dir=backend.root_dir if isinstance(backend, LocalBackend) else None,
     )

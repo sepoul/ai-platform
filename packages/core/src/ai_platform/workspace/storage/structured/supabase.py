@@ -25,6 +25,9 @@ from ai_platform.workspace.storage.exceptions import (
     ObjectNotFound,
     OptimisticConcurrencyError,
 )
+from ai_platform.workspace.storage.structured.job_definition_repository import (
+    JobDefinitionRecord,
+)
 from ai_platform.workspace.storage.structured.job_repository import (
     JobRecord,
     JobSpec,
@@ -408,3 +411,95 @@ class SupabasePromptExecutionRepository:
         with self._pool.connection() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [PromptExecution.model_validate(r[0]) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Job definitions
+# ---------------------------------------------------------------------------
+
+class SupabaseJobDefinitionRepository:
+    """Postgres-backed JobDefinition catalog.
+
+    Schema (see `supabase/migrations/0003_job_definitions.sql`):
+        id                TEXT PRIMARY KEY    -- "{name}@{version}"
+        name              TEXT NOT NULL
+        version           TEXT NOT NULL
+        runtime_selector  TEXT NOT NULL       -- "default" | "crewai" | ...
+        code_entrypoint   TEXT NOT NULL       -- "package.module:callable"
+        payload           JSONB NOT NULL      -- label, schemas, gates, refs
+        deployed_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+        UNIQUE(name, version)
+
+    Upsert is idempotent on `id` (which is the `(name, version)` join).
+    Re-deploying replaces the payload + bumps `deployed_at`.
+    """
+
+    def __init__(self, pool: ConnectionPool):
+        self._pool = pool
+
+    def put(self, record: JobDefinitionRecord) -> JobDefinitionRecord:
+        with self._pool.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_definitions
+                    (id, name, version, runtime_selector, code_entrypoint, payload, deployed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, now())
+                ON CONFLICT (id) DO UPDATE SET
+                    name             = EXCLUDED.name,
+                    version          = EXCLUDED.version,
+                    runtime_selector = EXCLUDED.runtime_selector,
+                    code_entrypoint  = EXCLUDED.code_entrypoint,
+                    payload          = EXCLUDED.payload,
+                    deployed_at      = now()
+                """,
+                (
+                    record.id,
+                    record.name,
+                    record.version,
+                    record.runtime_selector,
+                    record.code_entrypoint,
+                    Jsonb(json.loads(record.model_dump_json())),
+                ),
+            )
+        # Re-fetch so the caller sees the server-side `deployed_at`.
+        return self.get(record.id)
+
+    def get(self, definition_id: str) -> JobDefinitionRecord:
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                "SELECT payload FROM job_definitions WHERE id = %s",
+                (definition_id,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"JobDefinition not found: {definition_id}")
+        return JobDefinitionRecord.model_validate(row[0])
+
+    def list(self, *, runtime_selector: str | None = None) -> list[JobDefinitionRecord]:
+        sql = "SELECT payload FROM job_definitions"
+        params: list[Any] = []
+        if runtime_selector is not None:
+            sql += " WHERE runtime_selector = %s"
+            params.append(runtime_selector)
+        sql += " ORDER BY deployed_at DESC"
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [JobDefinitionRecord.model_validate(r[0]) for r in rows]
+
+    def get_by_name(self, name: str) -> JobDefinitionRecord:
+        """Latest-deployed record matching `name`. Single SQL query
+        (`ORDER BY deployed_at DESC LIMIT 1`); avoids fetching all
+        versions just to take the head.
+        """
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT payload FROM job_definitions
+                WHERE name = %s
+                ORDER BY deployed_at DESC
+                LIMIT 1
+                """,
+                (name,),
+            ).fetchone()
+        if row is None:
+            raise ObjectNotFound(f"No JobDefinition named: {name}")
+        return JobDefinitionRecord.model_validate(row[0])
