@@ -7,10 +7,10 @@ requires-python = ">=3.13"
 # Control-plane-only deps. `mathai.math_conversation.control` and the
 # schema-export router (`mathai.math_conversation.api`) are imported by
 # the API; both stay engine-free (no crewai, no pydantic_graph at module
-# top). The platform's `mathapp-core` covers everything control-side
+# top). The platform's `aiplatform-core` covers everything control-side
 # needs.
 dependencies = [
-    "mathapp-core",
+    "aiplatform-core",
 ]
 
 [project.optional-dependencies]
@@ -34,4 +34,4 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-mathapp-core = { path = "../core", editable = true }
+aiplatform-core = { path = "../core", editable = true }

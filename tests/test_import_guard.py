@@ -98,7 +98,7 @@ def test_api_entrypoint_boots_under_the_guard(tmp_path: Path):
     """The real API entrypoint arms the guard and imports the control plane;
     importing it must not trip the guard (regression canary for leaks)."""
     code = (
-        "import mathapp.entrypoints.api as api\n"
+        "import ai_platform.entrypoints.api as api\n"
         "assert api.app is not None\n"
         "print('API_OK')\n"
     )

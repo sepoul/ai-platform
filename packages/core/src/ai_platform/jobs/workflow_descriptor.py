@@ -3,7 +3,7 @@
 A descriptor is the API-facing projection of a job's graph — stages,
 edges, gates, and submit params, i.e. the `WorkflowSpecResponse` shape.
 It is generated offline by an admin command running in an engine context
-(`mathapp.entrypoints.gen_workflows`) and parked in the blob store, so the
+(`ai_platform.entrypoints.gen_workflows`) and parked in the blob store, so the
 API never introspects `pydantic_graph` at request time. The topology is
 static per deploy; regenerate after graph changes.
 

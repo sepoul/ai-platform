@@ -1,10 +1,10 @@
 [project]
-name = "mathapp-execution-plane"
+name = "aiplatform-worker"
 version = "0.1.0"
 description = "Execution plane (worker): virgin runtime. The base ships only pydantic_graph (the platform graph framework all runtimes need). Each runtime extra pulls a domain package, which in turn pulls its own LLM stack. The two extras are mutually exclusive over the otel-sdk pin — each runs as its own worker image, so no shared interpreter, no shared SDK pins."
 requires-python = ">=3.13"
 dependencies = [
-    "mathapp-core",
+    "aiplatform-core",
     "python-dotenv",
     # The platform graph framework — both runtimes need it (job_runner imports
     # `End` from pydantic_graph). Direct dep so the worker base resolves
@@ -32,8 +32,8 @@ namespaces = true
 
 [tool.uv.sources]
 # Path (not workspace) so the worker image installs from just core + the
-# domain package it serves. mathapp-core is always pulled; the domain
+# domain package it serves. aiplatform-core is always pulled; the domain
 # pkgs are pulled only by the extras above.
-mathapp-core = { path = "../core", editable = true }
+aiplatform-core = { path = "../core", editable = true }
 mathai-math-qa = { path = "../math-qa", editable = true }
 mathai-math-conversation = { path = "../math-conversation", editable = true }

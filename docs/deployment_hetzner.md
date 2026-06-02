@@ -10,7 +10,7 @@ zero-downtime story; that's a different document.
 > `cd infra/hetzner && terraform apply`. App deploy runs from a
 > GHCR-built images — GitHub Actions builds on push to `main` and
 > publishes the three split images
-> (`ghcr.io/sepoul/mathapp-{api,worker,worker-crewai}:latest`); the box
+> (`ghcr.io/sepoul/aiplatform-{api,worker,worker-crewai}:latest`); the box
 > pulls them via
 > [`infra/hetzner/scripts/redeploy.sh`](../infra/hetzner/scripts/redeploy.sh).
 > Step 6's Celery wiring is implemented and locally smoke-tested via
@@ -271,7 +271,7 @@ ssh root@mathapp-prod 'cd /srv/mathapp && infra/hetzner/scripts/redeploy.sh'
 `redeploy.sh` runs `docker compose -f docker-compose.yml -f
 docker-compose.prod.yml --profile ui --profile crewai pull && up -d`,
 then prunes dangling images. The compose override pins each service to
-its split image (`mathapp-api`, `mathapp-worker`, `mathapp-worker-crewai`)
+its split image (`aiplatform-api`, `aiplatform-worker`, `aiplatform-worker-crewai`)
 at `:latest` (or `${IMAGE_TAG}` if exported) — no build happens on the box.
 
 **Both workers run simultaneously.** The `worker` container serves the
@@ -376,7 +376,7 @@ so you can flip back).
 ### Status
 
 Wiring is in place as of 2026-05-12: `celery[redis]>=5.4` is in
-`packages/core/pyproject.toml`, `packages/worker/src/mathapp/entrypoints/celery_app.py`
+`packages/core/pyproject.toml`, `packages/worker/src/ai_platform/entrypoints/celery_app.py`
 defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
 `run_job.delay(job_id)`. The compose `celery` profile adds `redis`
 and `celery-worker`.
@@ -407,9 +407,9 @@ services:
 
   celery-worker:
     build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: default } }
-    image: mathapp-worker:local
+    image: aiplatform-worker:local
     command: >
-      celery -A mathapp.entrypoints.celery_app worker
+      celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
     environment:

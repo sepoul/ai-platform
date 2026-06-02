@@ -8,7 +8,7 @@ default-runtime invocation covers every job type.
 
 Re-run after graph/topology changes and as a deploy step:
 
-    python -m mathapp.entrypoints.gen_workflows
+    python -m ai_platform.entrypoints.gen_workflows
 
 The API reads the same blob store, so the descriptors are picked up with
 no API restart. Until this runs, `/workflows` is empty (optional surface).
@@ -25,7 +25,7 @@ from ai_platform.jobs.bootstrap import (
 )
 from ai_platform.workspace.bootstrap import bootstrap_workspace
 from ai_platform.workspace.storage.blobs.base import PutFilePayload
-from mathapp.composition_root import control_registers, execution_registers_all
+from ai_platform.composition_root import control_registers, execution_registers_all
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

@@ -80,7 +80,7 @@ file-by-file. Your domain module exposes a `register(ctx) -> Domain`
 function returning a `Domain` that lists its job definitions (and
 artifact types) — see [`src/mathai/domain.py`](../src/mathai/domain.py)
 for the pattern. Then add that `register` to the `DOMAINS` list in
-[`src/mathapp/composition_root.py`](../src/mathapp/composition_root.py).
+[`src/ai_platform/composition_root.py`](../src/ai_platform/composition_root.py).
 
 That's the only wiring. The API and worker bootstraps both iterate
 `DOMAINS`, so the generic submit endpoint, review endpoint, worker

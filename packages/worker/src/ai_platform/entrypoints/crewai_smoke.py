@@ -10,7 +10,7 @@ cost rolls up. Full multi-turn brainstorming is exercised by submitting
 a real job.
 
     docker compose --profile crewai run --rm worker-crewai \\
-        python -m mathapp.entrypoints.crewai_smoke "what is a sheaf?"
+        python -m ai_platform.entrypoints.crewai_smoke "what is a sheaf?"
 
 Requires `ANTHROPIC_API_KEY`. Optionally override the model with `CREW_MODEL`.
 Exits non-zero on any failure so it can gate a deploy.

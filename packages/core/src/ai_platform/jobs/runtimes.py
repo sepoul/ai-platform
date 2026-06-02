@@ -10,7 +10,7 @@ stack run on a separate worker pool.
 How it fits together:
 
 - Runtime is scoped at the **domain** level via a single import manifest
-  (`mathapp.composition_root`): runtime -> the domain modules importable
+  (`ai_platform.composition_root`): runtime -> the domain modules importable
   there. That manifest is the source of truth — there is no per-job
   runtime field, because you can't read one without importing the very
   module that may crash on a slim env.

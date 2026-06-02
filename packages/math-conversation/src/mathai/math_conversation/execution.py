@@ -30,8 +30,6 @@ from mathai.math_conversation.workflow import (
     math_conversation_graph,
     math_conversation_node_registry,
 )
-from mathai.workspace.client import MathWorkspaceClient
-
 # No human gate; the conversation runs autonomously (touchpoints are submit
 # + the final rendered transcript).
 math_conversation_policy = ExecutionPolicy(gates=[])
@@ -43,9 +41,7 @@ MATH_CONVERSATION_EDGES = [
 ]
 
 
-def build_math_conversation_execution(workspace_client) -> JobExecution:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-
+def build_math_conversation_execution(artifact_api: ArtifactService) -> JobExecution:
     def _deps_factory(payload: dict) -> MathConversationDeps:
         job_id = payload.get("_job_id")
         logger: WorkerLogger = WorkerLogger(job_id) if job_id else NullLogger()
@@ -85,12 +81,8 @@ def build_math_conversation_execution(workspace_client) -> JobExecution:
 
 
 def register_execution(ctx: BootstrapContext) -> ExecutionDomain:
-    workspace_client = MathWorkspaceClient.from_artifact_service(
-        artifact_service=ctx.artifact_service,
-        platform_client=ctx.platform_client,
-    )
     return ExecutionDomain(
         name="math_conversation",
-        job_executions=[build_math_conversation_execution(workspace_client)],
+        job_executions=[build_math_conversation_execution(ctx.artifact_service)],
         artifact_types=list(MATH_CONVERSATION_ARTIFACTS.values()),
     )

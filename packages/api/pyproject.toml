@@ -1,10 +1,10 @@
 [project]
-name = "mathapp-control-plane"
+name = "aiplatform-api"
 version = "0.1.0"
 description = "Control plane (API): job creation, exploration, artifact lookup. Depends on core + FastAPI + every domain's control-plane surface (engine-free); never the execution engine."
 requires-python = ">=3.13"
 dependencies = [
-    "mathapp-core",
+    "aiplatform-core",
     "fastapi>=0.115.0",
     "uvicorn>=0.34.0",
     "python-multipart",
@@ -31,6 +31,6 @@ namespaces = true
 # Path (not workspace) so a service installs standalone from core + the
 # domain packages it needs. The api image never needs the worker package
 # present. Still resolves inside the workspace for dev `uv sync`.
-mathapp-core = { path = "../core", editable = true }
+aiplatform-core = { path = "../core", editable = true }
 mathai-math-qa = { path = "../math-qa", editable = true }
 mathai-math-conversation = { path = "../math-conversation", editable = true }

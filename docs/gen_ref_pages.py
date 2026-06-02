@@ -34,7 +34,7 @@ with mkdocs_gen_files.open(REFERENCE / "index.md", "w") as fd:
         "  here.\n"
         "- **`mathai`** — the `math_qa` domain. Plugs into the platform via\n"
         "  `Domain.register()`.\n"
-        "- **`mathapp`** — composition root + entrypoints (the API process,\n"
+        "- **`ai_platform`** — platform library + composition root + entrypoints (the API process,\n"
         "  the worker process).\n"
         "- **`scripts`** — one-shot CLI tools (prompt deploy, etc.).\n\n"
         "Pages with empty bodies have no docstrings yet — adding them is the\n"

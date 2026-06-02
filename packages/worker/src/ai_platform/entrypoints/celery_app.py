@@ -1,7 +1,7 @@
 """Celery app + `run_job` task.
 
 Run with:
-    celery -A mathapp.entrypoints.celery_app worker --loglevel=info
+    celery -A ai_platform.entrypoints.celery_app worker --loglevel=info
 
 The task body mirrors `ai_platform.jobs.worker_loop._run_one_job` but
 skips `claim_next_pending` — the broker already routed this specific
@@ -26,7 +26,7 @@ from celery.signals import worker_process_init
 from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.job_runner import run_graph_job
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import execution_registers_all
+from ai_platform.composition_root import execution_registers_all
 
 logging.basicConfig(
     level=logging.INFO,

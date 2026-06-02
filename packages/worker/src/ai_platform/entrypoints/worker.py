@@ -5,9 +5,9 @@ because the same seam needs to support backends with no separate worker
 at all (`ThreadComputeBackend`) or their own CLI (`CeleryComputeBackend`).
 
 Usage:
-    python -m mathapp.entrypoints.worker                # COMPUTE=poll, interval=10s
-    python -m mathapp.entrypoints.worker --interval 5
-    python -m mathapp.entrypoints.worker --once         # run one job then exit
+    python -m ai_platform.entrypoints.worker                # COMPUTE=poll, interval=10s
+    python -m ai_platform.entrypoints.worker --interval 5
+    python -m ai_platform.entrypoints.worker --once         # run one job then exit
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ai_platform.compute.bootstrap import bootstrap_compute
 from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from mathapp.composition_root import execution_registers_for_runtime
+from ai_platform.composition_root import execution_registers_for_runtime
 
 logging.basicConfig(
     level=logging.INFO,

@@ -1,7 +1,7 @@
 """Platform workflows router — serves the static workflow descriptors.
 
 The descriptors are generated offline by an admin command running in an
-engine context (`mathapp.entrypoints.gen_workflows`) and parked in the
+engine context (`ai_platform.entrypoints.gen_workflows`) and parked in the
 blob store as a single `workflows.json`. This router only reads + serves
 them, so the API never imports `pydantic_graph`. The endpoints are
 **optional**: if the blob hasn't been generated yet, `/workflows` is empty

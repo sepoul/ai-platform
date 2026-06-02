@@ -34,7 +34,7 @@ from mathai.math_qa.workflow import (
     math_qa_graph,
     math_qa_node_registry,
 )
-from mathai.workspace.client import MathWorkspaceClient
+from ai_platform.workspace.client import PlatformClient
 
 # Runnable gating, built from the gate list the control plane also exposes.
 math_qa_policy = ExecutionPolicy(gates=MATH_QA_GATES)
@@ -50,13 +50,11 @@ MATH_QA_EDGES = [
 ]
 
 
-def build_math_qa_execution(workspace_client) -> JobExecution:
-    artifact_api: ArtifactService = workspace_client.artifact_store
-    prompt_registry = getattr(
-        getattr(workspace_client, "platform_client", None),
-        "prompt_registry",
-        None,
-    )
+def build_math_qa_execution(
+    artifact_api: ArtifactService,
+    platform_client: PlatformClient,
+) -> JobExecution:
+    prompt_registry = getattr(platform_client, "prompt_registry", None)
 
     def _load_prompt(name: str) -> Optional[str]:
         """Best-effort fetch from the prompt registry; None on miss lets
@@ -160,12 +158,8 @@ def build_math_qa_execution(workspace_client) -> JobExecution:
 
 
 def register_execution(ctx: BootstrapContext) -> ExecutionDomain:
-    workspace_client = MathWorkspaceClient.from_artifact_service(
-        artifact_service=ctx.artifact_service,
-        platform_client=ctx.platform_client,
-    )
     return ExecutionDomain(
         name="math_qa",
-        job_executions=[build_math_qa_execution(workspace_client)],
+        job_executions=[build_math_qa_execution(ctx.artifact_service, ctx.platform_client)],
         artifact_types=list(MATH_QA_ARTIFACTS.values()),
     )

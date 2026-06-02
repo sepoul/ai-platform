@@ -11,7 +11,7 @@ Four helpers do the heavy lifting:
     under the control/execution split — run a worker).
   - `build_api(...)`               — mount platform + domain routers.
 
-Adding a domain means appending to `mathapp.composition_root._DOMAINS`.
+Adding a domain means appending to `ai_platform.composition_root._DOMAINS`.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from ai_platform.api.app import build_api  # noqa: E402
 from ai_platform.compute.bootstrap import bootstrap_compute  # noqa: E402
 from ai_platform.jobs.bootstrap import register_control_domains  # noqa: E402
 from ai_platform.workspace.bootstrap import bootstrap_workspace  # noqa: E402
-from mathapp.composition_root import control_registers  # noqa: E402
+from ai_platform.composition_root import control_registers  # noqa: E402
 
 _workspace = bootstrap_workspace()
 # Control plane only — every job type, across all runtimes, no engine import.

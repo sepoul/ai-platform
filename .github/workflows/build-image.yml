@@ -30,23 +30,23 @@ jobs:
       matrix:
         include:
           # Control plane (FastAPI; NO engine) — control/execution split phase 3b.
-          - name: mathapp-api
+          - name: aiplatform-api
             context: .
             file: Dockerfile.api
-            image: ghcr.io/sepoul/mathapp-api
+            image: ghcr.io/sepoul/aiplatform-api
             build-args: ""
           # Default execution runtime (pydantic_ai + Anthropic + Logfire).
-          - name: mathapp-worker
+          - name: aiplatform-worker
             context: .
             file: Dockerfile.worker
-            image: ghcr.io/sepoul/mathapp-worker
+            image: ghcr.io/sepoul/aiplatform-worker
             build-args: |
               EXTRA=default
           # CrewAI execution runtime (multi-agent panel, otel <1.35, no Logfire SDK).
-          - name: mathapp-worker-crewai
+          - name: aiplatform-worker-crewai
             context: .
             file: Dockerfile.worker
-            image: ghcr.io/sepoul/mathapp-worker-crewai
+            image: ghcr.io/sepoul/aiplatform-worker-crewai
             build-args: |
               EXTRA=crewai
           - name: math-ui
