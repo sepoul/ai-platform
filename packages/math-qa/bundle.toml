@@ -1,0 +1,22 @@
+# Bundle manifest for the math_qa domain.
+#
+# Used by `aiplatform deploy` to push the math_qa wheel + register every
+# JobDefinition + ArtifactType it declares. Build the wheel first:
+#
+#     cd packages/math-qa && uv build --wheel
+#     uv run aiplatform deploy --bundle packages/math-qa/bundle.toml \
+#                              --api-url http://your-platform:8000
+#
+# This is the same dogfood path a friend's repo would take: their own
+# bundle.toml, their own wheel, the same `aiplatform deploy` invocation.
+
+[package]
+name    = "mathai-math-qa"
+version = "0.1.0"
+runtime = "default"
+wheel   = "dist/mathai_math_qa-0.1.0-py3-none-any.whl"
+
+[control]
+domain               = "math_qa"
+control_entrypoint   = "mathai.math_qa.control:register_control"
+execution_entrypoint = "mathai.math_qa.execution:register_execution"
