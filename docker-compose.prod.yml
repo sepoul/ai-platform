@@ -47,3 +47,19 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  # Platform admin SPA — catalog browser, domain-free. Brought up
+  # together with math-ui under the `ui` profile so a single
+  # redeploy ships both. Host port 3001 → container 7861.
+  platform-ui:
+    image: ghcr.io/sepoul/platform-ui:${IMAGE_TAG:-latest}
+    profiles: [ui]
+    environment:
+      # BFF routes proxy to the API over the compose network.
+      PLATFORM_API_URL: http://api:8000
+    ports:
+      - "3001:7861"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

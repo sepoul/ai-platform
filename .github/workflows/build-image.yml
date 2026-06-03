@@ -56,6 +56,13 @@ jobs:
             file: ""
             image: ghcr.io/sepoul/math-ui
             build-args: ""
+          # Domain-free admin SPA (catalog browser). Built from
+          # platform-ui/Dockerfile; listens on 7861 in prod compose.
+          - name: platform-ui
+            context: platform-ui
+            file: ""
+            image: ghcr.io/sepoul/platform-ui
+            build-args: ""
     steps:
       - uses: actions/checkout@v4
 
