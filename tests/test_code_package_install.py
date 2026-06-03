@@ -84,22 +84,47 @@ def test_install_downloads_and_invokes_pip_for_new_package():
     service.list.return_value = [_record()]
     service.download.return_value = (_record(), b"wheel-bytes")
 
+    fake_pip_ok = MagicMock(returncode=0, stderr="")
+
     with patch(
         "ai_platform.jobs.code_package_install._is_already_installed",
         return_value=False,
     ), patch(
-        "ai_platform.jobs.code_package_install.subprocess.run"
+        "ai_platform.jobs.code_package_install.subprocess.run",
+        return_value=fake_pip_ok,
     ) as mock_run:
         installed = install_packages_for_runtime("default", service)
 
     assert installed == ["toy_pkg@1.0.0"]
     service.download.assert_called_once_with("toy_pkg@1.0.0")
     mock_run.assert_called_once()
-    # The pip subprocess command should reference the temp wheel + the
-    # current interpreter; we only assert the shape, not the temp path.
     cmd = mock_run.call_args.args[0]
     assert cmd[1:5] == ["-m", "pip", "install", "--force-reinstall"]
-    assert cmd[5].endswith(".whl")
+    # The temp wheel keeps the record's filename so pip can parse name/version.
+    assert cmd[5].endswith(_record().filename)
+
+
+def test_install_surfaces_pip_stderr_on_failure():
+    """A non-zero pip exit must surface stderr in the warning, not the
+    bare CalledProcessError (which swallowed the actual cause).
+    """
+    service = MagicMock()
+    service.list.return_value = [_record()]
+    service.download.return_value = (_record(), b"wheel-bytes")
+
+    fake_pip_fail = MagicMock(returncode=1, stderr="ERROR: Invalid wheel filename")
+
+    with patch(
+        "ai_platform.jobs.code_package_install._is_already_installed",
+        return_value=False,
+    ), patch(
+        "ai_platform.jobs.code_package_install.subprocess.run",
+        return_value=fake_pip_fail,
+    ):
+        installed = install_packages_for_runtime("default", service)
+
+    # Failed install isn't in the returned list (best-effort path).
+    assert installed == []
 
 
 def test_install_swallows_individual_failures():
@@ -121,7 +146,8 @@ def test_install_swallows_individual_failures():
         "ai_platform.jobs.code_package_install._is_already_installed",
         return_value=False,
     ), patch(
-        "ai_platform.jobs.code_package_install.subprocess.run"
+        "ai_platform.jobs.code_package_install.subprocess.run",
+        return_value=MagicMock(returncode=0, stderr=""),
     ):
         installed = install_packages_for_runtime("default", service)
 
