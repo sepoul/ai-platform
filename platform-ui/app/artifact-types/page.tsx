@@ -1,16 +1,7 @@
-import { CatalogTable, type Column } from "@/components/CatalogTable";
-import { listArtifactTypes, type ArtifactTypeRecord } from "@/lib/api/catalogs";
-import { fmtTimestamp } from "@/lib/format";
+import { ArtifactTypesTable } from "@/components/ArtifactTypesTable";
+import { listArtifactTypes } from "@/lib/api/catalogs";
 
 export const dynamic = "force-dynamic";
-
-const COLUMNS: Column<ArtifactTypeRecord>[] = [
-  { header: "Name", cell: (r) => <span className="mono">{r.name}</span>, width: "w-1/4" },
-  { header: "Version", cell: (r) => <span className="mono">{r.version}</span>, width: "w-24" },
-  { header: "Domain", cell: (r) => r.domain, width: "w-32" },
-  { header: "Class", cell: (r) => <span className="mono text-xs">{r.class_name}</span> },
-  { header: "Deployed", cell: (r) => fmtTimestamp(r.deployed_at), width: "w-44" },
-];
 
 export default async function ArtifactTypesPage() {
   const rows = await listArtifactTypes();
@@ -23,7 +14,7 @@ export default async function ArtifactTypesPage() {
           Schema of a `BaseArtifact` subclass + which domain owns it.
         </p>
       </header>
-      <CatalogTable rows={rows} columns={COLUMNS} rowKey={(r) => r.id} />
+      <ArtifactTypesTable rows={rows} />
     </div>
   );
 }

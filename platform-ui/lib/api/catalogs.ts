@@ -6,7 +6,9 @@
 import { createApiClient } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 
-export type JobDefinitionRecord = components["schemas"]["JobDefinitionRecord"];
+// FastAPI emits separate input/output variants for models that have
+// computed/default fields. The list endpoints all return Output records.
+export type JobDefinitionRecord = components["schemas"]["JobDefinitionRecord-Output"];
 export type ArtifactTypeRecord = components["schemas"]["ArtifactTypeRecord"];
 export type CodePackageRecord = components["schemas"]["CodePackageRecord"];
 
