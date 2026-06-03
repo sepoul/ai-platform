@@ -13,6 +13,8 @@ mode, live reload while you edit. CLI build:
 
 | Doc | Read it when |
 |---|---|
+| [`architecture.md`](architecture.md) | **Start here.** Snapshot of how the platform works at HEAD — system map, the three catalogs, deploy/install/run lifecycles, runtime split. With mermaid diagrams. |
+| [`platform_design.md`](platform_design.md) | The conceptual contract — planes, ownership, vocabulary. Pairs with `architecture.md` (concept vs implementation). |
 | [`dev_lifecycle.md`](dev_lifecycle.md) | Touching anything that crosses the FastAPI ↔ Next.js boundary — codegen loop, what to regenerate, common drift scenarios. |
 | [`onboarding_new_job_type.md`](onboarding_new_job_type.md) | Adding a new domain workflow. Walks through the `JobDefinition` you write and the registry entries that pick it up. |
 | [`jobs_spec.md`](jobs_spec.md) | Working at the platform level — job lifecycle, checkpoints, gates, artifacts, the runner's invariants. |
