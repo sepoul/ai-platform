@@ -34,8 +34,8 @@ ENV PORT=7861
 
 EXPOSE 7861
 
-# standalone server output
-COPY --from=builder /app/public ./public
+# standalone server output. No `public/` copy — we ship no static
+# assets today; add one back here if that changes.
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
