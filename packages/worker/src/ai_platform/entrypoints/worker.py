@@ -18,6 +18,7 @@ from argparse import ArgumentParser
 
 from ai_platform.compute.bootstrap import bootstrap_compute
 from ai_platform.jobs.bootstrap import register_execution_domains
+from ai_platform.jobs.code_package_install import install_packages_for_runtime
 from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
 from ai_platform.composition_root import execution_registers_for_runtime
@@ -67,6 +68,16 @@ def main():
     # runtime's jobs — the worker claims exactly those, leaving other
     # runtimes' jobs PENDING for the pool provisioned with that stack.
     runtime = current_worker_runtime()
+
+    # Friend-test path: pull any CodePackages registered for this runtime
+    # (via `POST /code-packages`) and pip-install them before we resolve
+    # execution registers. Idempotent + best-effort — already-installed
+    # rows skip, failures log + continue, the worker still serves the
+    # JobDefinitions whose code is baked into the image.
+    installed = install_packages_for_runtime(runtime, ws.code_package_service)
+    if installed:
+        logger.info("Installed %d CodePackage(s) at boot: %s", len(installed), installed)
+
     domains = register_execution_domains(execution_registers_for_runtime(runtime), ws)
     served = domains.job_executions
     logger.info(
