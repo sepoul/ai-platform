@@ -1,5 +1,13 @@
-# Domain-bound worker image — chains on top of the virgin
-# aiplatform-worker image. Two stages:
+# Domain-bound worker image — LOCAL DEV ONLY.
+#
+# Prod runs the VIRGIN `aiplatform-worker` image directly and pulls
+# domain wheels from the CodePackage catalog at boot (`aiplatform deploy`
+# uploaded them ahead of time). This Dockerfile exists so that
+# `docker compose up` works locally without first running a deploy:
+# we bake the wheel in at image build time instead of resolving it
+# from an empty catalog. See docs/architecture.md §6.
+#
+# Two stages:
 #
 #   1. `build` — installs setuptools + builds a wheel from the
 #      domain package's source. Stays minimal (no platform deps).
@@ -7,9 +15,6 @@
 #      in, and `pip install` the wheel with its `[execution]` extra.
 #      That extra is where the domain pulls its LLM stack (pydantic_ai
 #      / Logfire for math-qa; crewai[anthropic] for math-conversation).
-#      Per-domain isolation is now a property of the IMAGE, not just
-#      the EXTRA: the platform image is identical for every domain;
-#      the domain image is the platform + this one wheel + its deps.
 #
 # Build args:
 #   DOMAIN — the package directory under `packages/` to install

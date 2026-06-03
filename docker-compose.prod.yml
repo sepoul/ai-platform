@@ -18,22 +18,21 @@ services:
   api:
     image: ghcr.io/sepoul/aiplatform-api:${IMAGE_TAG:-latest}
 
+  # Both worker services now run the VIRGIN aiplatform-worker image:
+  # zero domain code baked in. Domains arrive at boot via the
+  # CodePackage catalog (`POST /code-packages` from `aiplatform deploy`),
+  # which the worker pulls + pip-installs before resolving execution
+  # entrypoints. `worker` vs `worker-crewai` is purely a runtime-stack
+  # split — same image, different WORKER_RUNTIME env, different wheels
+  # installed at boot. See docs/architecture.md §4.2.
   worker:
-    # Was `aiplatform-worker:latest` (the math-qa-baked-in image).
-    # After Phase B, that name now refers to the VIRGIN platform
-    # worker. The domain-bound image is built by
-    # Dockerfile.worker-domain FROM aiplatform-worker + math-qa wheel.
-    image: ghcr.io/sepoul/aiplatform-worker-mathqa:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
 
   worker-crewai:
-    # Was `aiplatform-worker-crewai`. Same Phase B shape — the
-    # math-conversation domain image chains on top of the virgin
-    # `aiplatform-worker`.
-    image: ghcr.io/sepoul/aiplatform-worker-mathconversation:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
 
   celery-worker:
-    # Celery worker uses the default-runtime image (math-qa stack).
-    image: ghcr.io/sepoul/aiplatform-worker-mathqa:${IMAGE_TAG:-latest}
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
 
   math-ui:
     image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}

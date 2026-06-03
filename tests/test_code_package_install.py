@@ -99,9 +99,11 @@ def test_install_downloads_and_invokes_pip_for_new_package():
     service.download.assert_called_once_with("toy_pkg@1.0.0")
     mock_run.assert_called_once()
     cmd = mock_run.call_args.args[0]
-    assert cmd[1:5] == ["-m", "pip", "install", "--force-reinstall"]
-    # The temp wheel keeps the record's filename so pip can parse name/version.
-    assert cmd[5].endswith(_record().filename)
+    assert cmd[1:4] == ["-m", "pip", "install"]
+    # Temp wheel keeps the record's filename + the `[execution]` extra
+    # so pip resolves the domain's runtime stack (pydantic-ai-slim /
+    # crewai) alongside the base wheel.
+    assert cmd[4].endswith(f"{_record().filename}[execution]")
 
 
 def test_install_surfaces_pip_stderr_on_failure():
