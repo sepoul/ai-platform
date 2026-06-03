@@ -22,6 +22,11 @@ dependencies = [
     "streamlit-agraph",
 ]
 
+[project.scripts]
+# `aiplatform deploy` — manifest-driven bundle deploy. Friend's repo
+# installs `aiplatform-core` and gets this CLI on PATH.
+aiplatform = "ai_platform.bundle.cli:main"
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"

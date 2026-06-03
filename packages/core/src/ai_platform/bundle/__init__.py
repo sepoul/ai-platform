@@ -249,3 +249,111 @@ def deploy_control(
             )
         )
     return deployed
+
+
+# ---------------------------------------------------------------------------
+# Bundle deploy — manifest-driven orchestration over the three primitives.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_entrypoint(entrypoint: str) -> Callable[[Any], Any]:
+    """Resolve a "module.path:callable" entrypoint string.
+
+    Pure import — raises ImportError / AttributeError on failure, which
+    the CLI surfaces with the original message rather than wrapping.
+    """
+    if ":" not in entrypoint:
+        raise ValueError(
+            f"Entrypoint {entrypoint!r} must be 'package.module:callable'"
+        )
+    module_path, attr = entrypoint.split(":", 1)
+    import importlib
+
+    module = importlib.import_module(module_path)
+    return getattr(module, attr)
+
+
+def deploy_bundle(
+    manifest_path: str | Path,
+    *,
+    api_url: str = DEFAULT_API_URL,
+) -> dict[str, Any]:
+    """Read `bundle.toml`, upload the wheel, and register every
+    JobDefinition + ArtifactType the bundle's control entrypoint
+    declares.
+
+    Order matters: CodePackage first (so a worker booted between this
+    and the JobDefinition deploy already has the install rule), then
+    JobDefinitions + ArtifactTypes (which reference the package by
+    `code_entrypoint`).
+
+    Each underlying call is idempotent on `(name, version)`. A failure
+    midway leaves the platform in a partially-deployed but recoverable
+    state: re-running picks up where we left off (no duplicate rows,
+    no orphan blobs).
+
+    Returns a small report dict suitable for printing from the CLI.
+    """
+    from ai_platform.bundle.manifest import BundleManifest
+
+    manifest = BundleManifest.load(manifest_path)
+    wheel_path = manifest.wheel_path(manifest_path)
+
+    # 1. CodePackage — bytes must land before any JobDefinition can
+    #    reference the entrypoint that lives inside the wheel.
+    code_pkg = deploy_code_package(
+        wheel_path,
+        name=manifest.package.name,
+        version=manifest.package.version,
+        runtime_selector=manifest.package.runtime,
+        api_url=api_url,
+    )
+
+    # 2. Resolve the control entrypoint in-process to introspect the
+    #    JobControls + artifact types the wheel declares. The
+    #    execution entrypoint is NOT resolved here — it's a string
+    #    handed to the worker, which resolves it after install.
+    register_control = _resolve_entrypoint(manifest.control.control_entrypoint)
+    job_defs = deploy_control(
+        register_control,
+        runtime=manifest.package.runtime,
+        code_entrypoint=manifest.control.execution_entrypoint,
+        version=manifest.package.version,
+        api_url=api_url,
+    )
+
+    # 3. ArtifactTypes — same control_domain, separate POSTs. We can't
+    #    just re-invoke register_control (side-effects), so we drive
+    #    off the cached domain.
+    from dataclasses import dataclass
+
+    @dataclass
+    class _StubCtx:
+        platform_client: Any = None
+        backend: str = "stub"
+        artifact_service: Any = None
+        root_dir: Any = None
+
+    control_domain = register_control(_StubCtx())
+    artifact_types: list[ArtifactTypeRecord] = []
+    for artifact_cls in control_domain.artifact_types:
+        record = build_artifact_type_record(
+            artifact_cls,
+            domain=manifest.control.domain,
+            version=manifest.package.version,
+        )
+        if record is None:
+            continue
+        response = httpx.post(
+            f"{api_url.rstrip('/')}/artifact-types",
+            json=record.model_dump(mode="json"),
+            timeout=_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        artifact_types.append(ArtifactTypeRecord.model_validate(response.json()))
+
+    return {
+        "code_package": code_pkg.id,
+        "job_definitions": [jd.id for jd in job_defs],
+        "artifact_types": [at.id for at in artifact_types],
+    }
