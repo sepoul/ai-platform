@@ -94,23 +94,36 @@ def _download_and_install(
 ) -> None:
     """Fetch the blob (sha256-verified by the service) to a temp file
     and `pip install` it into the current interpreter.
+
+    The temp file MUST keep the original `record.filename` — pip parses
+    the wheel name to derive `{name}-{version}`, and a randomized
+    `tempfile.NamedTemporaryFile` suffix breaks that (PEP 427:
+    "Invalid wheel filename (wrong number of parts)"). We use a temp
+    *directory* and write the wheel inside under its real filename.
     """
     _, wheel_bytes = service.download(record.id)
-    with tempfile.NamedTemporaryFile(
-        prefix=f"{record.name}-", suffix=".whl", delete=False
-    ) as fh:
-        fh.write(wheel_bytes)
-        wheel_path = Path(fh.name)
+    tmpdir = Path(tempfile.mkdtemp(prefix="codepkg-"))
+    wheel_path = tmpdir / record.filename
+    wheel_path.write_bytes(wheel_bytes)
 
     try:
         # `--force-reinstall` covers the case where a *different* version
         # is currently installed (e.g. catalog bumped from 1.0.0 to 1.0.1).
         # `_is_already_installed` already short-circuits the exact-match
         # case, so we won't re-install identical bytes.
-        subprocess.run(
+        proc = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--force-reinstall", str(wheel_path)],
-            check=True,
+            check=False,
             capture_output=True,
+            text=True,
         )
+        if proc.returncode != 0:
+            # Surface pip's stderr — the bare CalledProcessError swallows
+            # the actual failure (e.g. "Invalid wheel filename"), which
+            # turned a wheel-naming bug into an inscrutable boot warning.
+            raise RuntimeError(
+                f"pip install failed (rc={proc.returncode}): {proc.stderr.strip()[:500]}"
+            )
     finally:
         wheel_path.unlink(missing_ok=True)
+        tmpdir.rmdir()
