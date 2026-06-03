@@ -1,0 +1,21 @@
+# Bundle manifest for the math_conversation domain.
+#
+# Mirror of packages/math-qa/bundle.toml, but routed to the `crewai`
+# worker runtime (CrewAI[anthropic], otel-sdk < 1.35 — can't share an
+# interpreter with Logfire). Build the wheel then `aiplatform deploy`:
+#
+#     cd packages/math-conversation && uv build --wheel
+#     uv run aiplatform deploy \
+#         --bundle packages/math-conversation/bundle.toml \
+#         --api-url http://your-platform:8000
+
+[package]
+name    = "mathai-math-conversation"
+version = "0.1.0"
+runtime = "crewai"
+wheel   = "dist/mathai_math_conversation-0.1.0-py3-none-any.whl"
+
+[control]
+domain               = "math_conversation"
+control_entrypoint   = "mathai.math_conversation.control:register_control"
+execution_entrypoint = "mathai.math_conversation.execution:register_execution"

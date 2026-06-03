@@ -260,64 +260,82 @@ Logfire (used by `pydantic_ai` for tracing) needs
 `opentelemetry-sdk >= 1.39`; CrewAI pins `< 1.35`. They can't share
 an interpreter.
 
+In prod, both pools run **the same virgin `aiplatform-worker` image**.
+The only difference is `WORKER_RUNTIME` env + which wheels the catalog
+serves to each pool:
+
 ```mermaid
 graph LR
-    subgraph d["worker (runtime=default)"]
-        Dimage["aiplatform-worker-mathqa image<br/>pydantic-ai-slim + Logfire +<br/>baked-in math-qa wheel"]
-        Dimage --> Drun["serves math_qa jobs"]
+    Image[("aiplatform-worker (virgin)<br/>NO domain code<br/>NO LLM stack")]
+
+    subgraph d["worker (WORKER_RUNTIME=default)"]
+        Drun["boot: pip install mathai-math-qa[execution]<br/>→ pydantic-ai-slim + Logfire arrive<br/>→ serves math_qa jobs"]
     end
 
-    subgraph c["worker-crewai (runtime=crewai)"]
-        Cimage["aiplatform-worker-mathconversation image<br/>crewai[anthropic] +<br/>baked-in math-conversation wheel"]
-        Cimage --> Crun["serves math_conversation jobs"]
+    subgraph c["worker-crewai (WORKER_RUNTIME=crewai)"]
+        Crun["boot: pip install mathai-math-conversation[execution]<br/>→ crewai[anthropic] arrives<br/>→ serves math_conversation jobs"]
     end
 
-    Q[Queue / Postgres jobs table] -.poll.-> Drun
-    Q -.poll.-> Crun
+    Image -.same image.-> Drun
+    Image -.same image.-> Crun
+    Cat[(code_packages)] -.runtime_selector=default.-> Drun
+    Cat -.runtime_selector=crewai.-> Crun
 ```
 
-Each worker reads `WORKER_RUNTIME` env, registers only that runtime's
-domains, and claims only the matching `job_type`s — leaving the other
-pool's jobs PENDING for that pool to pick up. See
-[`packages/core/src/ai_platform/jobs/runtimes.py`](../packages/core/src/ai_platform/jobs/runtimes.py)
-and [`compute_backends.md`](compute_backends.md).
+Each worker reads `WORKER_RUNTIME` env, queries the catalog for that
+runtime, installs the wheels, then registers only that runtime's
+domains. The otel-sdk pin conflict (Logfire `>=1.39` vs CrewAI
+`<1.35`) lives at the **wheel-extras level** now, not the image level
+— each runtime's wheels pull a different LLM stack, but the image
+they install into is identical.
 
-A friend's domain joins one of the two existing runtimes (declared
-in their `bundle.toml`'s `package.runtime`). Adding a third runtime
-means adding a new worker image + extending `KNOWN_RUNTIMES` in
-[`packages/core/src/ai_platform/jobs/job_definition_service.py`](../packages/core/src/ai_platform/jobs/job_definition_service.py).
+A friend's domain joins one of the two existing runtimes by declaring
+`package.runtime = "default" | "crewai"` in its `bundle.toml`, and
+must put its runtime-side deps under an `[execution]` extra (the
+platform install pass appends `[execution]` to the install target).
+Adding a third runtime means extending `KNOWN_RUNTIMES` in
+[`packages/core/src/ai_platform/jobs/job_definition_service.py`](../packages/core/src/ai_platform/jobs/job_definition_service.py)
+— no new image required.
 
 ---
 
-## 6. The image / install duality
+## 6. Platform and domain are separate, on the worker
 
-A platform-shipped domain (math_qa, math_conversation) is baked into
-the worker image at build time, so the worker can serve it without
-any catalog activity. The auto-deploy on API boot records a parallel
-catalog row so the friend-test path stays consistent: the catalog
-mirrors what's running.
+In prod, **the worker image carries zero domain code**. Both
+`worker` and `worker-crewai` run the identical virgin
+`aiplatform-worker` image — only `WORKER_RUNTIME` env differs. The
+platform's own domains (math-qa, math-conversation) arrive at boot
+via the CodePackage catalog, **the same way a friend's domain does**.
 
-A friend-shipped domain has *no* image presence — only catalog rows.
-The worker discovers it on boot, pip-installs the wheel, and resolves
-the entrypoint at register time. From that point on it's
-indistinguishable from a baked-in domain.
+The path math-qa takes is the path your domain takes:
 
 ```mermaid
 graph LR
-    subgraph baked["Baked-in domain (math_qa, math_conversation)"]
-        BImg[image build<br/>pip install math-qa] --> BInst[importable on boot]
-        BInst --> BReg[register_control_domains]
-        BReg --> BAuto[auto-deploy → catalog]
-    end
-
-    subgraph friend["Friend-shipped domain"]
-        FCLI[aiplatform deploy] --> FCat[POST → catalog]
-        FCat --> FInst[worker boot:<br/>install_packages_for_runtime]
-        FInst --> FReg[register_control_domains]
-    end
-
-    BReg -.same code path.-> FReg
+    Build[uv build --wheel] --> Deploy[aiplatform deploy<br/>--bundle bundle.toml]
+    Deploy --> Cat[(code_packages<br/>job_definitions<br/>artifact_types)]
+    Cat --> Worker[worker boot:<br/>install_packages_for_runtime]
+    Worker --> Reg[register_execution_domains]
+    Reg --> Serve[serve jobs]
 ```
+
+This means the prod posture matches the friend-test posture:
+
+- No `Dockerfile.<your-domain>` for prod images. The CI build matrix
+  produces *only* `aiplatform-worker` (virgin), `aiplatform-api`,
+  `math-ui`, `platform-ui` — none of which know about any specific
+  domain.
+- Adding or removing a domain is a `aiplatform deploy` away. No image
+  rebuild, no compose change, no platform PR.
+- The local-dev path (`docker compose up`) still bakes math-qa and
+  math-conversation via `Dockerfile.worker-domain` as a convenience
+  (skips the deploy step on a fresh box with an empty catalog). The
+  prod compose **does not** use that Dockerfile.
+
+The same shift is *not yet* applied to the API: `Dockerfile.api`
+still pre-installs the math-qa and math-conversation *control*
+modules so the API's boot-time `register_control_domains` can import
+them. Closing that gap (an API-side analog of the worker's catalog
+install pass) is on-deck — see §8.
 
 ---
 
@@ -348,6 +366,13 @@ The pieces a new reader needs to find, mapped to where they live.
 What's deliberately not coupled yet, so the next person extending the
 platform doesn't trip:
 
+- **API image is not yet virgin.** `Dockerfile.api` pre-installs the
+  math-qa and math-conversation *control* modules so the boot-time
+  `register_control_domains` can import them. The analog of the
+  worker's `install_packages_for_runtime` doesn't exist for the API
+  yet — adding it (or making the auto-deploy optional and requiring
+  explicit `aiplatform deploy` for all domains, friend and platform
+  alike) is the next axis of the platform/domain split cleanup.
 - **JobDefinition ↔ CodePackage.** A JobDefinition row carries
   `code_entrypoint` as a free string. There's no foreign key into
   `code_packages` and the worker doesn't verify the entrypoint
@@ -357,13 +382,16 @@ platform doesn't trip:
   JobControls via the in-memory `_job_controls` dict populated at
   boot. The catalog row is recorded as a parallel artifact — when a
   friend POSTs a new JobDefinition, the API knows about the row but
-  won't route to it until the next API restart (which triggers
-  registration via the now-installed wheel on the worker side).
-  Live routing from the catalog is a future PR.
+  won't route to it until the next API restart. Live routing from
+  the catalog is a future PR; pairs with the API-virgin item above.
+- **`[execution]` extra convention.** The worker install pass appends
+  `[execution]` to every wheel target. A friend's wheel that uses a
+  different extra name installs the base package but skips its
+  runtime stack (pip just warns). Documented in
+  `packages/{math-qa,math-conversation}/bundle.toml`.
 - **Wheel deps.** `pip install` runs with default dep resolution.
   Friends deploying to *their* platform decide their own dep set;
-  there's no constraints/sandbox/signature check today. Hardened
-  mode is a future option.
+  there's no constraints/sandbox/signature check today.
 - **Single Celery pool.** [`celery_app.py`](../packages/worker/src/ai_platform/entrypoints/celery_app.py)
   registers all runtimes in one pool — fine in dev, won't survive
   the otel pin conflict if Logfire + CrewAI ever load in the same

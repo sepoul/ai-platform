@@ -95,24 +95,38 @@ def _download_and_install(
     """Fetch the blob (sha256-verified by the service) to a temp file
     and `pip install` it into the current interpreter.
 
-    The temp file MUST keep the original `record.filename` — pip parses
-    the wheel name to derive `{name}-{version}`, and a randomized
-    `tempfile.NamedTemporaryFile` suffix breaks that (PEP 427:
-    "Invalid wheel filename (wrong number of parts)"). We use a temp
-    *directory* and write the wheel inside under its real filename.
+    Two non-obvious bits:
+
+    1. The temp file MUST keep the original `record.filename` — pip parses
+       the wheel name to derive `{name}-{version}`, and a randomized
+       `tempfile.NamedTemporaryFile` suffix breaks that (PEP 427:
+       "Invalid wheel filename (wrong number of parts)"). We use a temp
+       *directory* and write the wheel inside under its real filename.
+
+    2. We append `[execution]` to the install target. Platform
+       convention: a domain wheel's runtime-side deps live under that
+       extra (`pydantic-ai-slim[…]` for the default runtime, `crewai`
+       for crewai). pip warns + continues if the extra doesn't exist,
+       so a friend's wheel that uses a different name still installs
+       its base package — just without the runtime stack. The convention
+       is documented in `packages/{math-qa,math-conversation}/bundle.toml`.
+
+    No `--force-reinstall`: it would also try to reinstall transitive
+    deps like `aiplatform-core`, which is path-source-only and not on
+    PyPI. Plain `pip install` upgrades the target wheel and resolves
+    new deps but leaves already-satisfied ones (including aiplatform-core)
+    alone.
     """
     _, wheel_bytes = service.download(record.id)
     tmpdir = Path(tempfile.mkdtemp(prefix="codepkg-"))
     wheel_path = tmpdir / record.filename
     wheel_path.write_bytes(wheel_bytes)
 
+    target = f"{wheel_path}[execution]"
+
     try:
-        # `--force-reinstall` covers the case where a *different* version
-        # is currently installed (e.g. catalog bumped from 1.0.0 to 1.0.1).
-        # `_is_already_installed` already short-circuits the exact-match
-        # case, so we won't re-install identical bytes.
         proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--force-reinstall", str(wheel_path)],
+            [sys.executable, "-m", "pip", "install", target],
             check=False,
             capture_output=True,
             text=True,
