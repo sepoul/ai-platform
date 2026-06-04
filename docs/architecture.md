@@ -36,28 +36,28 @@ request flows through it.
 
 ```mermaid
 graph TB
-    subgraph friend["Friend's repo (or this repo's math-qa)"]
-        Bundle[bundle.toml + wheel]
+    subgraph friend["Friend repo or this repo math-qa"]
+        Bundle["bundle.toml + wheel"]
         DeployCLI["aiplatform deploy"]
         Bundle --> DeployCLI
     end
 
-    subgraph caller["Runtime caller (notebook / script / domain code)"]
-        Session[PlatformSession]
+    subgraph caller["Runtime caller - notebook script or domain code"]
+        Session["PlatformSession"]
     end
 
     subgraph platform["ai-platform instance"]
-        API[FastAPI API process]
+        API["FastAPI API process"]
 
-        subgraph catalogs["Three catalogs (Postgres / B2 / local)"]
+        subgraph catalogs["Three catalogs - Postgres B2 or local"]
             JD["job_definitions"]
             AT["artifact_types"]
             CP["code_packages"]
         end
 
-        Files[(File repo<br/>wheel blobs +<br/>artifact blobs)]
+        Files[("File repo<br/>wheel blobs and<br/>artifact blobs")]
 
-        subgraph workers["Worker pools — one per runtime"]
+        subgraph workers["Worker pools - one per runtime"]
             WD["worker (runtime=default)"]
             WC["worker (runtime=crewai)"]
         end
@@ -76,8 +76,8 @@ graph TB
         WC -.poll.-> JD
     end
 
-    DeployCLI -- "POST /code-packages\nPOST /job-definitions\nPOST /artifact-types" --> API
-    Session -- "POST /jobs/runs/submit\nGET /jobs/{id}\nGET /jobs/{id}/result" --> API
+    DeployCLI -- "POST /code-packages<br/>POST /job-definitions<br/>POST /artifact-types" --> API
+    Session -- "POST /jobs/runs/submit<br/>GET /jobs/id<br/>GET /jobs/id/result" --> API
 ```
 
 **Plane split** ([`platform_design.md`](platform_design.md) §2 has the
@@ -142,13 +142,13 @@ sequenceDiagram
     participant JDC as job_definitions
     participant ATC as artifact_types
 
-    CLI->>CLI: Read bundle.toml<br/>(package name/version/runtime/wheel,<br/>control entrypoint, exec entrypoint)
-    CLI->>+API: POST /code-packages (multipart wheel)
-    API->>FR: put_canonical_file(blob_id, wheel_bytes)
-    API->>CPC: upsert(name, version, runtime, blob_id, sha256)
+    CLI->>CLI: Read bundle.toml<br/>package name version runtime wheel<br/>control entrypoint exec entrypoint
+    CLI->>+API: POST /code-packages multipart wheel
+    API->>FR: put_canonical_file blob_id and wheel_bytes
+    API->>CPC: upsert name version runtime blob_id sha256
     API-->>-CLI: 201 CodePackageRecord
 
-    CLI->>CLI: import control_entrypoint<br/>→ ControlDomain
+    CLI->>CLI: import control_entrypoint returns ControlDomain
     loop For each JobControl in domain
         CLI->>+API: POST /job-definitions
         API->>JDC: upsert
@@ -184,24 +184,24 @@ sequenceDiagram
     participant FR as FileRepository
     participant Pip as pip subprocess
 
-    W->>W: bootstrap_workspace()<br/>(reads BACKEND env, opens connections)
-    W->>+CPC: list(runtime_selector="default")
-    CPC-->>-W: [CodePackageRecord, ...]
+    W->>W: bootstrap_workspace() reads BACKEND env
+    W->>+CPC: list(runtime_selector=default)
+    CPC-->>-W: list of CodePackageRecord
     loop For each record
         W->>W: importlib.metadata.version(name)
         alt version matches catalog
-            W->>W: log "already installed — skipping"
-        else not installed / version mismatch
+            W->>W: log already installed, skipping
+        else not installed or version mismatch
             W->>+FR: get_canonical_file_bytes(blob_id)
             FR-->>-W: wheel_bytes
             W->>W: verify sha256
-            W->>+Pip: pip install --force-reinstall <wheel>
+            W->>+Pip: pip install wheel path
             Pip-->>-W: rc=0
-            W->>W: log "Installed CodePackage <id>"
+            W->>W: log Installed CodePackage id
         end
     end
-    W->>W: register_execution_domains(...)<br/>(resolves entrypoints — now importable)
-    W->>W: compute.start_worker(...)  -- enter run loop
+    W->>W: register_execution_domains resolves entrypoints
+    W->>W: compute.start_worker enters run loop
 ```
 
 Best-effort: a single install failure logs + continues; a failed
@@ -218,32 +218,32 @@ sequenceDiagram
     participant Caller as PlatformSession
     participant API
     participant Q as Compute queue
-    participant W as Worker (right runtime)
+    participant W as Worker for runtime
     participant JR as job_repository
     participant FR as FileRepository
 
-    Caller->>+API: POST /jobs/runs/submit<br/>{job_type, ...params}
-    API->>JR: insert JobRecord (PENDING)
-    API->>Q: enqueue(job_id)
-    API-->>-Caller: 201 {job_id, status: PENDING}
+    Caller->>+API: POST /jobs/runs/submit with job_type and params
+    API->>JR: insert JobRecord status PENDING
+    API->>Q: enqueue job_id
+    API-->>-Caller: 201 job_id and status PENDING
 
-    Caller->>Caller: handle.wait(timeout=60)
+    Caller->>Caller: handle.wait timeout 60s
     loop poll every poll_interval
-        Caller->>API: GET /jobs/{id}
+        Caller->>API: GET /jobs/id
         API->>JR: get
         API-->>Caller: status row
     end
 
-    Q->>W: dispatch (poll or broker)
+    Q->>W: dispatch poll or broker
     W->>JR: mark RUNNING
-    W->>W: run job graph (writes artifact bytes)
+    W->>W: run job graph and write artifact bytes
     W->>FR: put artifact payloads
-    W->>JR: write artifact refs + mark SUCCEEDED
+    W->>JR: write artifact refs and mark SUCCEEDED
 
-    Caller->>+API: GET /jobs/{id}/result
+    Caller->>+API: GET /jobs/id/result
     API->>JR: get
     API->>FR: hydrate artifact refs
-    API-->>-Caller: 200 {result: ...}
+    API-->>-Caller: 200 result payload
 ```
 
 `PlatformSession` ([`packages/core/src/ai_platform/session/session.py`](../packages/core/src/ai_platform/session/session.py))
@@ -266,20 +266,22 @@ serves to each pool:
 
 ```mermaid
 graph LR
-    Image[("aiplatform-worker (virgin)<br/>NO domain code<br/>NO LLM stack")]
+    Image["aiplatform-worker (virgin)<br/>no domain code<br/>no LLM stack"]
 
     subgraph d["worker (WORKER_RUNTIME=default)"]
-        Drun["boot: pip install mathai-math-qa[execution]<br/>→ pydantic-ai-slim + Logfire arrive<br/>→ serves math_qa jobs"]
+        Drun["boot: pip install mathai-math-qa execution extra<br/>pydantic-ai-slim plus Logfire arrive<br/>serves math_qa jobs"]
     end
 
     subgraph c["worker-crewai (WORKER_RUNTIME=crewai)"]
-        Crun["boot: pip install mathai-math-conversation[execution]<br/>→ crewai[anthropic] arrives<br/>→ serves math_conversation jobs"]
+        Crun["boot: pip install mathai-math-conversation execution extra<br/>crewai with anthropic arrives<br/>serves math_conversation jobs"]
     end
 
-    Image -.same image.-> Drun
-    Image -.same image.-> Crun
-    Cat[(code_packages)] -.runtime_selector=default.-> Drun
-    Cat -.runtime_selector=crewai.-> Crun
+    Cat[("code_packages catalog")]
+
+    Image -. same image .-> Drun
+    Image -. same image .-> Crun
+    Cat -. runtime_selector=default .-> Drun
+    Cat -. runtime_selector=crewai .-> Crun
 ```
 
 Each worker reads `WORKER_RUNTIME` env, queries the catalog for that
@@ -311,25 +313,25 @@ The shape per process:
 
 ```mermaid
 graph LR
-    Build[uv build --wheel] --> Deploy[aiplatform deploy<br/>--bundle bundle.toml]
-    Deploy --> Cat[(code_packages<br/>job_definitions<br/>artifact_types)]
+    Build["uv build --wheel"] --> Deploy["aiplatform deploy<br/>--bundle bundle.toml"]
+    Deploy --> Cat[("code_packages +<br/>job_definitions +<br/>artifact_types")]
 
     subgraph api_proc["API process (virgin image)"]
-        ApiBoot[boot:<br/>install_control_packages_for_api]
-        ApiReg[register_control_domains]
+        ApiBoot["boot:<br/>install_control_packages_for_api"]
+        ApiReg["register_control_domains"]
         ApiBoot --> ApiReg
     end
 
     subgraph worker_proc["Worker process (virgin image)"]
-        WorkerBoot[boot:<br/>install_packages_for_runtime]
-        WorkerReg[register_execution_domains]
+        WorkerBoot["boot:<br/>install_packages_for_runtime"]
+        WorkerReg["register_execution_domains"]
         WorkerBoot --> WorkerReg
     end
 
     Cat --> ApiBoot
     Cat --> WorkerBoot
-    ApiReg --> Serve[serve control HTTP]
-    WorkerReg --> Run[run jobs]
+    ApiReg --> Serve["serve control HTTP"]
+    WorkerReg --> Run["run jobs"]
 ```
 
 Same install loop on both sides; the only difference is the
