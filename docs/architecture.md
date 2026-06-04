@@ -299,43 +299,67 @@ Adding a third runtime means extending `KNOWN_RUNTIMES` in
 
 ---
 
-## 6. Platform and domain are separate, on the worker
+## 6. Platform and domain are separate everywhere
 
-In prod, **the worker image carries zero domain code**. Both
-`worker` and `worker-crewai` run the identical virgin
-`aiplatform-worker` image — only `WORKER_RUNTIME` env differs. The
-platform's own domains (math-qa, math-conversation) arrive at boot
-via the CodePackage catalog, **the same way a friend's domain does**.
+**Both** the worker and the API images in prod now carry zero domain
+code. The platform's own domains (math-qa, math-conversation) arrive
+at boot via the CodePackage catalog — **the same way a friend's
+domain does**. There is no longer a special path for "platform
+domains" vs "friend domains"; they're the same path.
 
-The path math-qa takes is the path your domain takes:
+The shape per process:
 
 ```mermaid
 graph LR
     Build[uv build --wheel] --> Deploy[aiplatform deploy<br/>--bundle bundle.toml]
     Deploy --> Cat[(code_packages<br/>job_definitions<br/>artifact_types)]
-    Cat --> Worker[worker boot:<br/>install_packages_for_runtime]
-    Worker --> Reg[register_execution_domains]
-    Reg --> Serve[serve jobs]
+
+    subgraph api_proc["API process (virgin image)"]
+        ApiBoot[boot:<br/>install_control_packages_for_api]
+        ApiReg[register_control_domains]
+        ApiBoot --> ApiReg
+    end
+
+    subgraph worker_proc["Worker process (virgin image)"]
+        WorkerBoot[boot:<br/>install_packages_for_runtime]
+        WorkerReg[register_execution_domains]
+        WorkerBoot --> WorkerReg
+    end
+
+    Cat --> ApiBoot
+    Cat --> WorkerBoot
+    ApiReg --> Serve[serve control HTTP]
+    WorkerReg --> Run[run jobs]
 ```
 
-This means the prod posture matches the friend-test posture:
+Same install loop on both sides; the only difference is the
+extras + filter:
 
-- No `Dockerfile.<your-domain>` for prod images. The CI build matrix
-  produces *only* `aiplatform-worker` (virgin), `aiplatform-api`,
-  `math-ui`, `platform-ui` — none of which know about any specific
-  domain.
-- Adding or removing a domain is a `aiplatform deploy` away. No image
-  rebuild, no compose change, no platform PR.
-- The local-dev path (`docker compose up`) still bakes math-qa and
-  math-conversation via `Dockerfile.worker-domain` as a convenience
-  (skips the deploy step on a fresh box with an empty catalog). The
-  prod compose **does not** use that Dockerfile.
+- **Worker** queries the catalog for one `runtime_selector` and
+  installs each wheel **with `[execution]`** so the LLM stack
+  (pydantic-ai-slim / crewai) lands.
+- **API** queries the catalog with no filter and installs each wheel
+  **without** `[execution]` — control modules only. The API stays
+  engine-free; the `import_guard` enforces this independently.
 
-The same shift is *not yet* applied to the API: `Dockerfile.api`
-still pre-installs the math-qa and math-conversation *control*
-modules so the API's boot-time `register_control_domains` can import
-them. Closing that gap (an API-side analog of the worker's catalog
-install pass) is on-deck — see §8.
+What this means in practice:
+
+- **CI build matrix** produces only platform images:
+  `aiplatform-api`, `aiplatform-worker` (virgin), `math-ui`,
+  `platform-ui`. None know about any specific domain.
+- **Adding or removing a domain** is a single `aiplatform deploy`
+  call. No image rebuild, no compose change, no platform PR.
+- **Local-dev convenience** (`docker compose up`) still bakes
+  math-qa + math-conversation into worker images via
+  `Dockerfile.worker-domain`, and into the API image via path-source
+  installs, so a fresh box with an empty catalog still works. The
+  prod compose **does not** use either of those shortcuts.
+
+The one residual hardcode: `composition_root._DOMAINS` (a Python
+list naming the two domain modules) is consulted **after** the
+install pass to decide what to import. A friend adding a new domain
+still has to edit that list. Closing that gap fully (catalog drives
+the module list too) is the remaining axis — see §8.
 
 ---
 
@@ -366,13 +390,16 @@ The pieces a new reader needs to find, mapped to where they live.
 What's deliberately not coupled yet, so the next person extending the
 platform doesn't trip:
 
-- **API image is not yet virgin.** `Dockerfile.api` pre-installs the
-  math-qa and math-conversation *control* modules so the boot-time
-  `register_control_domains` can import them. The analog of the
-  worker's `install_packages_for_runtime` doesn't exist for the API
-  yet — adding it (or making the auto-deploy optional and requiring
-  explicit `aiplatform deploy` for all domains, friend and platform
-  alike) is the next axis of the platform/domain split cleanup.
+- **`composition_root._DOMAINS` is still hardcoded.** Both the API
+  and the worker iterate a Python list of `(control_module,
+  execution_module, runtime)` tuples to decide what to import after
+  the catalog install pass. A friend adding a new domain still has
+  to edit that list. Closing this gap fully (catalog drives the
+  module list too) likely means a `control_entrypoint` field on
+  `JobDefinitionRecord` or `CodePackageRecord`. Today this is
+  partially mitigated by `control_registers` / `execution_registers`
+  catching `ModuleNotFoundError` so a missing wheel degrades the
+  boot instead of crashing it.
 - **JobDefinition ↔ CodePackage.** A JobDefinition row carries
   `code_entrypoint` as a free string. There's no foreign key into
   `code_packages` and the worker doesn't verify the entrypoint

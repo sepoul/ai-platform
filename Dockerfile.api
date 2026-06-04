@@ -1,10 +1,11 @@
 # Control-plane image (aiplatform-api): job creation / exploration /
-# artifact lookup. Installs core + api + every domain package CONTROL-side
-# only — the worker package and the AI engine (pydantic_graph / pydantic_ai
-# / crewai) are not in this image. Each domain package's `[execution]`
-# extra (which carries the LLM stack) is deliberately not pulled here, so
-# engine isolation is physical (ModuleNotFound) on top of the runtime
-# import guard. See docs/control_execution_split.md.
+# artifact lookup. Truly virgin — no domain source code, no math-qa or
+# math-conversation pre-installed. Domain control modules arrive at
+# boot via the CodePackage catalog (the API-side analog of the worker's
+# install pass; see ai_platform.jobs.code_package_install). The
+# `[execution]` extras (LLM stacks) are still never pulled — the API
+# is engine-free on top of the runtime import_guard. See
+# docs/architecture.md §6 and docs/control_execution_split.md.
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -17,18 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Only the control plane's source + shared core + every domain pkg
-# (control-side imports only) + repo-root data. No worker source — true
-# per-image isolation.
+# Only platform source — core + api. Domain wheels arrive at boot via
+# `aiplatform deploy` → CodePackage catalog → install_control_packages_for_api.
 COPY packages/core               /app/packages/core
 COPY packages/api                /app/packages/api
-COPY packages/math-qa            /app/packages/math-qa
-COPY packages/math-conversation  /app/packages/math-conversation
 COPY instructions                /app/instructions
 COPY supabase                    /app/supabase
 
-# Editable install: resolves deps (core + math pkgs via path sources). The
-# api pyproject names both domain packages directly; their `[execution]`
-# extras are NOT pulled (those carry pydantic_ai / crewai). Source stays
-# under /app/packages/*/src so repo-root data dirs resolve at runtime.
+# Editable install of the api package + core (path source). Domain
+# packages are no longer pinned here — see commit history for the
+# previous shape.
 RUN uv pip install --system --no-cache -e packages/api

@@ -24,10 +24,21 @@ enforce_control_plane()
 from ai_platform.api.app import build_api  # noqa: E402
 from ai_platform.compute.bootstrap import bootstrap_compute  # noqa: E402
 from ai_platform.jobs.bootstrap import register_control_domains  # noqa: E402
+from ai_platform.jobs.code_package_install import install_control_packages_for_api  # noqa: E402
 from ai_platform.workspace.bootstrap import bootstrap_workspace  # noqa: E402
 from ai_platform.composition_root import control_registers  # noqa: E402
 
 _workspace = bootstrap_workspace()
+
+# Friend-test path on the API: pull every CodePackage from the catalog
+# and pip-install its *control modules only* (no `[execution]` extra)
+# before `register_control_domains` tries to import them. This is the
+# API-side analog of `install_packages_for_runtime` on the worker.
+# Best-effort + idempotent: skips already-installed wheels at matching
+# versions, swallows failures so a degraded catalog doesn't dead-end
+# API boot.
+install_control_packages_for_api(_workspace.code_package_service)
+
 # Control plane only — every job type, across all runtimes, no engine import.
 _domains = register_control_domains(control_registers(), _workspace)
 _compute = bootstrap_compute(_workspace.executor, {})

@@ -44,21 +44,72 @@ def install_packages_for_runtime(
 ) -> list[str]:
     """Install every CodePackage catalog row for this runtime.
 
+    Worker-side entrypoint. Pulls wheels for one `runtime_selector`
+    and installs with the `[execution]` extra so the LLM stack
+    (pydantic-ai-slim / crewai) lands alongside the base package.
+
     Returns the list of package ids that were installed (excludes
     already-present ones). Failures are logged + swallowed — the
     returned list reflects what actually landed.
     """
+    return _install_all(
+        code_package_service,
+        runtime_selector=runtime_selector,
+        extras=["execution"],
+        scope=f"runtime={runtime_selector}",
+    )
+
+
+def install_control_packages_for_api(
+    code_package_service: "CodePackageService",
+) -> list[str]:
+    """Install every CodePackage's *control modules* on API boot.
+
+    API-side analog of `install_packages_for_runtime`. The API is
+    runtime-agnostic — it imports control modules across every
+    runtime so `register_control_domains` can introspect their
+    JobControls + artifact types. It does NOT need the runtime LLM
+    stack (`pydantic-ai-slim`, `crewai`), because control modules
+    are engine-free by construction (enforced via
+    `ai_platform.jobs.import_guard`).
+
+    The two diffs from the worker path:
+    1. No `runtime_selector` filter — install everything in the catalog.
+    2. No `[execution]` extra on the install target.
+
+    Best-effort, same as the worker version: failures log + continue.
+    A degraded API still serves whatever domains the previous boot's
+    install pass + the current image baseline produce.
+    """
+    return _install_all(
+        code_package_service,
+        runtime_selector=None,
+        extras=[],
+        scope="api control plane",
+    )
+
+
+def _install_all(
+    code_package_service: "CodePackageService",
+    *,
+    runtime_selector: str | None,
+    extras: list[str],
+    scope: str,
+) -> list[str]:
     try:
-        records = code_package_service.list(runtime_selector=runtime_selector)
+        if runtime_selector is None:
+            records = code_package_service.list()
+        else:
+            records = code_package_service.list(runtime_selector=runtime_selector)
     except Exception as exc:  # noqa: BLE001 — best-effort
         _logger.warning(
-            "Failed to list CodePackages for runtime=%s: %s — skipping install",
-            runtime_selector, exc,
+            "Failed to list CodePackages for %s: %s — skipping install",
+            scope, exc,
         )
         return []
 
     if not records:
-        _logger.info("No CodePackages registered for runtime=%s", runtime_selector)
+        _logger.info("No CodePackages registered for %s", scope)
         return []
 
     installed: list[str] = []
@@ -70,7 +121,7 @@ def install_packages_for_runtime(
             )
             continue
         try:
-            _download_and_install(record, code_package_service)
+            _download_and_install(record, code_package_service, extras=extras)
             installed.append(record.id)
             _logger.info("Installed CodePackage %s", record.id)
         except Exception as exc:  # noqa: BLE001 — best-effort
@@ -90,7 +141,10 @@ def _is_already_installed(record: "CodePackageRecord") -> bool:
 
 
 def _download_and_install(
-    record: "CodePackageRecord", service: "CodePackageService"
+    record: "CodePackageRecord",
+    service: "CodePackageService",
+    *,
+    extras: list[str],
 ) -> None:
     """Fetch the blob (sha256-verified by the service) to a temp file
     and `pip install` it into the current interpreter.
@@ -103,13 +157,15 @@ def _download_and_install(
        "Invalid wheel filename (wrong number of parts)"). We use a temp
        *directory* and write the wheel inside under its real filename.
 
-    2. We append `[execution]` to the install target. Platform
-       convention: a domain wheel's runtime-side deps live under that
-       extra (`pydantic-ai-slim[…]` for the default runtime, `crewai`
-       for crewai). pip warns + continues if the extra doesn't exist,
-       so a friend's wheel that uses a different name still installs
-       its base package — just without the runtime stack. The convention
-       is documented in `packages/{math-qa,math-conversation}/bundle.toml`.
+    2. `extras` (a list like `["execution"]`) is appended to the install
+       target so pip resolves the wheel's optional dep set. The worker
+       path passes `["execution"]` (platform convention: runtime-side
+       LLM stack lives under that extra). The API path passes `[]` —
+       control modules only, no LLM deps. pip warns + continues if the
+       extra doesn't exist, so a friend's wheel that uses a different
+       name still installs its base package — just without the runtime
+       stack. The convention is documented in
+       `packages/{math-qa,math-conversation}/bundle.toml`.
 
     No `--force-reinstall`: it would also try to reinstall transitive
     deps like `aiplatform-core`, which is path-source-only and not on
@@ -122,7 +178,8 @@ def _download_and_install(
     wheel_path = tmpdir / record.filename
     wheel_path.write_bytes(wheel_bytes)
 
-    target = f"{wheel_path}[execution]"
+    suffix = f"[{','.join(extras)}]" if extras else ""
+    target = f"{wheel_path}{suffix}"
 
     try:
         proc = subprocess.run(
