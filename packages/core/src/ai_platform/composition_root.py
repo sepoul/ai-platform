@@ -51,13 +51,52 @@ def _execution(module_path: str) -> ExecutionRegister:
 
 
 def control_registers() -> list[ControlRegister]:
-    """Every domain's control plane — for the API (engine-free, lazy import)."""
-    return [_control(d.control) for d in _DOMAINS]
+    """Every domain's control plane — for the API (engine-free, lazy import).
+
+    Best-effort: a domain whose wheel hasn't landed yet (catalog
+    install failed / catalog empty on first boot) is skipped with a
+    log warning, not raised. Pairs with
+    `install_control_packages_for_api` — the install pass runs first
+    and tries to make every entry below importable; if one slips
+    through, this lets the API boot serve the rest.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    out: list[ControlRegister] = []
+    for d in _DOMAINS:
+        try:
+            out.append(_control(d.control))
+        except ModuleNotFoundError as exc:
+            log.warning(
+                "control_registers: skipping %s — not importable (%s). "
+                "Was the wheel deployed to the CodePackage catalog?",
+                d.control, exc,
+            )
+    return out
 
 
 def execution_registers_for_runtime(runtime: str) -> list[ExecutionRegister]:
-    """Execution plane for domains on `runtime` — for a worker (lazy import)."""
-    return [_execution(d.execution) for d in _DOMAINS if d.runtime == runtime]
+    """Execution plane for domains on `runtime` — for a worker (lazy import).
+
+    Same posture as [[control_registers]]: skip on ModuleNotFoundError
+    so a missing wheel degrades the worker (it serves fewer job_types)
+    instead of crashing it.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    out: list[ExecutionRegister] = []
+    for d in _DOMAINS:
+        if d.runtime != runtime:
+            continue
+        try:
+            out.append(_execution(d.execution))
+        except ModuleNotFoundError as exc:
+            log.warning(
+                "execution_registers: skipping %s — not importable (%s). "
+                "Was the wheel deployed to the CodePackage catalog?",
+                d.execution, exc,
+            )
+    return out
 
 
 def execution_registers_all() -> list[ExecutionRegister]:

@@ -16,6 +16,7 @@ import pytest
 
 from ai_platform.jobs.code_package_install import (
     _is_already_installed,
+    install_control_packages_for_api,
     install_packages_for_runtime,
 )
 from ai_platform.workspace.storage.structured.code_package_repository import (
@@ -182,3 +183,84 @@ def test_install_filters_by_runtime():
     service.list.return_value = []
     install_packages_for_runtime("crewai", service)
     service.list.assert_called_once_with(runtime_selector="crewai")
+
+
+# ---------------------------------------------------------------------------
+# install_control_packages_for_api — API-side path
+# ---------------------------------------------------------------------------
+
+
+def test_install_control_packages_does_not_filter_by_runtime():
+    """The API is runtime-agnostic — it imports every domain's control
+    module regardless of runtime. So `service.list()` is called WITHOUT
+    a runtime_selector filter (vs. the worker path which filters).
+    """
+    service = MagicMock()
+    service.list.return_value = []
+    install_control_packages_for_api(service)
+    service.list.assert_called_once_with()  # no kwargs
+
+
+def test_install_control_packages_invokes_pip_without_execution_extra():
+    """The API doesn't need the runtime LLM stack (pydantic-ai-slim,
+    crewai). The install target therefore omits `[execution]` —
+    pip only resolves the base wheel + its base deps.
+    """
+    service = MagicMock()
+    service.list.return_value = [_record(name="mathai-math-qa")]
+    service.download.return_value = (_record(name="mathai-math-qa"), b"wheel-bytes")
+
+    fake_pip_ok = MagicMock(returncode=0, stderr="")
+
+    with patch(
+        "ai_platform.jobs.code_package_install._is_already_installed",
+        return_value=False,
+    ), patch(
+        "ai_platform.jobs.code_package_install.subprocess.run",
+        return_value=fake_pip_ok,
+    ) as mock_run:
+        installed = install_control_packages_for_api(service)
+
+    assert installed == ["mathai-math-qa@1.0.0"]
+    cmd = mock_run.call_args.args[0]
+    assert cmd[1:4] == ["-m", "pip", "install"]
+    # API path: plain wheel path, NO [execution] suffix.
+    target = cmd[4]
+    assert target.endswith(_record(name="mathai-math-qa").filename)
+    assert "[execution]" not in target
+
+
+def test_install_control_packages_swallows_failures():
+    """API boot must still proceed if a single install fails — degraded
+    serving (whatever did install) is better than no API at all.
+    """
+    service = MagicMock()
+    service.list.return_value = [_record(name="ok"), _record(name="bad")]
+
+    def fake_download(pid):
+        if pid == "bad@1.0.0":
+            raise RuntimeError("download failed")
+        return (_record(name="ok"), b"x")
+
+    service.download.side_effect = fake_download
+
+    with patch(
+        "ai_platform.jobs.code_package_install._is_already_installed",
+        return_value=False,
+    ), patch(
+        "ai_platform.jobs.code_package_install.subprocess.run",
+        return_value=MagicMock(returncode=0, stderr=""),
+    ):
+        installed = install_control_packages_for_api(service)
+
+    assert installed == ["ok@1.0.0"]
+
+
+def test_install_control_packages_swallows_list_failure():
+    """A DB-down `service.list()` returns [] instead of raising —
+    same posture as the worker path.
+    """
+    service = MagicMock()
+    service.list.side_effect = RuntimeError("DB unreachable")
+    assert install_control_packages_for_api(service) == []
+    service.download.assert_not_called()
