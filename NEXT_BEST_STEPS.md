@@ -472,51 +472,129 @@ Supabase Storage object metadata works for simple cases; if we end up
 storing metadata-heavy artifacts we should switch to native metadata
 and drop the sidecars. Decision deferred until a real perf signal.
 
-## 7p. Platform/domain split — Phase C (bundle deploy substrate) ⚙️ in progress
+## 7p. Platform/domain split — Phases A–D ✅ done
 
-The "give the code to my friend" track. Where we are:
+The "give the code to my friend" track. Final shipped shape:
 
 - **Phase A** ✅ (PR #3) — domain code lives in per-runtime packages
   (`packages/math-qa/`, `packages/math-conversation/`); platform
   packages are domain-free.
 - **Phase A.5** ✅ (PR #4) — platform vocabulary renamed
-  (`mathapp-*` → `aiplatform-*`, `mathapp.*` → `ai_platform.*`,
-  `mathai.workspace.*` facade deleted).
-- **Phase B** ✅ (PR #5) — virgin worker image + chained domain images
-  built FROM it via `Dockerfile.worker-domain`. The platform image is
-  the same artifact regardless of domain.
-- **Phase C, slice 1** ✅ (this PR) — JobDefinition catalog. Bundle
-  deploy can now push a JobControl into the platform via
-  `POST /job-definitions`; `aiplatform.bundle.deploy_control(...)` is
-  the Python entrypoint a domain repo calls. Records are stored
-  (Supabase / local / B2) but **routing still goes through the
-  in-memory `_job_controls` dict** — the catalog is a parallel
-  artifact for now.
-- **Phase C, slice 2** 📝 open — cutover. `make_jobs_router` reads the
-  discriminated submit/result union from the catalog instead of from
-  in-code registration. Workers on boot pull their JobExecution
-  references from `runtime_selector` queries against the catalog.
-  Composition_root drops from "the source of truth" to "the bootstrap
-  seed" (and is eventually retired when wheel upload lands).
-- **Phase C, slice 3** 📝 open — ArtifactType catalog. Mirror of the
-  JobDefinition shape; lets a tenant register new artifact types
-  without baking them into the platform image.
-- **Phase C, slice 4** 📝 open — Code package upload. The
-  `code_entrypoint` string currently resolves against the in-image
-  source tree (Phase B baked the domain wheel in). Slice 4 publishes
-  domain wheels independently (GHCR's Python registry or PyPI), and
-  the worker pip-installs the wheel at runtime from the
-  JobDefinition's `code_entrypoint` package coordinate. After this,
-  `Dockerfile.worker-domain` is no longer needed for a tenant — they
-  bring the wheel; the platform installs it on the virgin image.
-- **Phase D** 📝 open — `aiplatform deploy` CLI + a `bundle.toml`
-  manifest. The Python `deploy_control` is the substrate; the CLI is
-  the user-facing one-liner ("give your friend the repo, `aiplatform
-  deploy` is what they run").
+  (`mathapp-*` → `aiplatform-*`, `mathapp.*` → `ai_platform.*`).
+- **Phase B** ✅ (PR #5) — virgin worker image substrate.
+- **Phase C slice 1** ✅ (PR #6) — JobDefinition catalog.
+- **Phase C slice 1b** ✅ (PR #7) — auto-deploy known domains on API boot.
+- **Phase C slice 2** ✅ (PR #8) — ArtifactType catalog.
+- **Phase C slice 3** ✅ (PR #9) — CodePackage catalog substrate
+  (wheel upload + download, sha256-verified).
+- **Phase C slice 4** ✅ (PRs #10, #11) — worker boot-time pip-install
+  loop. Catalog wheels arrive at runtime; `--force-reinstall` dropped,
+  `[execution]` extras convention documented, pip stderr surfaced.
+- **Phase D** ✅ (PR #12) — `aiplatform deploy` CLI + `bundle.toml`.
+- **PlatformSession** ✅ (PR #13) — Spark-session-shaped Python runtime
+  entry (`PlatformSession.connect` + `JobHandle.wait` / `.result`).
+- **platform-ui** ✅ (PRs #14–16) — domain-free admin SPA. Catalog
+  browsers + jobs/runs inspector + schema-driven submit-job form.
+- **Virgin worker prod** ✅ (PR #17) — `Dockerfile.worker-domain`
+  retired from prod; `aiplatform-worker:latest` runs both runtimes,
+  pulls math wheels from catalog at boot.
+- **Virgin API prod** ✅ (PR #18) — `Dockerfile.api` slim;
+  `install_control_packages_for_api` analog of the worker install pass;
+  `composition_root.control_registers` hardened against
+  `ModuleNotFoundError`. Both prod images now carry zero domain code.
 
-The "PlatformSession" object (the SparkSession-shaped runtime API for
-domain code) is its own track — not part of Phase C. Surfaces after
-the bundle-deploy + cutover work is done.
+End-to-end verified live with real `math_qa` jobs through the fully
+virgin stack.
+
+## 7q. Repo split — extract `math-app`, build TS SDK 📝 open
+
+The platform repo and the math domain should be different repos. The
+substrate is ready (virgin images + catalog deploy); what's left is
+the cleanup so the split is a `git mv`, not a rewrite.
+
+The plan is three ordered phases. Each phase ships as its own PR set
+in **this** repo before the actual `git mv` happens.
+
+### Phase 1 — Drop the `composition_root._DOMAINS` hardcode
+
+Today both API and worker iterate a Python list naming the two domain
+modules to decide what to import after the catalog install pass. A
+friend's domain still has to be added to that list. Catalog-driven
+discovery closes the gap.
+
+- Add `control_entrypoint: str` field to `JobDefinitionRecord`
+  (alongside the existing `code_entrypoint` for execution). The
+  bundle.toml manifest already carries this in `[control]`; just thread
+  it through `build_record` + `_auto_deploy_to_catalog`.
+- Add `control_entrypoint: str` to `ControlDomain` so the auto-deploy
+  has it at hand; each domain's `register_control` sets it.
+- New helpers:
+  - `control_registers_from_catalog(jd_service) → list[ControlRegister]`
+    — read all JobDefinitions, dedup by `control_entrypoint`, import.
+  - `execution_registers_from_catalog(jd_service, runtime) →
+    list[ExecutionRegister]` — filter by `runtime_selector`, dedup by
+    `code_entrypoint`, import.
+- API + worker entrypoints swap `composition_root.control_registers()`
+  / `execution_registers_for_runtime(runtime)` for the catalog
+  versions. Keep `_DOMAINS`-based functions as a one-line fallback
+  only if the catalog query fails (DB down on cold boot).
+- `composition_root._DOMAINS` becomes empty (or the module is
+  retired in a follow-up PR). After this, **nothing in
+  `packages/core` mentions `mathai.math_qa` or `mathai.math_conversation`**.
+- Tests + arch doc §8 close-out.
+
+### Phase 2 — `@aiplatform/sdk` (TypeScript)
+
+`packages/sdk-ts/` (or top-level `sdk-ts/`) — the JS/TS mirror of
+`PlatformSession`. Ships from this repo, consumed by both UIs.
+
+- `PlatformSession`, `JobHandle` (browser + node).
+- Catalog reads: `listJobDefinitions`, `listArtifactTypes`,
+  `listCodePackages` — all typed via the same openapi-typescript
+  pipeline platform-ui already uses, but **shipped inside the SDK**
+  so consumers stop running their own `gen-api.sh`.
+- BFF helper for Next.js (`createBffProxy(upstreamUrl)`) — the
+  `app/api/[...path]/route.ts` pattern duplicated in math-ui +
+  platform-ui collapses into one factory.
+- Surface designed by reading math-ui's `lib/platform/` —
+  carve the line cleanly: anything every domain needs goes in the
+  SDK; math-specific things (LaTeX rendering, math-shaped event
+  types) stay in math-ui.
+- **platform-ui dogfoods the SDK first** — catches API gaps before
+  math-ui depends on them.
+- math-ui refactored to consume the SDK (still in this repo).
+  Should be a near-trivial PR if the SDK was designed from
+  math-ui's existing shape.
+
+### Phase 3 — Synthetic demo domain + the actual `git mv`
+
+- `packages/_demo/` — tiny built-in domain (single JobControl that
+  echoes input, single ArtifactType). Lives in this platform repo
+  forever; only purpose is to keep `docker compose up` and CI runnable
+  after math leaves. Wired into local-dev compose as the default
+  "hello world" target.
+- `git mv packages/math-{qa,conversation}` and `math-ui/` to a new
+  `math-app` repo. Set up its CI to:
+  - Build `mathai-math-qa` and `mathai-math-conversation` wheels.
+  - `aiplatform deploy --bundle ... --api-url $PLATFORM_URL` to land
+    catalog rows on the target platform.
+  - Build + push the math-ui image.
+- This repo's `docker-compose.yml` switches from
+  `Dockerfile.worker-domain` (which baked math in) to the synthetic
+  demo for local dev. `Dockerfile.worker-domain` is finally retired.
+
+### Out of scope (good follow-ups, not blocking the split)
+
+- Catalog-driven *live routing* — today `make_jobs_router` still
+  consumes the in-memory `_job_controls` dict at boot. After Phase 1
+  the dict is populated from the catalog, but the API still needs a
+  restart for new JobDefinitions to be live-routable. A streaming/
+  watch model on top of `/job-definitions` SSE would close this.
+- `JobDefinition.code_package_ref` — foreign key into `code_packages`
+  so the worker verifies the entrypoint resolves to *this* deployed
+  package, not whatever was lying around.
+- API `logging.basicConfig` polish (so install lines hit stdout on
+  the API process too, not just on workers).
 
 ## 8. `math_conversation` v1.x follow-ups 📝 open
 
