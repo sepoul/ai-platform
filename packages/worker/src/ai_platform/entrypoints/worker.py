@@ -87,7 +87,13 @@ def main():
     # fallback covers cold boot (empty catalog) so a fresh deploy still
     # serves the platform's baseline domains.
     registers = execution_registers_from_catalog(ws.job_definition_service, runtime)
-    if not registers:
+    if registers:
+        logger.info(
+            "execution_registers_from_catalog returned %d register(s) for "
+            "runtime=%s — catalog-driven discovery active",
+            len(registers), runtime,
+        )
+    else:
         logger.info(
             "execution_registers_from_catalog returned empty for runtime=%s — "
             "falling back to hardcoded _DOMAINS for cold boot",

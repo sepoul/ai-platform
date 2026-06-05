@@ -59,7 +59,13 @@ install_control_packages_for_api(_workspace.code_package_service)
 # fallback covers cold boot (empty catalog) so a fresh deploy still
 # brings up the platform's baseline domains.
 _registers = control_registers_from_catalog(_workspace.job_definition_service)
-if not _registers:
+if _registers:
+    _log.info(
+        "control_registers_from_catalog returned %d register(s) — "
+        "catalog-driven discovery active",
+        len(_registers),
+    )
+else:
     _log.info(
         "control_registers_from_catalog returned empty — "
         "falling back to hardcoded _DOMAINS for cold boot"
