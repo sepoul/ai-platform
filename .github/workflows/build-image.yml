@@ -58,9 +58,12 @@ jobs:
             build-args: ""
           # Domain-free admin SPA (catalog browser). Built from
           # platform-ui/Dockerfile; listens on 7861 in prod compose.
+          # Context is REPO ROOT (not platform-ui/) because the image
+          # also needs sibling sdk-ts/ to build the in-repo TypeScript
+          # SDK that platform-ui consumes.
           - name: platform-ui
-            context: platform-ui
-            file: ""
+            context: .
+            file: platform-ui/Dockerfile
             image: ghcr.io/sepoul/platform-ui
             build-args: ""
     steps:

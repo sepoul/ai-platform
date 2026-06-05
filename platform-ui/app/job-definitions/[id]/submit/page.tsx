@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SubmitJobForm } from "@/components/SubmitJobForm";
-import { createApiClient } from "@/lib/api/client";
+import { platformSession } from "@/lib/session";
 import type { JobDefinitionRecord } from "@/lib/api/catalogs";
 
 export const dynamic = "force-dynamic";
@@ -12,14 +12,12 @@ export default async function SubmitJobPage({ params }: Props) {
   const { id } = await params;
   const definitionId = decodeURIComponent(id);
 
-  const client = createApiClient();
-  const { data, error } = await client.GET("/job-definitions/{definition_id}", {
-    params: { path: { definition_id: definitionId } },
-  });
-  if (error || !data) {
+  let jd: JobDefinitionRecord;
+  try {
+    jd = await platformSession().getJobDefinitionById(definitionId);
+  } catch {
     notFound();
   }
-  const jd = data as JobDefinitionRecord;
 
   return (
     <div className="max-w-2xl">

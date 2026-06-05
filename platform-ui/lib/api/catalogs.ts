@@ -1,34 +1,25 @@
 /**
- * Server-side fetchers for the three platform catalogs. Each one uses
- * the typed `openapi-fetch` client; the returned shape matches the
- * generated `components["schemas"]` types.
+ * Server-side fetchers for the three platform catalogs. Thin
+ * wrappers over `@aiplatform/sdk`'s `PlatformSession`. The record
+ * types are re-exported here for ergonomic local imports.
  */
-import { createApiClient } from "@/lib/api/client";
-import type { components } from "@/lib/api/schema";
+import { platformSession } from "@/lib/session";
+import type {
+  ArtifactTypeRecord,
+  CodePackageRecord,
+  JobDefinitionRecord,
+} from "@aiplatform/sdk";
 
-// FastAPI emits separate input/output variants for models that have
-// computed/default fields. The list endpoints all return Output records.
-export type JobDefinitionRecord = components["schemas"]["JobDefinitionRecord-Output"];
-export type ArtifactTypeRecord = components["schemas"]["ArtifactTypeRecord"];
-export type CodePackageRecord = components["schemas"]["CodePackageRecord"];
+export type { ArtifactTypeRecord, CodePackageRecord, JobDefinitionRecord };
 
-export async function listJobDefinitions(): Promise<JobDefinitionRecord[]> {
-  const client = createApiClient();
-  const { data, error } = await client.GET("/job-definitions", {});
-  if (error) throw new Error(`/job-definitions failed: ${JSON.stringify(error)}`);
-  return data ?? [];
+export function listJobDefinitions(): Promise<JobDefinitionRecord[]> {
+  return platformSession().listJobDefinitions();
 }
 
-export async function listArtifactTypes(): Promise<ArtifactTypeRecord[]> {
-  const client = createApiClient();
-  const { data, error } = await client.GET("/artifact-types", {});
-  if (error) throw new Error(`/artifact-types failed: ${JSON.stringify(error)}`);
-  return data ?? [];
+export function listArtifactTypes(): Promise<ArtifactTypeRecord[]> {
+  return platformSession().listArtifactTypes();
 }
 
-export async function listCodePackages(): Promise<CodePackageRecord[]> {
-  const client = createApiClient();
-  const { data, error } = await client.GET("/code-packages", {});
-  if (error) throw new Error(`/code-packages failed: ${JSON.stringify(error)}`);
-  return data ?? [];
+export function listCodePackages(): Promise<CodePackageRecord[]> {
+  return platformSession().listCodePackages();
 }
