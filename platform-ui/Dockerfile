@@ -12,12 +12,16 @@ WORKDIR /sdk
 RUN apk add --no-cache libc6-compat
 
 COPY sdk-ts/package.json sdk-ts/package-lock.json* ./
+# `--ignore-scripts` skips the SDK's `prepare` (tsc), which would
+# otherwise run before src/ has been COPYd and fail. The explicit
+# `npm run build` below does the compile once everything's in place.
 RUN \
-  if [ -f package-lock.json ]; then npm ci; \
-  else npm i; \
+  if [ -f package-lock.json ]; then npm ci --ignore-scripts; \
+  else npm i --ignore-scripts; \
   fi
 
-COPY sdk-ts/tsconfig.json sdk-ts/scripts ./
+COPY sdk-ts/tsconfig.json ./
+COPY sdk-ts/scripts ./scripts
 COPY sdk-ts/src ./src
 RUN npm run build
 
@@ -34,9 +38,14 @@ COPY platform-ui/package.json platform-ui/package-lock.json* platform-ui/.npmrc*
 COPY --from=sdk /sdk ./sdk-ts
 
 WORKDIR /app/platform-ui
+# Same `--ignore-scripts` rationale as the SDK stage above: with
+# `install-links=true` (pinned in .npmrc), `npm ci` would hard-copy
+# sdk-ts/ and re-run its `prepare` (tsc) against the copy. The SDK's
+# dist/ was already built one stage up and copied in via --from=sdk;
+# we don't want it overwritten or fail-looped here.
 RUN \
-  if [ -f package-lock.json ]; then npm ci; \
-  else npm i; \
+  if [ -f package-lock.json ]; then npm ci --ignore-scripts; \
+  else npm i --ignore-scripts; \
   fi
 
 # ---------- next build ----------
