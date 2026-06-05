@@ -8,9 +8,9 @@
   "types": "./dist/index.d.ts",
   "files": ["dist", "src"],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/schema.d.ts dist/schema.d.ts",
     "typecheck": "tsc --noEmit",
-    "prepare": "tsc",
+    "prepare": "npm run build",
     "gen:api": "./scripts/gen-api.sh",
     "gen:api:check": "./scripts/gen-api.sh && git diff --exit-code src/schema.d.ts"
   },

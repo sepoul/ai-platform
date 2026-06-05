@@ -14,11 +14,18 @@
  */
 import { createApiClient, type ApiClient } from "./client";
 import {
+  type Artifact,
+  type ArtifactListResponse,
+  type ArtifactTypeListResponse,
   type ArtifactTypeRecord,
   type CodePackageRecord,
   type JobDefinitionRecord,
   type JobResultResponse,
   type JobStatusResponse,
+  type RunSubmitResponse,
+  type UserComment,
+  type WorkflowListResponse,
+  type WorkflowSpecResponse,
   TERMINAL_STATUSES,
 } from "./types";
 
@@ -139,6 +146,87 @@ export class PlatformSession {
     });
     if (error) throw new PlatformSessionError(`/jobs failed: ${JSON.stringify(error)}`);
     return data ?? [];
+  }
+
+  /**
+   * Post a reviewer's verdict (approve / reject / comment) to a job
+   * waiting at a human-review gate. The job transitions out of
+   * WAITING_INPUT into RUNNING (then SUCCEEDED / FAILED) after this.
+   */
+  async submitReview(jobId: string, review: UserComment): Promise<RunSubmitResponse> {
+    const { data, error, response } = await this.client.POST(
+      "/jobs/{job_id}/review",
+      {
+        params: { path: { job_id: jobId } },
+        body: review as never,
+      },
+    );
+    if (response.status === 404) throw new JobNotFoundError(`Job not found: ${jobId}`);
+    if (error) throw new PlatformSessionError(`/jobs/${jobId}/review failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError(`/jobs/${jobId}/review returned empty body`);
+    return data;
+  }
+
+  // ---- Artifacts (registry surface; coexists with /artifact-types) ----
+
+  async listArtifacts(opts: {
+    jobId?: string;
+    artifactType?: string;
+    limit?: number;
+  } = {}): Promise<ArtifactListResponse> {
+    const query: Record<string, string | number> = {};
+    if (opts.jobId) query.job_id = opts.jobId;
+    if (opts.artifactType) query.artifact_type = opts.artifactType;
+    if (opts.limit) query.limit = opts.limit;
+    const { data, error } = await this.client.GET("/artifacts", {
+      params: { query: query as never },
+    });
+    if (error) throw new PlatformSessionError(`/artifacts failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError("/artifacts returned empty body");
+    return data;
+  }
+
+  async getArtifact(artifactId: string): Promise<Artifact> {
+    const { data, error, response } = await this.client.GET(
+      "/artifacts/{artifact_id}",
+      { params: { path: { artifact_id: artifactId } } },
+    );
+    if (response.status === 404) {
+      throw new PlatformSessionError(`Artifact not found: ${artifactId}`);
+    }
+    if (error) throw new PlatformSessionError(`/artifacts/${artifactId} failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError(`/artifacts/${artifactId} returned empty body`);
+    return data as Artifact;
+  }
+
+  /** Older artifact-types registry endpoint (`/artifacts/types`). */
+  async listArtifactTypesRegistry(): Promise<ArtifactTypeListResponse> {
+    const { data, error } = await this.client.GET("/artifacts/types", {});
+    if (error) throw new PlatformSessionError(`/artifacts/types failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError("/artifacts/types returned empty body");
+    return data;
+  }
+
+  // ---- Workflows ----
+
+  async listWorkflows(): Promise<WorkflowListResponse> {
+    const { data, error } = await this.client.GET("/workflows", {});
+    if (error) throw new PlatformSessionError(`/workflows failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError("/workflows returned empty body");
+    return data;
+  }
+
+  async getWorkflowSpec(jobType: string): Promise<WorkflowSpecResponse> {
+    const { data, error, response } = await this.client.GET(
+      "/workflows/{job_type}",
+      { params: { path: { job_type: jobType } } },
+    );
+    if (response.status === 404) {
+      throw new PlatformSessionError(`Workflow not found for job type: ${jobType}`);
+    }
+    if (error) throw new PlatformSessionError(`/workflows/${jobType} failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError(`/workflows/${jobType} returned empty body`);
+    return data;
   }
 
   // ---- Internal — called by JobHandle ----

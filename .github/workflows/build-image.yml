@@ -51,9 +51,12 @@ jobs:
             file: Dockerfile.worker
             image: ghcr.io/sepoul/aiplatform-worker
             build-args: ""
+          # math-ui now consumes @aiplatform/sdk (file:../sdk-ts), so
+          # the build context is REPO ROOT (not math-ui/) — same shape
+          # as platform-ui below.
           - name: math-ui
-            context: math-ui
-            file: ""
+            context: .
+            file: math-ui/Dockerfile
             image: ghcr.io/sepoul/math-ui
             build-args: ""
           # Domain-free admin SPA (catalog browser). Built from

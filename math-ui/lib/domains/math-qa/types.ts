@@ -4,7 +4,7 @@
  * import from `@/lib/domains/math-qa` rather than reaching into the
  * platform schema directly.
  */
-import type { components } from "@/lib/api/schema";
+import type { components } from "@aiplatform/sdk";
 
 type S = components["schemas"];
 

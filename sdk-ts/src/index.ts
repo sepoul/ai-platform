@@ -36,6 +36,23 @@ export {
   type CodePackageRecord,
   type JobStatusResponse,
   type JobResultResponse,
+  type RunSubmitResponse,
+  type UserComment,
+  // Artifacts (legacy registry endpoints — coexist with /artifact-types)
+  type Artifact,
+  type ArtifactType,
+  type ArtifactSummary,
+  type ArtifactListResponse,
+  type ArtifactTypeSpec,
+  type ArtifactTypeListResponse,
+  // Workflows
+  type ParamSpec,
+  type StageResponse,
+  type EdgeResponse,
+  type GateSpec,
+  type WorkflowSpecResponse,
+  type WorkflowListItem,
+  type WorkflowListResponse,
 } from "./types";
 
 // Re-export the raw schema so power users can reach for
