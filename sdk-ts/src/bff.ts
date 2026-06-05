@@ -26,8 +26,17 @@
 import type { NextRequest } from "next/server";
 
 export interface BffHandlerOptions {
-  /** The upstream platform API base URL (e.g. `http://api:8000`). */
-  upstreamUrl: string;
+  /**
+   * The upstream platform API base URL (e.g. `http://api:8000`).
+   *
+   * Accepts a string OR a `() => string` thunk. Prefer the thunk
+   * when reading from `process.env` — Next.js's build-time page-
+   * data collection imports route modules with envs unset, and a
+   * string read at module load (`createBffMethods({upstreamUrl:
+   * process.env.X!})`) would crash the build. The thunk resolves
+   * per-request instead.
+   */
+  upstreamUrl: string | (() => string);
   /**
    * Headers always set on the upstream request. Useful for auth tokens
    * minted server-side. Browser-supplied headers (Authorization,
@@ -43,8 +52,12 @@ type RouteHandler = (
 
 /** A single route handler that proxies all HTTP methods. */
 export function createBffHandler(opts: BffHandlerOptions): RouteHandler {
-  const upstream = opts.upstreamUrl.replace(/\/$/, "") + "/";
+  const resolveUpstream = (): string => {
+    const raw = typeof opts.upstreamUrl === "function" ? opts.upstreamUrl() : opts.upstreamUrl;
+    return raw.replace(/\/$/, "") + "/";
+  };
   return async function proxy(req, { params }) {
+    const upstream = resolveUpstream();
     const { path } = await params;
     const upstreamUrl = new URL(path.join("/"), upstream);
     upstreamUrl.search = req.nextUrl.search;
