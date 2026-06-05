@@ -1,0 +1,33 @@
+{
+  "name": "@aiplatform/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript client for ai-platform. Mirror of the Python PlatformSession API plus a Next.js BFF proxy helper.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsc",
+    "gen:api": "./scripts/gen-api.sh",
+    "gen:api:check": "./scripts/gen-api.sh && git diff --exit-code src/schema.d.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "peerDependencies": {
+    "next": ">=14"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "next": "16.1.6",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5"
+  }
+}

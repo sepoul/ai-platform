@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# Regenerate the typed API contract from the platform's OpenAPI schema.
+# Regenerate the SDK's typed API contract from the platform's OpenAPI
+# schema. The generated types are committed to the SDK so consumers
+# (math-ui, platform-ui, friend repos) get them transitively via
+# `npm install @aiplatform/sdk` — no per-consumer codegen needed.
 #
-# Same source-resolution policy as math-ui/scripts/gen-api.sh:
+# Same source-resolution ladder as math-ui/scripts/gen-api.sh:
 #   1. $OPENAPI_SOURCE   — file path or http(s) URL
 #   2. $MATHAPP_REPO     — path to a mathapp checkout
-#   3. ..                — monorepo parent (mathapp root)
+#   3. ..                — monorepo parent
 #   4. http://127.0.0.1:8000/openapi.json — fallback
-#
-# Output: lib/api/schema.d.ts (committed; PR diffs surface contract drift).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-OUT="lib/api/schema.d.ts"
+OUT="src/schema.d.ts"
 TMP="$(mktemp -t openapi.XXXXXX.json)"
 trap 'rm -f "$TMP"' EXIT
 
@@ -39,7 +40,7 @@ resolve_source() {
   fi
 
   local url="http://127.0.0.1:8000/openapi.json"
-  echo "[gen-api] source: $url (fallback — start mathapp's scripts/api.sh)" >&2
+  echo "[gen-api] source: $url (fallback)" >&2
   curl -sfSL "$url" -o "$TMP"
 }
 

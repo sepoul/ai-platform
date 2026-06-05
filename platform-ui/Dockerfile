@@ -1,5 +1,25 @@
-# Mirror of math-ui/Dockerfile — same Next 16 standalone-output pattern.
-# Difference: PORT 7861 (math-ui owns 7860).
+# Build context: REPO ROOT (not platform-ui/). The image needs the
+# sibling sdk-ts/ to build the in-repo SDK before bundling platform-ui.
+# The CI build matrix sets `context: .` for this image.
+#
+# Mirror of math-ui/Dockerfile in spirit (Next 16 standalone output).
+# PORT 7861 (math-ui owns 7860).
+
+# ---------- sdk build ----------
+FROM node:20-alpine AS sdk
+WORKDIR /sdk
+
+RUN apk add --no-cache libc6-compat
+
+COPY sdk-ts/package.json sdk-ts/package-lock.json* ./
+RUN \
+  if [ -f package-lock.json ]; then npm ci; \
+  else npm i; \
+  fi
+
+COPY sdk-ts/tsconfig.json sdk-ts/scripts ./
+COPY sdk-ts/src ./src
+RUN npm run build
 
 # ---------- deps ----------
 FROM node:20-alpine AS deps
@@ -7,22 +27,31 @@ WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
 
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
+# `.npmrc` pins install-links so file: deps are hard-copied (Turbopack
+# can't resolve symlinked file: deps). The directory layout has to
+# place sdk-ts alongside platform-ui for the `file:../sdk-ts` ref.
+COPY platform-ui/package.json platform-ui/package-lock.json* platform-ui/.npmrc* ./platform-ui/
+COPY --from=sdk /sdk ./sdk-ts
+
+WORKDIR /app/platform-ui
 RUN \
   if [ -f package-lock.json ]; then npm ci; \
-  elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable && pnpm i --frozen-lockfile; \
   else npm i; \
   fi
 
-# ---------- build ----------
+# ---------- next build ----------
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npm run build
+COPY --from=deps /app/platform-ui/node_modules ./platform-ui/node_modules
+COPY --from=sdk /sdk ./sdk-ts
+COPY platform-ui ./platform-ui
+
+WORKDIR /app/platform-ui
+# Skip the `predev`/`prebuild` SDK rebuild — sdk-ts/dist is already
+# copied above via --from=sdk.
+RUN npm run build --ignore-scripts
 
 # ---------- run ----------
 FROM node:20-alpine AS runner
@@ -34,11 +63,12 @@ ENV PORT=7861
 
 EXPOSE 7861
 
-# standalone server output. No `public/` copy — we ship no static
-# assets today; add one back here if that changes.
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Standalone output collapses node_modules into .next/standalone, so
+# we don't need to copy sdk-ts separately at runtime.
+COPY --from=builder /app/platform-ui/.next/standalone ./
+COPY --from=builder /app/platform-ui/.next/static ./platform-ui/.next/static
 
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:7861/ || exit 1
 
+WORKDIR /app/platform-ui
 CMD ["node", "server.js"]

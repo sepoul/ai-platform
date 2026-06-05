@@ -3,16 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sdk:build": "npm --prefix ../sdk-ts run build",
+    "predev": "npm run sdk:build",
+    "prebuild": "npm run sdk:build",
     "dev": "next dev -p 7861",
     "build": "next build",
     "start": "next start -p 7861",
-    "lint": "eslint",
-    "gen:api": "./scripts/gen-api.sh",
-    "gen:api:check": "./scripts/gen-api.sh && git diff --exit-code lib/api/schema.d.ts"
+    "lint": "eslint"
   },
   "dependencies": {
+    "@aiplatform/sdk": "file:../sdk-ts",
     "next": "16.1.6",
-    "openapi-fetch": "^0.17.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
@@ -23,7 +24,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

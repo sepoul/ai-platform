@@ -825,6 +825,11 @@ export interface components {
             /** Code Entrypoint */
             code_entrypoint: string;
             /**
+             * Control Entrypoint
+             * @default
+             */
+            control_entrypoint: string;
+            /**
              * Label
              * @default
              */
@@ -869,6 +874,11 @@ export interface components {
             runtime_selector: string;
             /** Code Entrypoint */
             code_entrypoint: string;
+            /**
+             * Control Entrypoint
+             * @default
+             */
+            control_entrypoint: string;
             /**
              * Label
              * @default
