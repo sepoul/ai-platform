@@ -259,3 +259,7 @@ infer_org_chart_test_output/
 mathdata/dist/
 dist/
 mathdata/
+
+# Wheel build artifacts under packages/*/build/
+packages/*/build/
+packages/*/uv.lock

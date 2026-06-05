@@ -68,7 +68,17 @@ class JobDefinitionRecord(BaseModel):
     # forward-compatible with new runtimes without re-deploying the
     # API schema.
     runtime_selector: str
-    code_entrypoint: str  # "package.module:callable", e.g. "mathai.math_qa.control:register_control"
+    # Execution-plane entrypoint string ("package.module:callable", e.g.
+    # "mathai.math_qa.execution:register_execution"). The worker imports
+    # this after the catalog install pass + registers the JobExecution.
+    code_entrypoint: str
+    # Control-plane entrypoint ("package.module:callable" pointing at the
+    # `register_control(ctx) -> ControlDomain` callable, e.g.
+    # "mathai.math_qa.control:register_control"). The API imports this
+    # after `install_control_packages_for_api` + registers the JobControl.
+    # Default empty for backward-compat with rows written before this field
+    # existed; the API's auto-deploy on next boot will overwrite them.
+    control_entrypoint: str = ""
     label: str = ""
     input_schema: Dict[str, Any] = Field(default_factory=dict)  # JSON Schema from model_json_schema()
     result_schema: Dict[str, Any] = Field(default_factory=dict)

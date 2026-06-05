@@ -357,11 +357,20 @@ What this means in practice:
   installs, so a fresh box with an empty catalog still works. The
   prod compose **does not** use either of those shortcuts.
 
-The one residual hardcode: `composition_root._DOMAINS` (a Python
-list naming the two domain modules) is consulted **after** the
-install pass to decide what to import. A friend adding a new domain
-still has to edit that list. Closing that gap fully (catalog drives
-the module list too) is the remaining axis — see §8.
+**Discovery is catalog-driven.** The API and worker entrypoints
+both consult the catalog for the import list after the install pass:
+
+- API: `control_registers_from_catalog(jd_service)` reads every
+  JobDefinition row, dedups by `control_entrypoint`, imports each.
+- Worker: `execution_registers_from_catalog(jd_service, runtime)`
+  filters by `runtime_selector`, dedups by `code_entrypoint`, imports each.
+
+`composition_root._DOMAINS` remains as a *cold-boot fallback only*:
+on a fresh box with an empty catalog (before any `aiplatform deploy`
+has landed), the hardcoded list lets the platform's baseline domains
+come up. Post first-deploy, the catalog is the source of truth and
+adding a new domain is purely a deploy operation — no edit to this
+file.
 
 ---
 
@@ -392,16 +401,14 @@ The pieces a new reader needs to find, mapped to where they live.
 What's deliberately not coupled yet, so the next person extending the
 platform doesn't trip:
 
-- **`composition_root._DOMAINS` is still hardcoded.** Both the API
-  and the worker iterate a Python list of `(control_module,
-  execution_module, runtime)` tuples to decide what to import after
-  the catalog install pass. A friend adding a new domain still has
-  to edit that list. Closing this gap fully (catalog drives the
-  module list too) likely means a `control_entrypoint` field on
-  `JobDefinitionRecord` or `CodePackageRecord`. Today this is
-  partially mitigated by `control_registers` / `execution_registers`
-  catching `ModuleNotFoundError` so a missing wheel degrades the
-  boot instead of crashing it.
+- **`composition_root._DOMAINS` remains as a cold-boot fallback.**
+  Catalog-driven discovery is the primary path
+  (`control_registers_from_catalog` and `execution_registers_from_catalog`,
+  driven by the new `JobDefinitionRecord.control_entrypoint` field).
+  The hardcoded list still kicks in on a fresh box before any
+  `aiplatform deploy` has populated the catalog. After the repo
+  split (NEXT_BEST_STEPS §7q Phase 3) it shrinks to a synthetic
+  demo domain, then to `[]`.
 - **JobDefinition ↔ CodePackage.** A JobDefinition row carries
   `code_entrypoint` as a free string. There's no foreign key into
   `code_packages` and the worker doesn't verify the entrypoint
