@@ -73,11 +73,16 @@ ENV PORT=7861
 EXPOSE 7861
 
 # Standalone output collapses node_modules into .next/standalone, so
-# we don't need to copy sdk-ts separately at runtime.
+# we don't need to copy sdk-ts separately at runtime. Next's standalone
+# bundler emits the bootstrap `server.js` at the root of the workspace
+# tracing dir AND the app's compiled output under its own subdir
+# (`platform-ui/.next/server`, `platform-ui/.next/static` etc.). So:
+#   /app/server.js                          ← bootstrap (entry)
+#   /app/platform-ui/.next/{static,server}  ← app payload
+# Run `node server.js` from /app; the bootstrap navigates the subdir.
 COPY --from=builder /app/platform-ui/.next/standalone ./
 COPY --from=builder /app/platform-ui/.next/static ./platform-ui/.next/static
 
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:7861/ || exit 1
 
-WORKDIR /app/platform-ui
 CMD ["node", "server.js"]
