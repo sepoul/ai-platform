@@ -123,6 +123,7 @@ def _auto_deploy_to_catalog(domain, ws: WorkspaceBootstrap) -> None:
                 control,
                 runtime=domain.runtime_selector,
                 code_entrypoint=domain.code_entrypoint,
+                control_entrypoint=getattr(domain, "control_entrypoint", ""),
                 artifact_types=tuple(domain.artifact_types),
             )
             service.deploy(record)

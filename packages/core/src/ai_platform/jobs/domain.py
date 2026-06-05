@@ -47,13 +47,20 @@ class ControlDomain:
     artifact viewer). Building this must not import the execution engine,
     so the API process stays engine-free.
 
-    `runtime_selector` + `code_entrypoint` are how the domain identifies
-    itself in the JobDefinition catalog. `register_control_domains` uses
-    them to auto-deploy this domain's job controls into the catalog at
-    API boot, so the catalog mirrors what's in code without requiring
-    a separate bundle-deploy step for the platform's own domains. A
-    friend's domain provides the same shape; its deploy just hits the
-    same code path with different values.
+    `runtime_selector`, `code_entrypoint`, and `control_entrypoint`
+    are how the domain identifies itself in the JobDefinition catalog.
+    `register_control_domains` uses them to auto-deploy this domain's
+    job controls into the catalog at API boot, so the catalog mirrors
+    what's in code without requiring a separate bundle-deploy step for
+    the platform's own domains. A friend's domain provides the same
+    shape; its deploy just hits the same code path with different
+    values.
+
+    `code_entrypoint` points at the *execution-plane* register
+    callable (the worker imports it). `control_entrypoint` points at
+    *this* register callable (the control-plane one); the API imports
+    it on boot via catalog-driven discovery so the
+    `composition_root._DOMAINS` hardcode can go away.
     """
 
     name: str
@@ -62,6 +69,7 @@ class ControlDomain:
     artifact_types: list[type[BaseArtifact]] = field(default_factory=list)
     runtime_selector: str = "default"
     code_entrypoint: str = ""
+    control_entrypoint: str = ""
 
 
 @dataclass

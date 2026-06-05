@@ -56,4 +56,5 @@ def register_control(ctx: BootstrapContext) -> ControlDomain:
         artifact_types=list(MATH_QA_ARTIFACTS.values()),
         runtime_selector="default",
         code_entrypoint="mathai.math_qa.execution:register_execution",
+        control_entrypoint="mathai.math_qa.control:register_control",
     )

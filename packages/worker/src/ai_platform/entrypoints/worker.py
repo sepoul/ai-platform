@@ -21,7 +21,10 @@ from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.code_package_install import install_packages_for_runtime
 from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from ai_platform.composition_root import execution_registers_for_runtime
+from ai_platform.composition_root import (
+    execution_registers_for_runtime,
+    execution_registers_from_catalog,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,7 +81,21 @@ def main():
     if installed:
         logger.info("Installed %d CodePackage(s) at boot: %s", len(installed), installed)
 
-    domains = register_execution_domains(execution_registers_for_runtime(runtime), ws)
+    # Catalog-driven discovery: JobDefinition.code_entrypoint per row
+    # (filtered to this runtime, deduped). Drops the dependency on
+    # composition_root._DOMAINS for the friend-test path. The hardcoded
+    # fallback covers cold boot (empty catalog) so a fresh deploy still
+    # serves the platform's baseline domains.
+    registers = execution_registers_from_catalog(ws.job_definition_service, runtime)
+    if not registers:
+        logger.info(
+            "execution_registers_from_catalog returned empty for runtime=%s — "
+            "falling back to hardcoded _DOMAINS for cold boot",
+            runtime,
+        )
+        registers = execution_registers_for_runtime(runtime)
+
+    domains = register_execution_domains(registers, ws)
     served = domains.job_executions
     logger.info(
         "Worker %s runtime=%s serving job types: %s",

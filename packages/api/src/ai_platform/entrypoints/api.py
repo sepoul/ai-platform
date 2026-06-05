@@ -21,12 +21,26 @@ from ai_platform.jobs.import_guard import enforce_control_plane
 
 enforce_control_plane()
 
+import logging  # noqa: E402
+
 from ai_platform.api.app import build_api  # noqa: E402
 from ai_platform.compute.bootstrap import bootstrap_compute  # noqa: E402
 from ai_platform.jobs.bootstrap import register_control_domains  # noqa: E402
 from ai_platform.jobs.code_package_install import install_control_packages_for_api  # noqa: E402
 from ai_platform.workspace.bootstrap import bootstrap_workspace  # noqa: E402
-from ai_platform.composition_root import control_registers  # noqa: E402
+from ai_platform.composition_root import (  # noqa: E402
+    control_registers,
+    control_registers_from_catalog,
+)
+
+# Surface our own boot-time INFO lines (catalog install, register, etc.).
+# Without this, only uvicorn's access log lands on stdout and the
+# install/register narrative is invisible in container logs.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+_log = logging.getLogger("api.boot")
 
 _workspace = bootstrap_workspace()
 
@@ -39,8 +53,21 @@ _workspace = bootstrap_workspace()
 # API boot.
 install_control_packages_for_api(_workspace.code_package_service)
 
+# Discovery: prefer the catalog (JobDefinition.control_entrypoint per
+# row, deduped) — this is the seam that lets a friend's domain become
+# live without an edit to composition_root. The hardcoded `_DOMAINS`
+# fallback covers cold boot (empty catalog) so a fresh deploy still
+# brings up the platform's baseline domains.
+_registers = control_registers_from_catalog(_workspace.job_definition_service)
+if not _registers:
+    _log.info(
+        "control_registers_from_catalog returned empty — "
+        "falling back to hardcoded _DOMAINS for cold boot"
+    )
+    _registers = control_registers()
+
 # Control plane only — every job type, across all runtimes, no engine import.
-_domains = register_control_domains(control_registers(), _workspace)
+_domains = register_control_domains(_registers, _workspace)
 _compute = bootstrap_compute(_workspace.executor, {})
 
 app = build_api(workspace=_workspace, domains=_domains, compute=_compute)

@@ -62,6 +62,7 @@ def build_record(
     *,
     runtime: str,
     code_entrypoint: str,
+    control_entrypoint: str = "",
     version: str = "1.0.0",
     artifact_types: tuple[type[BaseArtifact], ...] = (),
 ) -> JobDefinitionRecord:
@@ -69,6 +70,13 @@ def build_record(
 
     Pure function — no I/O. Tests can use this to assert the deploy
     payload shape without standing up a server.
+
+    `control_entrypoint` is the platform-discovery seam: the API reads
+    JobDefinition rows on boot, dedups by this field, and pip-imports
+    each callable to register its control plane. Leave empty for rows
+    that originate from in-process auto-deploy on a domain that didn't
+    self-describe (older bootstrap shapes); the API falls back to
+    composition_root in that case.
     """
     return JobDefinitionRecord(
         id=JobDefinitionRecord.make_id(control.name, version),
@@ -76,6 +84,7 @@ def build_record(
         version=version,
         runtime_selector=runtime,
         code_entrypoint=code_entrypoint,
+        control_entrypoint=control_entrypoint,
         label=control.label,
         input_schema=control.submit_input_type.model_json_schema(),
         result_schema=control.result_type.model_json_schema(),
@@ -98,6 +107,7 @@ def deploy_job_control(
     *,
     runtime: str,
     code_entrypoint: str,
+    control_entrypoint: str = "",
     version: str = "1.0.0",
     artifact_types: tuple[type[BaseArtifact], ...] = (),
     api_url: str = DEFAULT_API_URL,
@@ -109,6 +119,7 @@ def deploy_job_control(
         control,
         runtime=runtime,
         code_entrypoint=code_entrypoint,
+        control_entrypoint=control_entrypoint,
         version=version,
         artifact_types=artifact_types,
     )
@@ -207,6 +218,7 @@ def deploy_control(
     *,
     runtime: str,
     code_entrypoint: str,
+    control_entrypoint: str = "",
     bootstrap_ctx: Optional[Any] = None,
     version: str = "1.0.0",
     api_url: str = DEFAULT_API_URL,
@@ -235,6 +247,11 @@ def deploy_control(
 
     control_domain = register_control(bootstrap_ctx)
     artifact_types_by_owner = tuple(control_domain.artifact_types)
+    # Prefer the explicitly-passed value (bundle.toml flow), else fall
+    # back to what the domain self-described.
+    effective_control_entrypoint = (
+        control_entrypoint or getattr(control_domain, "control_entrypoint", "")
+    )
 
     deployed: list[JobDefinitionRecord] = []
     for control in control_domain.job_controls:
@@ -243,6 +260,7 @@ def deploy_control(
                 control,
                 runtime=runtime,
                 code_entrypoint=code_entrypoint,
+                control_entrypoint=effective_control_entrypoint,
                 version=version,
                 artifact_types=artifact_types_by_owner,
                 api_url=api_url,
@@ -318,6 +336,7 @@ def deploy_bundle(
         register_control,
         runtime=manifest.package.runtime,
         code_entrypoint=manifest.control.execution_entrypoint,
+        control_entrypoint=manifest.control.control_entrypoint,
         version=manifest.package.version,
         api_url=api_url,
     )

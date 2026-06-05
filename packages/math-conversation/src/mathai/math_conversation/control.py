@@ -54,4 +54,5 @@ def register_control(ctx: BootstrapContext) -> ControlDomain:
         artifact_types=list(MATH_CONVERSATION_ARTIFACTS.values()),
         runtime_selector="crewai",
         code_entrypoint="mathai.math_conversation.execution:register_execution",
+        control_entrypoint="mathai.math_conversation.control:register_control",
     )
