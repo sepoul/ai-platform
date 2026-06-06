@@ -29,16 +29,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Only the platform's source — no math packages here. The repo-root
-# `instructions/` directory is copied so a domain that ships its
-# Markdown prompts under a known path (today's convention) can still
-# resolve them via `find_ancestor_containing("instructions")` after
-# the domain wheel installs on top.
+# Only the platform's source — no real domain code. `packages/_demo`
+# is the synthetic baseline domain: a single JobControl + JobExecution
+# whose only purpose is to keep `docker compose up` and CI runnable
+# without a deploy. It pulls in pydantic_graph but no LLM stack.
 COPY packages/core   /app/packages/core
 COPY packages/worker /app/packages/worker
+COPY packages/_demo  /app/packages/_demo
 COPY instructions    /app/instructions
 COPY supabase        /app/supabase
 
-# Editable install: no extras. The platform image carries only what
-# every runtime needs.
-RUN uv pip install --system --no-cache -e packages/worker
+# Editable install with the [demo] extra — pulls aiplatform-demo so a
+# fresh boot has at least one domain registerable. Real domains
+# arrive at runtime via the CodePackage catalog.
+RUN uv pip install --system --no-cache -e 'packages/worker[demo]'

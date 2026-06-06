@@ -1,11 +1,11 @@
 # Control-plane image (aiplatform-api): job creation / exploration /
-# artifact lookup. Truly virgin — no domain source code, no math-qa or
-# math-conversation pre-installed. Domain control modules arrive at
-# boot via the CodePackage catalog (the API-side analog of the worker's
-# install pass; see ai_platform.jobs.code_package_install). The
-# `[execution]` extras (LLM stacks) are still never pulled — the API
-# is engine-free on top of the runtime import_guard. See
-# docs/architecture.md §6 and docs/control_execution_split.md.
+# artifact lookup. Truly virgin — no domain source code. Domain
+# control modules arrive at boot via the CodePackage catalog (the
+# API-side analog of the worker's install pass; see
+# ai_platform.jobs.code_package_install). The `[execution]` extras
+# (LLM stacks) are still never pulled — the API is engine-free on top
+# of the runtime import_guard. See docs/architecture.md §6 and
+# docs/control_execution_split.md.
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \

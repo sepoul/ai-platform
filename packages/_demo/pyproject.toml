@@ -1,0 +1,30 @@
+[project]
+name = "aiplatform-demo"
+version = "0.1.0"
+description = "Synthetic demo domain — a trivial job that echoes its input. Ships with the platform so `docker compose up` and CI stay green without any real domain. Replaces math-{qa,conversation} as the in-image baseline after the math-app split."
+requires-python = ">=3.13"
+
+# Control + execution share the same trivial set: no LLM stack, no
+# extra deps. The control module is imported by the API, the execution
+# module by the worker — both engine-free.
+dependencies = [
+    "aiplatform-core",
+]
+
+[project.optional-dependencies]
+# `[execution]` extra exists so the worker install path works
+# uniformly (`pip install wheel[execution]`) regardless of whether a
+# given domain actually has extra runtime deps. For the demo there's
+# nothing here — the convention is what matters.
+execution = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.uv.sources]
+aiplatform-core = { path = "../core", editable = true }

@@ -62,14 +62,14 @@ def test_finder_allows_unrelated_modules():
 # ---------------------------------------------------------------------------
 
 def test_guard_allows_the_control_plane():
-    """Arming the guard then importing every domain's control plane must
-    succeed — proves the control plane is genuinely engine-free."""
+    """Arming the guard then importing the platform's baseline control
+    module must succeed — proves the control plane is engine-free.
+    """
     code = (
         "from ai_platform.jobs.import_guard import enforce_control_plane\n"
         "enforce_control_plane()\n"
         "import importlib, sys\n"
-        "for m in ('mathai.math_qa.control', 'mathai.math_conversation.control'):\n"
-        "    importlib.import_module(m)\n"
+        "importlib.import_module('aiplatform_demo.control')\n"
         "assert 'pydantic_graph' not in sys.modules\n"
         "assert 'crewai' not in sys.modules\n"
         "print('CONTROL_OK')\n"
@@ -86,7 +86,7 @@ def test_guard_blocks_the_engine():
         "from ai_platform.jobs.import_guard import enforce_control_plane\n"
         "enforce_control_plane()\n"
         "import importlib\n"
-        "importlib.import_module('mathai.math_qa.execution')\n"
+        "importlib.import_module('aiplatform_demo.execution')\n"
     )
     proc = _run(code)
     assert proc.returncode != 0

@@ -56,11 +56,16 @@ class _DomainModules:
 
 
 _DOMAINS: list[_DomainModules] = [
-    _DomainModules("mathai.math_qa.control", "mathai.math_qa.execution", "default"),
+    # The synthetic `_demo` domain ships with the platform purely so
+    # `docker compose up` and CI stay green. Math (and any friend's
+    # domain) arrives via `aiplatform deploy` → CodePackage catalog
+    # → `install_*_packages_for_*` → catalog-driven discovery
+    # (`*_registers_from_catalog`). This hardcoded list is the
+    # cold-boot fallback only.
     _DomainModules(
-        "mathai.math_conversation.control",
-        "mathai.math_conversation.execution",
-        "crewai",
+        "aiplatform_demo.control",
+        "aiplatform_demo.execution",
+        "default",
     ),
 ]
 

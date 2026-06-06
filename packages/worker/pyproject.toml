@@ -1,7 +1,7 @@
 [project]
 name = "aiplatform-worker"
 version = "0.1.0"
-description = "Execution plane (worker): virgin runtime. The base ships only pydantic_graph (the platform graph framework all runtimes need). Each runtime extra pulls a domain package, which in turn pulls its own LLM stack. The two extras are mutually exclusive over the otel-sdk pin — each runs as its own worker image, so no shared interpreter, no shared SDK pins."
+description = "Execution plane (worker): virgin runtime. Ships only pydantic_graph (the platform graph framework all runtimes need). Real domains arrive at boot via the CodePackage catalog (`aiplatform deploy` → `install_packages_for_runtime`); the worker base is identical for every runtime."
 requires-python = ">=3.13"
 dependencies = [
     "aiplatform-core",
@@ -13,14 +13,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# default runtime: math_qa domain + its execution-side LLM stack (pydantic_ai
-# + Anthropic + Logfire, otel >=1.39). Image:
-# `Dockerfile.worker --build-arg EXTRA=default`.
-default = ["mathai-math-qa[execution]"]
-# crewai runtime: math_conversation domain + its execution-side LLM stack
-# (CrewAI[anthropic], otel <1.35; no Logfire). Image:
-# `Dockerfile.worker --build-arg EXTRA=crewai`.
-crewai = ["mathai-math-conversation[execution]"]
+# `demo` extra: synthetic platform-only domain. Bundled into the worker
+# image as the cold-boot baseline so `docker compose up` and CI work
+# without a real domain deployed. Real domains (math-app, friends')
+# layer in at runtime via the CodePackage catalog.
+demo = ["aiplatform-demo[execution]"]
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -31,9 +28,5 @@ where = ["src"]
 namespaces = true
 
 [tool.uv.sources]
-# Path (not workspace) so the worker image installs from just core + the
-# domain package it serves. aiplatform-core is always pulled; the domain
-# pkgs are pulled only by the extras above.
 aiplatform-core = { path = "../core", editable = true }
-mathai-math-qa = { path = "../math-qa", editable = true }
-mathai-math-conversation = { path = "../math-conversation", editable = true }
+aiplatform-demo = { path = "../_demo", editable = true }
