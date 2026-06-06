@@ -1,23 +1,22 @@
 /**
- * Workflow types — server-defined shapes derived from the generated
- * OpenAPI schema, plus a few UI-only types for resolved runtime state.
+ * Workflow types — re-exported from `@aiplatform/sdk`, plus a few
+ * UI-only types for resolved runtime state used by workflow-graph.
  */
-import type { components } from "@/lib/api/schema";
-
-type S = components["schemas"];
+export type {
+  ParamSpec,
+  StageResponse,
+  EdgeResponse,
+  GateSpec,
+  WorkflowSpecResponse,
+  WorkflowListItem,
+  WorkflowListResponse,
+} from "@aiplatform/sdk";
+import type { StageResponse } from "@aiplatform/sdk";
 
 // Job type identifiers come from the backend registry (`GET /workflows`).
 // Kept as `string` rather than a literal union — the backend is the
-// single source of truth, not a frontend constant.
+// single source of truth.
 export type WorkflowJobType = string;
-
-export type ParamSpec = S["ParamSpec"];
-export type StageResponse = S["StageResponse"];
-export type EdgeResponse = S["EdgeResponse"];
-export type GateSpec = S["GateSpec"];
-export type WorkflowSpecResponse = S["WorkflowSpecResponse"];
-export type WorkflowListItem = S["WorkflowListItem"];
-export type WorkflowListResponse = S["WorkflowListResponse"];
 
 export type WorkflowStepRuntimeState =
   | "pending"

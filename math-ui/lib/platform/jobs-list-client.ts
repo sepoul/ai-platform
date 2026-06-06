@@ -1,18 +1,12 @@
+/**
+ * Thin wrapper over `@aiplatform/sdk`'s `PlatformSession`.
+ *
+ * Math-ui's local `JobStatusResponse` tightens optional fields to
+ * required nullables; the SDK returns the raw shape. The cast is
+ * safe at runtime because the upstream always populates the fields.
+ */
+import { platformSession } from "@/lib/session";
 import type { JobStatusResponse } from "./job-types";
-
-async function handleJson<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let msg: string;
-    try {
-      const body = (await res.json()) as { error?: string; detail?: string };
-      msg = body.error || body.detail || `HTTP ${res.status}`;
-    } catch {
-      msg = `HTTP ${res.status}`;
-    }
-    throw new Error(msg);
-  }
-  return res.json() as Promise<T>;
-}
 
 export interface ListJobsParams {
   status?: string;
@@ -23,22 +17,17 @@ export interface ListJobsParams {
   offset?: number;
 }
 
-/**
- * Lists job records (history) — backed by `GET /jobs` on the platform
- * router. The list is sorted server-side, newest first.
- */
 export async function fetchJobs(
   params: ListJobsParams = {}
 ): Promise<JobStatusResponse[]> {
-  const qs = new URLSearchParams();
-  if (params.status) qs.set("status", params.status);
-  if (params.jobType) qs.set("job_type", params.jobType);
-  if (params.createdAfter) qs.set("created_after", params.createdAfter);
-  if (params.createdBefore) qs.set("created_before", params.createdBefore);
-  if (params.limit != null) qs.set("limit", String(params.limit));
-  if (params.offset != null) qs.set("offset", String(params.offset));
-  const suffix = qs.toString();
-  const url = `/api/jobs${suffix ? `?${suffix}` : ""}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  return handleJson<JobStatusResponse[]>(res);
+  const rows = await platformSession().listJobs({
+    status: params.status,
+    jobType: params.jobType,
+    limit: params.limit,
+    // Note: SDK's listJobs doesn't expose createdAfter/Before/offset
+    // yet — the upstream supports them as query params, the SDK just
+    // hasn't surfaced them. Add as needed; today no caller passes
+    // these.
+  });
+  return rows as unknown as JobStatusResponse[];
 }
