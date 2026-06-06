@@ -60,11 +60,14 @@ ENV PORT=7860
 EXPOSE 7860
 
 # Next 16 standalone with a workspace puts bootstrap at the tracing-root
-# (/app/server.js) + app payload under its own subdir
-# (/app/math-ui/.next/{server,static}). Run from /app.
-COPY --from=builder /app/math-ui/public ./math-ui/public
+# (/app/server.js) + app payload under its own subdir (/app/math-ui/.next/server).
+# Static assets are NOT copied by standalone — we copy to /app/.next/static
+# which is where the bootstrap serves `/_next/static/*` from. Same with
+# `/app/public`. (Lesson from PR #21 deploy: the obvious-looking subdir
+# layout was wrong.)
+COPY --from=builder /app/math-ui/public ./public
 COPY --from=builder /app/math-ui/.next/standalone ./
-COPY --from=builder /app/math-ui/.next/static ./math-ui/.next/static
+COPY --from=builder /app/math-ui/.next/static ./.next/static
 
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:7860/ || exit 1
 

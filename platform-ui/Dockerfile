@@ -74,14 +74,14 @@ EXPOSE 7861
 
 # Standalone output collapses node_modules into .next/standalone, so
 # we don't need to copy sdk-ts separately at runtime. Next's standalone
-# bundler emits the bootstrap `server.js` at the root of the workspace
-# tracing dir AND the app's compiled output under its own subdir
-# (`platform-ui/.next/server`, `platform-ui/.next/static` etc.). So:
-#   /app/server.js                          ← bootstrap (entry)
-#   /app/platform-ui/.next/{static,server}  ← app payload
-# Run `node server.js` from /app; the bootstrap navigates the subdir.
+# bundler emits the bootstrap `server.js` at the workspace tracing
+# root (/app/) and the app's server-side payload under its subdir
+# (/app/platform-ui/.next/server). Static assets are NOT copied by
+# standalone — we copy them ourselves to the path the bootstrap
+# serves `/_next/static/*` from, which (for a monorepo-style standalone
+# build) is the workspace root's `.next/static`, not the subdir.
 COPY --from=builder /app/platform-ui/.next/standalone ./
-COPY --from=builder /app/platform-ui/.next/static ./platform-ui/.next/static
+COPY --from=builder /app/platform-ui/.next/static ./.next/static
 
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:7861/ || exit 1
 
