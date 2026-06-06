@@ -1,11 +1,12 @@
-# Domain-bound worker image — LOCAL DEV ONLY.
+# Domain-bound worker image — reference template for tenants who want
+# their domain baked in at image-build time instead of arriving via
+# the catalog at runtime.
 #
-# Prod runs the VIRGIN `aiplatform-worker` image directly and pulls
-# domain wheels from the CodePackage catalog at boot (`aiplatform deploy`
-# uploaded them ahead of time). This Dockerfile exists so that
-# `docker compose up` works locally without first running a deploy:
-# we bake the wheel in at image build time instead of resolving it
-# from an empty catalog. See docs/architecture.md §6.
+# Not used by this repo's docker-compose (which uses the virgin
+# `aiplatform-worker` image directly with the `_demo` baseline).
+# Kept here as documentation: a tenant whose domain lives in another
+# repo points `DOMAIN` at the package directory under `packages/` and
+# `PLATFORM_IMAGE` at the published `ghcr.io/sepoul/aiplatform-worker`.
 #
 # Two stages:
 #

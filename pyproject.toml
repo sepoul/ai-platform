@@ -1,18 +1,23 @@
-# Control/execution-plane split (docs/control_execution_split.md). Five
+# Control/execution-plane split (docs/control_execution_split.md). Four
 # distinct installable packages that share Python namespaces (PEP-420) but
 # have disjoint dependency closures:
-#   packages/core               (aiplatform-core)              — shared: JobRecord, storage, compute
-#   packages/api                (aiplatform-api)               — core + fastapi, NO engine
-#   packages/worker             (aiplatform-worker)            — core + pydantic_graph (+ per-runtime extras)
-#   packages/math-qa            (mathai-math-qa)               — domain, default runtime
-#   packages/math-conversation  (mathai-math-conversation)     — domain, crewai runtime
+#   packages/core      (aiplatform-core)     — shared: JobRecord, storage, compute
+#   packages/api       (aiplatform-api)      — core + fastapi, NO engine
+#   packages/worker    (aiplatform-worker)   — core + pydantic_graph (+ per-runtime extras)
+#   packages/_demo     (aiplatform-demo)     — synthetic "hello" domain that ships
+#                                              with the platform so local dev / CI
+#                                              stays runnable when no real domain
+#                                              is deployed yet.
 #
 # Each service installs standalone with uv from core + the packages it
-# needs (api/worker/domain pyprojects pin `aiplatform-core` via a path
-# source), so the api image never contains worker code and vice versa —
-# true per-image isolation. NOT a uv workspace: a workspace forbids path
-# sources for members, which we need for standalone installs. Tests run
-# against source via `pythonpath` below (no install needed).
+# needs. NOT a uv workspace: a workspace forbids path sources for members,
+# which we need for standalone installs. Tests run against source via
+# `pythonpath` below.
+#
+# Real domains (math-qa, math-conversation, friend's domains) live in
+# their own repos and arrive at runtime via `aiplatform deploy` →
+# CodePackage catalog → boot-time `install_*_packages_for_*`. See
+# docs/architecture.md and NEXT_BEST_STEPS.md §7q.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -20,6 +25,5 @@ pythonpath = [
     "packages/core/src",
     "packages/api/src",
     "packages/worker/src",
-    "packages/math-qa/src",
-    "packages/math-conversation/src",
+    "packages/_demo/src",
 ]

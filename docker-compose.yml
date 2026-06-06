@@ -68,16 +68,14 @@ services:
     command: ["true"]   # not meant to run; the image is the artifact
 
   worker:
-    # Domain-bound worker (math-qa). Built FROM aiplatform-worker:local
-    # via Dockerfile.worker-domain. Requires `aiplatform-worker:local`
-    # to exist locally first (see comment on the service above).
+    # Default-runtime worker. Ships `_demo` as the baseline domain so
+    # local-dev `docker compose up` has at least one registerable job
+    # without a deploy. Real domains (math-app etc.) arrive at runtime
+    # via the CodePackage catalog.
     build:
       context: .
-      dockerfile: Dockerfile.worker-domain
-      args:
-        DOMAIN: math-qa
-        PLATFORM_IMAGE: aiplatform-worker:local
-    image: aiplatform-worker-mathqa:local
+      dockerfile: Dockerfile.worker
+    image: aiplatform-worker:local
     command: >
       python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -107,23 +105,14 @@ services:
       - api
     restart: unless-stopped
 
-  # crewai runtime worker pool. Built from packages/worker[crewai], which
-  # ships ONLY pydantic_graph + crewai[anthropic] — no pydantic_ai, no
-  # Logfire (the otel-sdk pin conflicts with logfire). Serves only the
-  # math_conversation domain. Opt-in via `--profile crewai`; default
-  # `docker compose up` doesn't build/run it.
-  # See ai_platform/jobs/runtimes.py and docs/math_conversation.md.
+  # crewai runtime worker pool. Same virgin worker image as the
+  # `worker` service above — there is no longer a crewai-specific
+  # base because no real crewai domain ships in this repo. The
+  # `WORKER_RUNTIME=crewai` env scopes the worker to that runtime's
+  # CodePackage catalog rows (a friend's crewai domain installs at
+  # boot via the catalog).
   worker-crewai:
-    # Domain-bound worker (math-conversation). Built FROM
-    # aiplatform-worker:local via Dockerfile.worker-domain. Same
-    # platform-base requirement as `worker`.
-    build:
-      context: .
-      dockerfile: Dockerfile.worker-domain
-      args:
-        DOMAIN: math-conversation
-        PLATFORM_IMAGE: aiplatform-worker:local
-    image: aiplatform-worker-mathconversation:local
+    image: aiplatform-worker:local
     command: >
       python -u -m ai_platform.entrypoints.worker
       --interval ${WORKER_INTERVAL:-5}
@@ -173,15 +162,10 @@ services:
     profiles: [celery]
 
   celery-worker:
-    # Celery worker uses the math-qa-bound image (default runtime
-    # stack). Same build base as `worker`.
-    build:
-      context: .
-      dockerfile: Dockerfile.worker-domain
-      args:
-        DOMAIN: math-qa
-        PLATFORM_IMAGE: aiplatform-worker:local
-    image: aiplatform-worker-mathqa:local
+    # Celery worker uses the virgin aiplatform-worker image (with the
+    # `_demo` baseline domain installed). Real domains arrive via the
+    # catalog install pass on boot.
+    image: aiplatform-worker:local
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info

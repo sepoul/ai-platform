@@ -18,17 +18,17 @@ request flows through it.
 ("jobs"). The split that makes it a *platform* and not a monolith:
 
 - **Core platform** (`packages/core`, `packages/api`, `packages/worker`)
-  knows nothing about math. It ships generic catalogs (JobDefinitions,
-  ArtifactTypes, CodePackages), a job lifecycle (submit → run →
-  result), and a runtime substrate.
-- **Domain packages** (`packages/math-qa`, `packages/math-conversation`)
-  declare their JobControls + artifact classes via a `register_control`
-  entrypoint. They're the *tenant* of the platform.
-- **Friend test**: a third party can ship their domain as a wheel +
-  `bundle.toml` and run `aiplatform deploy` against a running platform
-  instance. The platform installs the wheel on its worker(s) on boot
-  and starts serving the friend's jobs. No platform code changes,
-  no image rebuild.
+  knows nothing about any specific domain. It ships generic catalogs
+  (JobDefinitions, ArtifactTypes, CodePackages), a job lifecycle
+  (submit → run → result), and a runtime substrate.
+- **Domain packages** live in their own repos. The math domain (math_qa,
+  math_conversation) lives in [`sepoul/math-app`](https://github.com/sepoul/math-app);
+  this repo ships a synthetic `packages/_demo` baseline only.
+- **Friend test**: a third party ships their domain as a wheel + a
+  `bundle.toml` and runs `aiplatform deploy` against a running
+  platform instance. The platform installs the wheel on its worker(s)
+  on boot and starts serving the friend's jobs. No platform code
+  changes, no image rebuild — math-app's own CI does exactly this.
 
 ---
 

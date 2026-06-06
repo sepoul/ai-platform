@@ -95,18 +95,24 @@ def test_default_runtime_constant_and_env():
 # ---------------------------------------------------------------------------
 
 def test_composition_root_partitions_domains_by_runtime():
+    """The hardcoded `_DOMAINS` list is the cold-boot fallback.
+
+    Post repo-split (§7q Phase 3), the only domain in `_DOMAINS` is
+    the synthetic `_demo`. We can still exercise the partitioning
+    mechanism with one entry; the `runtime != "default"` branch
+    returns an empty list, which is exactly what a worker pool on a
+    runtime with no baked-in domain expects.
+    """
     from ai_platform.composition_root import (
         control_registers,
         execution_registers_all,
         execution_registers_for_runtime,
     )
     # The API loads every domain's control plane (engine-free).
-    assert len(control_registers()) == 2
-    # A worker loads only its runtime's execution modules.
+    assert len(control_registers()) == 1
     default_mods = {r.__module__ for r in execution_registers_for_runtime("default")}
     crewai_mods = {r.__module__ for r in execution_registers_for_runtime("crewai")}
-    assert default_mods == {"mathai.math_qa.execution"}
-    assert crewai_mods == {"mathai.math_conversation.execution"}
-    # The crewai runtime must NOT pull math_qa's execution (logfire stack).
-    assert "mathai.math_qa.execution" not in crewai_mods
-    assert len(execution_registers_all()) == 2
+    assert default_mods == {"aiplatform_demo.execution"}
+    # crewai pool has no baked-in domain — empty cold-boot fallback.
+    assert crewai_mods == set()
+    assert len(execution_registers_all()) == 1
