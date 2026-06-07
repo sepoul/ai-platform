@@ -1,107 +1,139 @@
-# mathapp
+# ai-platform
 
-FastAPI + worker for math-AI jobs.
+A small platform for running domain AI workflows. The platform is the
+orchestrator — catalogs (JobDefinitions, ArtifactTypes, CodePackages),
+a worker that pip-installs domain wheels at boot, and a typed
+TypeScript SDK any domain UI consumes. Domains live in their own
+repos; deploying one is a single `aiplatform deploy` command.
 
-## What it is
+The reference domain is [`sepoul/math-app`](https://github.com/sepoul/math-app)
+(math_qa + math_conversation jobs, math-ui frontend). Replace it with
+your own — that's the friend-test.
 
-The backend for a math-learning AI tool aimed at self-directed
-learners — people doing math daily as research or a serious hobby,
-not inside a course. The product bet is *personalized guidance over
-an all-in-one wizard*: decompose a concept, map how theorems and
-propositions connect, turn a spoken or written theorem into LaTeX,
-and keep a thinking/log space for exercises and progress. Lean
-theorem-prover support — coupled math/Lean learning, Lean as a
-navigable knowledge base — is the longer-term direction.
-
-This repo holds both halves of the stack:
-
-- Top-level `src/` + `scripts/` + `instructions/` — the FastAPI
-  surface, the job/graph runner, the workers, and the storage/compute
-  backends.
-- [`math-ui/`](math-ui/) — the Next.js 16 frontend. It was a separate
-  GitHub repo (`ai-platform-ui`) until 2026-05-16, when it merged in.
-  See [`math-ui/README.md`](math-ui/README.md) for its own run
-  instructions; the OpenAPI-driven typing pipeline that connects the
-  two is in [`docs/dev_lifecycle.md`](docs/dev_lifecycle.md).
-
-## Run locally
-
-Docker Compose is the canonical local run path. For deploying to a
-single box, see [`docs/deployment_hetzner.md`](docs/deployment_hetzner.md)
-and the OpenTofu config in [`infra/hetzner/`](infra/hetzner/).
-
-```bash
-cp .env.example .env       # set ANTHROPIC_API_KEY
-docker compose up --build  # first run, or after dep changes
-docker compose up          # subsequent runs
+```mermaid
+graph LR
+    Dev["aiplatform deploy --bundle bundle.toml"] --> Cat[("code_packages<br/>job_definitions<br/>artifact_types")]
+    Cat --> API["API process (virgin image)<br/>install_control_packages_for_api"]
+    Cat --> W["Worker (virgin image)<br/>install_packages_for_runtime"]
+    API --> Serve["serve control HTTP"]
+    W --> Run["run jobs"]
 ```
 
-This brings up two services:
+See [`docs/architecture.md`](docs/architecture.md) for the full
+diagram set, [`docs/concepts/platform-design.md`](docs/concepts/platform-design.md)
+for the conceptual contract.
 
-- **api** — FastAPI on `http://localhost:8000` (health: `/health`,
-  OpenAPI: `/docs`). Reach it from a Next.js dev server on the host.
-- **worker** — polls the shared volume for pending jobs.
-
-Both share a named docker volume (`mathapp-data`) mounted at `/data`,
-which is `LOCAL_DATA_DIR` — the local-backend job repo + artifact store.
-
-Tail logs / restart one service:
+## Quick start
 
 ```bash
-docker compose logs -f worker
-docker compose restart api
+cp .env.example .env       # add ANTHROPIC_API_KEY etc.
+docker compose up --build
 ```
 
-Three storage backends are available:
+That brings up:
 
-- `BACKEND=local` (default) — JSON on disk
-- `BACKEND=b2` — Backblaze (`B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`)
-- `BACKEND=supabase` — Postgres + Supabase Storage (`SUPABASE_URL`,
-  `SUPABASE_SECRET_KEY`, `SUPABASE_CONNECTION_STRING`,
-  `SUPABASE_BUCKET`)
+- **api** — FastAPI control plane on `localhost:8000`
+- **worker** — default-runtime worker, pre-installed with the
+  synthetic `_demo` domain so the stack is functional out of the box
+- **platform-ui** — catalog browser + jobs inspector on `localhost:3001`
 
-Full breakdown: [`docs/storage_backends.md`](docs/storage_backends.md).
+Submit a demo job:
 
-### Pluggable compute
+```bash
+curl -s -X POST -H 'content-type: application/json' \
+    -d '{"job_type":"demo","message":"hello platform"}' \
+    http://localhost:8000/jobs/runs/submit
+```
 
-Storage isn't the only swappable layer. `COMPUTE` selects how a
-submitted job reaches a worker:
+Bring up a real domain (the math one):
 
-| `COMPUTE` | Worker | Use when |
+```bash
+git clone https://github.com/sepoul/math-app.git ../math-app
+cd ../math-app/packages/math-qa && uv build --wheel
+cd ../math-conversation && uv build --wheel
+cd ../..
+uv run aiplatform deploy \
+    --bundle packages/math-qa/bundle.toml \
+    --api-url http://localhost:8000
+uv run aiplatform deploy \
+    --bundle packages/math-conversation/bundle.toml \
+    --api-url http://localhost:8000
+# Restart workers; they'll pip-install the wheels from the catalog.
+```
+
+## What's in this repo
+
+```
+packages/
+  core/                # ai_platform — shared substrate (storage, compute, catalogs)
+  api/                 # FastAPI control plane
+  worker/              # execution-plane worker
+  _demo/               # synthetic baseline domain (echo job)
+sdk-ts/                # @aiplatform/sdk — typed TS client + Next.js BFF helper
+platform-ui/           # domain-free admin SPA
+docs/                  # see docs/README.md
+```
+
+Real domains do **not** live here. They live in their own repos and
+arrive at boot via the CodePackage catalog. The platform image
+contains zero domain code in production.
+
+## Documentation
+
+- [`docs/architecture.md`](docs/architecture.md) — system overview with diagrams
+- [`docs/concepts/`](docs/concepts/) — the conceptual model
+- [`docs/guides/`](docs/guides/) — how to deploy a domain, run locally, etc.
+- [`docs/reference/`](docs/reference/) — backends, typed clients
+- [`docs/operations/`](docs/operations/) — deploying the platform itself
+- [`docs/project/`](docs/project/) — team conventions, roadmap
+
+## Storage backends
+
+`BACKEND` env var selects the storage substrate. All three implement
+the same Protocol surface:
+
+| `BACKEND` | What | When |
 |---|---|---|
-| `poll` (default) | separate `scripts/worker.sh` | what compose runs |
-| `thread` | none — runs in the API process | single-process dev |
-| `celery` | `celery -A …` (stub) | future, with a broker |
+| `local` (default) | JSON on disk under `LOCAL_DATA_DIR` | local dev |
+| `b2` | Backblaze B2 | small prod / personal |
+| `supabase` | Postgres + Supabase Storage | shared prod |
+
+Details: [`docs/reference/storage-backends.md`](docs/reference/storage-backends.md) and [`docs/reference/compute-backends.md`](docs/reference/compute-backends.md).
+
+## Compute backends
+
+`COMPUTE` env var selects how the API hands jobs to workers:
+
+| `COMPUTE` | Worker | When |
+|---|---|---|
+| `poll` (default) | separate process polls the job repo | compose, prod |
+| `thread` | in-process | single-machine dev |
+| `celery` | broker-driven | scale-out (with redis) |
+
+Details: [`docs/reference/storage-backends.md`](docs/reference/storage-backends.md) and [`docs/reference/compute-backends.md`](docs/reference/compute-backends.md).
+
+## Run on the host (no docker)
 
 ```bash
-COMPUTE=thread BACKEND=local ./scripts/api.sh
-# submit a job — runs in-process, no worker.sh needed
+./scripts/dev.sh                   # api + worker, tagged logs, one terminal
+./scripts/api.sh                   # uvicorn on 127.0.0.1:8000
+./scripts/api.sh --reload          # extra args go through to uvicorn
+./scripts/worker.sh                # poll loop
+./scripts/worker.sh --once         # one job then exit
+./scripts/test.sh                  # pytest, args forwarded
 ```
 
-Full breakdown + the Celery migration plan: [docs/compute_backends.md](docs/compute_backends.md).
-
-## Run on the host (Unix)
-
-For iterating on a single service without docker, use the bash entry
-points in [`scripts/`](scripts/). They auto-pick the project venv
-(`./.venv` first), load `.env`, and default `BACKEND=local` with
-`LOCAL_DATA_DIR=./mathdata`.
-
-```bash
-./scripts/dev.sh                     # api + worker, one terminal, tagged logs
-./scripts/api.sh                     # uvicorn on 127.0.0.1:8000
-./scripts/api.sh --reload            # extra args go through to uvicorn
-PORT=9000 ./scripts/api.sh           # override via env
-./scripts/worker.sh                  # poll loop
-./scripts/worker.sh --once           # one job then exit
-./scripts/deploy-prompts.sh          # idempotent prompt seeding
-./scripts/test.sh                    # pytest, args forwarded
-```
-
-`scripts/_lib.sh` is the shared bootstrap (sourced, not executed).
+Each script auto-picks the project venv (`./.venv` first), loads
+`.env`, defaults `BACKEND=local` with `LOCAL_DATA_DIR=./mathdata`.
 
 ## Tests
 
 ```bash
 ./scripts/test.sh
+# or
+uv run pytest tests/
 ```
+
+## License
+
+TBD.

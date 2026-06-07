@@ -275,9 +275,11 @@ its split image (`aiplatform-api`, `aiplatform-worker` (virgin), `aiplatform-wor
 at `:latest` (or `${IMAGE_TAG}` if exported) — no build happens on the box.
 
 **Both workers run simultaneously.** The `worker` container serves the
-default runtime (pydantic_ai, math_qa) and `worker-crewai` serves the
-CrewAI runtime (math_conversation); they are not swappable. Storage and
-compute backends are still pick-one (`BACKEND`, `COMPUTE` env vars).
+`default` runtime (pydantic_ai + Logfire stack) and `worker-crewai`
+serves the `crewai` runtime (crewai\[anthropic\]); they are not
+swappable. Domain wheels arrive at boot via the CodePackage catalog
+([architecture.md §6](../architecture.md)). Storage and compute
+backends are still pick-one (`BACKEND`, `COMPUTE` env vars).
 
 From the laptop on the tailnet:
 
@@ -292,33 +294,30 @@ rotation, `.env` updates, and the threat model live in the gitignored
 
 ---
 
-## Step 5 — math-ui
+## Step 5 — UIs
 
-Two paths, depending on how you want to access the UI.
+Two UIs ship out of the box:
 
-### Path A — co-deploy on the same box (recommended for now)
+- **platform-ui** (domain-free admin SPA) is in this repo. The prod
+  compose's `ui` profile brings it up on host port 3001.
+- **A domain UI** (math-ui in the reference math-app deployment)
+  comes from the domain repo's CI: it builds the image as
+  `ghcr.io/<org>/<your-domain-ui>:latest` and the prod compose
+  pulls it like any other image. See
+  [`../guides/deploy-a-domain.md`](../guides/deploy-a-domain.md).
 
-The Next.js app runs as a third container; it talks to the API at
-`http://api:8000` over the docker network (compose service name).
-The user reaches `http://<box-tailnet-ip>:3000` from the laptop —
-which proxies to the API container internally, so the API still
-doesn't need to be reachable from the public.
+`redeploy.sh` brings up the `ui` profile by default, so a fresh
+deploy gets both UIs:
 
-Out of scope for this commit — needs a small UI service added to
-compose with the math-ui repo checked out next to mathapp. Sketched
-as future work below.
+```bash
+ssh root@mathapp-prod 'cd /srv/mathapp && infra/hetzner/scripts/redeploy.sh'
+# platform-ui: http://<box-tailnet-ip>:3001
+# domain ui:   http://<box-tailnet-ip>:3000   (if a domain repo deployed one)
+```
 
-### Path B — Vercel for the UI, public API on the box
-
-Vercel can't reach a tailnet. To make this work the API has to be
-publicly reachable, which means:
-
-- Add a real auth layer (JWT, Cloudflare Access, magic-link, …).
-- Add TLS — Caddy on the box does this in 5 lines.
-- Open port 443 in the firewall.
-
-Bigger lift. Defer until there's a real need for the UI to be
-accessible from devices not on the tailnet.
+For public access (laptop not on the tailnet), front the API with
+Caddy / nginx terminating TLS, then put domain auth in front.
+Deferred until needed.
 
 ---
 
@@ -382,10 +381,10 @@ defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
 and `celery-worker`.
 
 Local smoke-tested end-to-end against Supabase: submit → enqueue →
-redis → celery-worker → `mark_running` → graph execution. The
-math_qa workflow itself depends on math-ui at `_ui_url()` for
-`validate-latex`; that's an environmental requirement orthogonal to
-the celery wiring and applies equally to the poll worker.
+redis → celery-worker → `mark_running` → graph execution. Domain-
+specific environmental requirements (a domain that calls back into
+its UI for a validate-* tool, etc.) are orthogonal to the celery
+wiring and apply equally to the poll worker.
 
 ### Compose additions
 
@@ -471,8 +470,8 @@ both backends see the same Supabase rows.
 - **Memory.** Redis with a handful of small JSON tasks barely
   registers — kilobytes. CX22's 4 GB is plenty.
 - **Concurrency.** `--concurrency=2` means two prefork workers
-  inside the one container. For a math_qa job that's mostly waiting
-  on Anthropic, you can push this higher (4–8) before CPU matters.
+  inside the one container. For domain jobs that mostly wait on an
+  upstream LLM, you can push this higher (4–8) before CPU matters.
 - **Scaling beyond one box.** Move redis to its own host (or
   Supabase Redis when that lands) and bump `replicas` on
   `celery-worker`. The API side doesn't change.
@@ -572,9 +571,6 @@ Tracking these here rather than spreading them across the doc.
   Postgres + Storage backups already; the box itself is stateless.
 - **Observability beyond `docker compose logs`.** Logfire is wired
   but no dashboards/alerting are set up on the deployed box.
-- **math-ui co-deployment.** Sketched above (Path A); not yet
-  implemented in compose. Needs the math-ui repo on the box and a
-  third compose service.
 - **Secrets rotation.** `.env` lives on the box filesystem. When you
   rotate `SUPABASE_SECRET_KEY` or the DB password, you re-`scp` the
   file and `docker compose up -d`.

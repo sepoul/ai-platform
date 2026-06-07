@@ -1,28 +1,65 @@
-# Docs index
+# Documentation
 
-Operational and onboarding references for `mathapp` and the
-`math-ui` companion. Roadmap-y stuff lives in
-[`../FEATURES.md`](../FEATURES.md) and the two
-`NEXT_BEST_STEPS.md` files; this directory is for **how things
-already work**.
+Reference for `ai-platform` — how it works, how to deploy a domain
+against it, how to run the platform itself.
 
-For a browsable rendered version, run `./scripts/docs.sh` and open
-<http://127.0.0.1:8001>. Material theme, full-text search, dark
-mode, live reload while you edit. CLI build:
-`.venv/bin/mkdocs build`.
+## Start here
 
-| Doc | Read it when |
+| | What |
 |---|---|
-| [`architecture.md`](architecture.md) | **Start here.** Snapshot of how the platform works at HEAD — system map, the three catalogs, deploy/install/run lifecycles, runtime split. With mermaid diagrams. |
-| [`platform_design.md`](platform_design.md) | The conceptual contract — planes, ownership, vocabulary. Pairs with `architecture.md` (concept vs implementation). |
-| [`dev_lifecycle.md`](dev_lifecycle.md) | Touching anything that crosses the FastAPI ↔ Next.js boundary — codegen loop, what to regenerate, common drift scenarios. |
-| [`onboarding_new_job_type.md`](onboarding_new_job_type.md) | Adding a new domain workflow. Walks through the `JobDefinition` you write and the registry entries that pick it up. |
-| [`jobs_spec.md`](jobs_spec.md) | Working at the platform level — job lifecycle, checkpoints, gates, artifacts, the runner's invariants. |
-| [`compute_backends.md`](compute_backends.md) | Switching between `poll` / `thread` / `celery`, or implementing a new one. |
-| [`prompt_registry.md`](prompt_registry.md) | Adding or editing an agent prompt. Prompts live in the registry, not as string literals in graph nodes. |
-| [`live_logs.md`](live_logs.md) | Surfacing real-time progress from a worker to the UI via the SSE stream. |
-| [`math_qa_stabilization_plan.md`](math_qa_stabilization_plan.md) | The rollout order for the larger Math Q&A artifact rework. Companion to [`../FEATURES.md`](../FEATURES.md). |
+| [`architecture.md`](architecture.md) | System overview with diagrams. Reads top-to-bottom in ~10 min. |
 
-If a coding agent (Cursor, Claude Code, Codex, etc.) is editing
-this repo, point it at [`../AGENTS.md`](../AGENTS.md) first — it
-links here from the right places.
+## Concepts — the why
+
+| | What |
+|---|---|
+| [`concepts/platform-design.md`](concepts/platform-design.md) | Planes, ownership boundaries, vocabulary. The conceptual contract. |
+| [`concepts/control-execution-split.md`](concepts/control-execution-split.md) | Why control and execution are separate processes; the import guard. |
+| [`concepts/jobs.md`](concepts/jobs.md) | Job lifecycle — states, checkpoints, gates, artifacts. |
+
+## Guides — how to do X
+
+| | What |
+|---|---|
+| [`guides/deploy-a-domain.md`](guides/deploy-a-domain.md) | Author a `bundle.toml`, build a wheel, `aiplatform deploy` against a running platform. |
+| [`guides/prompts.md`](guides/prompts.md) | Add or edit a versioned prompt via the registry. |
+| [`guides/live-logs.md`](guides/live-logs.md) | Surface worker progress to the UI via the SSE stream. |
+
+## Reference — config, CLI, contracts
+
+| | What |
+|---|---|
+| [`reference/storage-backends.md`](reference/storage-backends.md) | `local` / `b2` / `supabase` storage. Choosing and configuring. |
+| [`reference/compute-backends.md`](reference/compute-backends.md) | `poll` / `thread` / `celery` compute. Choosing and migrating. |
+| [`reference/typed-clients.md`](reference/typed-clients.md) | OpenAPI → TypeScript SDK codegen, the BFF proxy pattern, regen workflow. |
+
+## Operations — running the platform itself
+
+| | What |
+|---|---|
+| [`operations/hetzner-deploy.md`](operations/hetzner-deploy.md) | The reference single-box deployment. |
+| [`operations/supabase.md`](operations/supabase.md) | Postgres + Supabase Storage as the production backend. |
+
+## Project — conventions, roadmap
+
+| | What |
+|---|---|
+| [`project/README.md`](project/README.md) | What each project doc is. |
+| [`project/AGENTS.md`](project/AGENTS.md) | Conventions for coding agents (Claude Code, Cursor, Codex). |
+| [`project/NEXT_BEST_STEPS.md`](project/NEXT_BEST_STEPS.md) | Backend backlog, ordered by leverage. |
+
+## Browsable site
+
+Material-themed mkdocs site:
+
+```bash
+./scripts/docs.sh   # serves on http://127.0.0.1:8001
+.venv/bin/mkdocs build
+```
+
+## Where math lives
+
+Math (`math_qa`, `math_conversation`, `math-ui`) is in
+[`sepoul/math-app`](https://github.com/sepoul/math-app). It's a
+reference domain, not part of the platform — see math-app's own
+`docs/` for math-specific design notes.
