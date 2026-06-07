@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from datetime import datetime, timezone
+from ai_platform.utilities.time import utc_now
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
@@ -190,7 +190,7 @@ class GraphJobExecutor:
             return None
         record = jobs[0]
         if max_age_s is not None:
-            age_s = (datetime.now(timezone.utc) - record.created_at).total_seconds()
+            age_s = (utc_now() - record.created_at).total_seconds()
             if age_s > max_age_s:
                 logger.info(
                     "Skipping stale pending job %s (age=%.0fs > max=%.0fs)",

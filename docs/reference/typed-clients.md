@@ -81,9 +81,9 @@ backend without re-running codegen.
 These are backend-only and have their own conventions documented
 elsewhere — they don't cross the wire to the UI:
 
-- **Job definitions and workflow specs** — see [`onboarding_new_job_type.md`](onboarding_new_job_type.md).
-- **Prompt registry** — see [`prompt_registry.md`](prompt_registry.md).
-- **Compute backends** — see [`compute_backends.md`](compute_backends.md).
+- **Job definitions and workflow specs** — see [`onboarding_new_job_type.md`](../guides/deploy-a-domain.md).
+- **Prompt registry** — see [`prompt_registry.md`](../guides/prompts.md).
+- **Compute backends** — see [`compute_backends.md`](compute-backends.md).
 
 ---
 

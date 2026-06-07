@@ -16,7 +16,9 @@ artifact of the deploy and the runtime still uses the in-code path.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,8 +29,6 @@ from ai_platform.workspace.storage.structured.b2 import B2CanonicalRepository
 from ai_platform.workspace.storage.structured.local import LocalCanonicalRepository
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ class JobDefinitionRecord(BaseModel):
     result_schema: Dict[str, Any] = Field(default_factory=dict)
     output_artifact_type_refs: List[str] = Field(default_factory=list)
     gates: List[GateSpec] = Field(default_factory=list)
-    deployed_at: datetime = Field(default_factory=_utc_now)
+    deployed_at: datetime = Field(default_factory=utc_now)
 
     @classmethod
     def make_id(cls, name: str, version: str) -> str:
@@ -99,7 +99,7 @@ class JobDefinitionRecord(BaseModel):
 class JobDefinitionStore(BaseModel):
     """All job-definition records, single JSON blob keyed by id."""
     items: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class _JobDefinitionStoreMixin(SingleStoreMixin[Dict[str, Any], JobDefinitionStore]):

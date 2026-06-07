@@ -22,7 +22,9 @@ upload does.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -33,8 +35,6 @@ from ai_platform.workspace.storage.structured.b2 import B2CanonicalRepository
 from ai_platform.workspace.storage.structured.local import LocalCanonicalRepository
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class ArtifactTypeRecord(BaseModel):
@@ -53,7 +53,7 @@ class ArtifactTypeRecord(BaseModel):
     class_name: str  # the Python class name (e.g. "MathQuestionArtifact")
     json_schema: Dict[str, Any] = Field(default_factory=dict)
     display_hints: Dict[str, Any] = Field(default_factory=dict)
-    deployed_at: datetime = Field(default_factory=_utc_now)
+    deployed_at: datetime = Field(default_factory=utc_now)
 
     @classmethod
     def make_id(cls, name: str, version: str) -> str:
@@ -67,7 +67,7 @@ class ArtifactTypeRecord(BaseModel):
 
 class ArtifactTypeStore(BaseModel):
     items: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class _ArtifactTypeStoreMixin(SingleStoreMixin[Dict[str, Any], ArtifactTypeStore]):

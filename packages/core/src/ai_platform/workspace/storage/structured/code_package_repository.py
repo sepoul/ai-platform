@@ -18,7 +18,9 @@ gets everything the platform needs to (eventually) run their code.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,8 +31,6 @@ from ai_platform.workspace.storage.structured.b2 import B2CanonicalRepository
 from ai_platform.workspace.storage.structured.local import LocalCanonicalRepository
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class CodePackageRecord(BaseModel):
@@ -50,7 +50,7 @@ class CodePackageRecord(BaseModel):
     blob_id: str  # FileRepository logical name within the code-packages prefix
     sha256: str  # integrity check; verified at fetch time
     size_bytes: int
-    deployed_at: datetime = Field(default_factory=_utc_now)
+    deployed_at: datetime = Field(default_factory=utc_now)
 
     @classmethod
     def make_id(cls, name: str, version: str) -> str:
@@ -59,7 +59,7 @@ class CodePackageRecord(BaseModel):
 
 class CodePackageStore(BaseModel):
     items: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class _CodePackageStoreMixin(SingleStoreMixin[Dict[str, Any], CodePackageStore]):

@@ -1,7 +1,7 @@
 """Prompt registry — high-level operations over the prompt store."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from ai_platform.utilities.time import utc_now
 from itertools import groupby
 from operator import attrgetter
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
@@ -106,7 +106,7 @@ class PromptRegistry:
             prompt_name=prompt.name,
             prompt_version=prompt.version,
             input_data=input_data,
-            executed_at=datetime.now(timezone.utc),
+            executed_at=utc_now(),
             model_name=model_name,
             output_type=output_type,
             usage=usage,

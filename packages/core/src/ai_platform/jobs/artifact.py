@@ -8,15 +8,15 @@ right concrete class.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from typing import Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class BaseArtifact(BaseModel):
@@ -24,5 +24,5 @@ class BaseArtifact(BaseModel):
 
     artifact_id: UUID = Field(default_factory=uuid4)
     artifact_type: str
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: datetime = Field(default_factory=utc_now)
     created_by_job: Optional[str] = None

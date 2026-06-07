@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ai_platform.utilities.time import utc_now
 
 
 # A registry entry is one of: a plain instruction prompt, a CrewAI
@@ -27,8 +29,8 @@ class Prompt(BaseModel):
     instructions: str               # instruction text (editable via API)
     kind: PromptKind = "prompt"     # discriminates plain prompts from personae / skills
     version: str = "0.1.0"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     def bump_version(self) -> str:
         """Return a copy of this prompt with the patch version bumped and updated_at set."""
@@ -53,7 +55,7 @@ class PromptStore(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: Dict[str, Prompt] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class PromptSnapshot(BaseModel):
@@ -73,7 +75,7 @@ class PromptExecution(BaseModel):
     prompt_name: str
     prompt_version: str
     input_data: Dict[str, Any] = Field(default_factory=dict)
-    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    executed_at: datetime = Field(default_factory=utc_now)
     model_name: Optional[str] = None
     output_type: Optional[str] = None
     usage: Optional[Dict[str, Any]] = None
@@ -84,4 +86,4 @@ class PromptExecutionStore(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: Dict[str, PromptExecution] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=utc_now)

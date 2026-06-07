@@ -1,7 +1,23 @@
 site_name: ai-platform
 site_description: Architecture, ops, and onboarding docs for the ai-platform control plane and the synthetic _demo baseline. Domain repos (e.g. sepoul/math-app) carry their own docs.
-site_url: ""
-repo_url: ""
+site_url: "https://sepoul.github.io/ai-platform/"
+repo_url: "https://github.com/sepoul/ai-platform"
+repo_name: "sepoul/ai-platform"
+edit_uri: "edit/main/docs/"
+# §1n: surface broken intra-doc links + nav issues. Many doc bodies
+# still link to source files via `../packages/...` paths which are
+# valid on GitHub but unknown to mkdocs — those are warnings we
+# tolerate for now. Full strict mode lands once those bodies are
+# rewritten to use github absolute URLs (tracked in §1n).
+strict: false
+validation:
+  links:
+    absolute_links: warn
+    unrecognized_links: warn
+    not_found: warn
+  nav:
+    omitted_files: warn
+    not_found: warn
 docs_dir: docs
 use_directory_urls: true
 
