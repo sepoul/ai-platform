@@ -26,3 +26,18 @@ class BaseArtifact(BaseModel):
     artifact_type: str
     created_at: datetime = Field(default_factory=utc_now)
     created_by_job: Optional[str] = None
+
+    # Blob-backed artifacts (PR-1). When a domain uploads user bytes via
+    # `POST /media`, it stamps the returned `storage_ref` (+ content_type
+    # / byte_size) here so the artifact references a blob in the storage
+    # plane instead of inlining JSON. These stay `None` for the common
+    # JSON-only artifact.
+    storage_ref: Optional[str] = None
+    content_type: Optional[str] = None
+    byte_size: Optional[int] = None
+
+    # Transient read-side hydration: `GET /artifacts/{id}` fills this in
+    # with a download URL for `storage_ref`. Never persisted —
+    # `ArtifactService.put` excludes it (it's a view of the ref, not
+    # state).
+    storage_url: Optional[str] = None
