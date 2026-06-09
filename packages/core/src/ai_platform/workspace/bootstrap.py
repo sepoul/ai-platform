@@ -15,6 +15,7 @@ from ai_platform.jobs.artifact_type_service import ArtifactTypeService
 from ai_platform.jobs.code_package_service import CodePackageService
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.jobs.job_definition_service import JobDefinitionService
+from ai_platform.jobs.media_service import MediaService
 from ai_platform.workspace.client import PlatformClient
 from ai_platform.workspace.storage.backends import LocalBackend, make_backend
 
@@ -30,6 +31,7 @@ class WorkspaceBootstrap:
     job_definition_service: JobDefinitionService  # catalog of deployed JobDefinitions
     artifact_type_service: ArtifactTypeService    # catalog of deployed BaseArtifact types
     code_package_service: CodePackageService      # installable wheels + their metadata
+    media_service: MediaService                   # user-uploaded bytes -> storage_ref (PR-1)
     root_dir: Optional[str]           # only meaningful when backend == "local"
 
 
@@ -45,5 +47,6 @@ def bootstrap_workspace() -> WorkspaceBootstrap:
         code_package_service=CodePackageService(
             backend.code_package_repo, backend.file_repo
         ),
+        media_service=MediaService(backend.file_repo),
         root_dir=backend.root_dir if isinstance(backend, LocalBackend) else None,
     )

@@ -123,6 +123,20 @@ After any change to a request/response model:
 CI runs `npm run gen:api:check` (regenerate + `git diff --exit-code`)
 to catch missing regenerations.
 
+**⚠️ Post repo-split SDK regen caveat.** The typed contract now lives in
+`sdk-ts/src/schema.d.ts` (published as `@aiplatform/sdk`, consumed by
+both `platform-ui/` here and `math-app/math-ui`). Regenerating it
+(`sdk-ts: npm run gen:api`) is **only safe from an OpenAPI dump of a
+deployment that registers every domain whose types consumers need**.
+This repo's local API boots only the synthetic `_demo` domain, so a
+naive local regen silently **drops the `math_*` types `math-app/math-ui`
+imports** — the diff will show large deletions. If your change is
+platform-only (new route / response model that needs no domain), it's
+fine to land the backend + tests and let the schema be regenerated at
+deploy time against the full platform+math OpenAPI; do **not** commit a
+local regen that deletes domain types. See the warning block in
+`sdk-ts/scripts/gen-api.sh`.
+
 ### Reaching for `os.getenv` inside a node
 
 Workers and API processes load env via the bootstrap helpers

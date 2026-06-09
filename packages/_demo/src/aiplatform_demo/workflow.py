@@ -20,6 +20,10 @@ class DemoWorkflowDependencies:
     """Per-run inputs for the demo graph."""
     message: str = ""
     logger: WorkerLogger = field(default_factory=NullLogger)
+    # Optional blob ref to attach to the produced artifact (PR-1).
+    storage_ref: Optional[str] = None
+    content_type: Optional[str] = None
+    byte_size: Optional[int] = None
 
 
 @dataclass
@@ -37,6 +41,9 @@ class EchoStep(BaseNode[DemoState, DemoWorkflowDependencies, DemoState]):
         )
         ctx.state.message = ctx.deps.message
         ctx.state.echoed = ctx.deps.message.upper()
+        ctx.state.storage_ref = ctx.deps.storage_ref
+        ctx.state.content_type = ctx.deps.content_type
+        ctx.state.byte_size = ctx.deps.byte_size
         return End(ctx.state)
 
 
@@ -61,5 +68,11 @@ def _extract_demo_result(state: DemoState):
 
     if state.echoed is None:
         return DemoResult()
-    echo = DemoEchoArtifact(original=state.message or "", echoed=state.echoed)
+    echo = DemoEchoArtifact(
+        original=state.message or "",
+        echoed=state.echoed,
+        storage_ref=state.storage_ref,
+        content_type=state.content_type,
+        byte_size=state.byte_size,
+    )
     return DemoResult(echo=echo, artifact_refs=[])

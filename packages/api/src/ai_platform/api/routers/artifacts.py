@@ -10,6 +10,7 @@ the OpenAPI schema typed variants per `artifact_type`.
 from __future__ import annotations
 
 from typing import Annotated, Optional, Union
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -115,10 +116,16 @@ def make_artifacts_router(
         service: ArtifactService = Depends(get_artifact_service),
     ):
         try:
-            return service.get(artifact_id)
+            artifact = service.get(artifact_id)
         except ObjectNotFound:
             raise HTTPException(
                 status_code=404, detail=f"Artifact '{artifact_id}' not found"
             )
+        # Hydrate a blob-backed artifact's ref into a download URL the
+        # client can fetch (PR-1). The ref carries `/` separators, so
+        # encode it whole as the query value.
+        if getattr(artifact, "storage_ref", None):
+            artifact.storage_url = f"/media/download?ref={quote(artifact.storage_ref, safe='')}"
+        return artifact
 
     return router

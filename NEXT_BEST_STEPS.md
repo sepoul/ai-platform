@@ -20,6 +20,19 @@ for tracking.
   discovery (PR #19), `@aiplatform/sdk` consumed by both UIs
   (PRs #20 + #21), math packages and math-ui extracted to math-app,
   synthetic `_demo` baseline (PR #22).
+- **PR-1 — Media ingestion + blob-backed artifacts** ✅
+  ([`platform-requirements.md`](platform-requirements.md), P0 keystone).
+  `POST /media` (multipart) lands user bytes in the storage plane via a
+  new `MediaService` over `FileRepository` (`media/` prefix) and returns
+  a `storage_ref`; `GET /media/download?ref=` streams them back.
+  `BaseArtifact` gained `storage_ref` / `content_type` / `byte_size`
+  (persisted) plus a transient `storage_url` hydrated to the download URL
+  on `GET /artifacts/{id}` (excluded from `ArtifactService.put`). The
+  `_demo` echo job threads an optional `storage_ref` input → state →
+  artifact so the full ingest loop is UAT-able out of the box (also
+  fixed a latent `UUID(uuid)` crash in the demo's persist). Bytes
+  traverse the control plane on ingest only — no compute/LLM/artifact
+  generation runs there. ASR/OCR/vision stay domain `[execution]` deps.
 
 See [`docs/architecture.md`](docs/architecture.md) for the resulting
 shape and [`docs/guides/deploy-a-domain.md`](docs/guides/deploy-a-domain.md)
@@ -110,6 +123,37 @@ changes, and have the API recompute its routing union on the fly.
 Foreign key into `code_packages` so the worker verifies that the
 entrypoint resolves to *this* deployed package, not whatever was
 lying around. Tightens what's currently a loose string contract.
+
+### §PR — Domain → platform asks (PR-2 … PR-7)
+
+From [`platform-requirements.md`](platform-requirements.md) (the
+math-app domain's ask list). PR-1 shipped (see Recent landings). Open,
+in priority order:
+
+- **PR-2 — cross-domain shared types + read facade** (P0): sanction a
+  shared library tier for artifact types more than one domain
+  produces/consumes, plus a thin read facade (`get` / `list_by_type`)
+  so a domain reads another's artifacts by ref/type without importing
+  its package. Types + reads only; write-ownership stays with the
+  producer.
+- **PR-3 — structured artifact query** (P1): add a metadata/tag field
+  to `BaseArtifact` + a filtered `GET /artifacts?type=&tag=&created_after=&created_by=&limit=`.
+  Structured filtering only — vector/semantic search stays domain-side
+  (design §13).
+- **PR-5 — cross-run thread / journey grouping** (P1): domain-modeled
+  first (a `LearningJourneyArtifact` referencing run-ids + concept-ids,
+  zero platform change); promote to a first-class `Session`/`Thread`
+  only if multiple features converge on needing it.
+- **PR-4 — scheduled / triggered runs** (P2): external cron →
+  `POST /jobs/runs/submit` first; promote to a stored
+  `(job_type, input_template, cron)` primitive only once a second
+  domain wants it.
+- **PR-7 — per-run model / budget tier** (P2): a `model_tier` / `effort`
+  knob on the job input or `ExecutionPolicy`, threaded to `deps_factory`
+  so a domain picks model + iteration cap from one place.
+- **Live conversation room** (feature 5): explicitly *not* a platform
+  item — a separate realtime service that uses the platform only as an
+  artifact sink (reuses PR-1's ingest).
 
 ---
 

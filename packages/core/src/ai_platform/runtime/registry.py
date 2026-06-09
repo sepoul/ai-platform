@@ -20,6 +20,7 @@ from ai_platform.jobs.artifact_service import ArtifactService
 from ai_platform.jobs.artifact_type_service import ArtifactTypeService
 from ai_platform.jobs.code_package_service import CodePackageService
 from ai_platform.jobs.execution_policy import JobControl
+from ai_platform.jobs.media_service import MediaService
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.jobs.job_definition_service import JobDefinitionService
 from ai_platform.workspace.client import PlatformClient
@@ -32,6 +33,7 @@ _artifact_service: Optional[ArtifactService] = None
 _job_definition_service: Optional[JobDefinitionService] = None
 _artifact_type_service: Optional[ArtifactTypeService] = None
 _code_package_service: Optional[CodePackageService] = None
+_media_service: Optional[MediaService] = None
 # Control-plane only: the API serves submission/result/status from these.
 # Execution objects never enter the API process (see control/execution split).
 _job_controls: dict[str, JobControl] = {}
@@ -45,9 +47,11 @@ def init_platform(
     job_definition_service: JobDefinitionService | None = None,
     artifact_type_service: ArtifactTypeService | None = None,
     code_package_service: CodePackageService | None = None,
+    media_service: MediaService | None = None,
 ) -> None:
     global _platform_client, _executor, _compute, _artifact_service
     global _job_definition_service, _artifact_type_service, _code_package_service
+    global _media_service
     _platform_client = platform_client
     _executor = executor
     _compute = compute
@@ -55,6 +59,7 @@ def init_platform(
     _job_definition_service = job_definition_service
     _artifact_type_service = artifact_type_service
     _code_package_service = code_package_service
+    _media_service = media_service
 
 
 def register_job_control(control: JobControl) -> None:
@@ -111,3 +116,11 @@ def get_code_package_service() -> CodePackageService:
             "CodePackageService not initialized — pass it to init_platform()"
         )
     return _code_package_service
+
+
+def get_media_service() -> MediaService:
+    if _media_service is None:
+        raise RuntimeError(
+            "MediaService not initialized — pass it to init_platform()"
+        )
+    return _media_service

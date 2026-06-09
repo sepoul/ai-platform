@@ -9,6 +9,16 @@
 #   2. $MATHAPP_REPO     — path to a mathapp checkout
 #   3. ..                — monorepo parent
 #   4. http://127.0.0.1:8000/openapi.json — fallback
+#
+# ⚠️  The OpenAPI source MUST come from a deployment that registers
+# EVERY domain whose types consumers need. Since the repo split, this
+# repo's local API (scripts/dump-openapi.sh, the localhost fallback)
+# boots only the synthetic `_demo` domain — dumping from it silently
+# DROPS the `math_*` artifact/input types that `math-app/math-ui`
+# imports from `components`. Before committing a regen, point
+# $OPENAPI_SOURCE / $MATHAPP_REPO at a full platform+math OpenAPI (a
+# math-app deployment's /openapi.json) and sanity-check the diff isn't
+# deleting domain types you still ship.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

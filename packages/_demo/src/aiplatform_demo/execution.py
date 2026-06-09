@@ -41,6 +41,9 @@ def build_demo_execution(
         return DemoWorkflowDependencies(
             message=payload.get("message", ""),
             logger=logger,
+            storage_ref=payload.get("storage_ref"),
+            content_type=payload.get("content_type"),
+            byte_size=payload.get("byte_size"),
         )
 
     def _persist(job_id: str, state: DemoState) -> list[UUID]:
@@ -51,9 +54,14 @@ def build_demo_execution(
             original=state.message or "",
             echoed=state.echoed,
             created_by_job=job_id,
+            storage_ref=state.storage_ref,
+            content_type=state.content_type,
+            byte_size=state.byte_size,
         )
         artifact_api.put(artifact)
-        return [UUID(artifact.artifact_id)]
+        # `artifact_id` is already a UUID (BaseArtifact default_factory);
+        # wrapping it in UUID(...) raised. Return it directly.
+        return [artifact.artifact_id]
 
     return JobExecution(
         name="demo",

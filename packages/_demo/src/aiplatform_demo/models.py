@@ -17,6 +17,16 @@ class DemoInput(BaseJobInput):
     message: str = Field(..., description="Any text. The demo job echoes it back uppercased.")
     created_by: Optional[str] = Field(None, description="Submitting user.")
 
+    # PR-1 UAT hook: pass a `storage_ref` from `POST /media` and the demo
+    # stamps it onto the produced artifact, so the full ingest loop
+    # (upload → blob-backed artifact → hydrated `storage_url` on
+    # `GET /artifacts/{id}`) is exercisable out of the box.
+    storage_ref: Optional[str] = Field(
+        None, description="storage_ref from POST /media to attach to the artifact."
+    )
+    content_type: Optional[str] = Field(None, description="Content-type of the uploaded blob.")
+    byte_size: Optional[int] = Field(None, description="Size in bytes of the uploaded blob.")
+
 
 class DemoResult(BaseJobResult):
     """Result payload for the demo job."""

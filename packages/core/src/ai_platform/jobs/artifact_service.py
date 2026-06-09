@@ -43,7 +43,9 @@ class ArtifactService:
     def put(self, artifact: BaseArtifact) -> UUID:
         self.repo.put(
             str(artifact.artifact_id),
-            artifact.model_dump(mode="json"),
+            # `storage_url` is a read-side hydration of `storage_ref`
+            # (see BaseArtifact); it's recomputed on GET and never stored.
+            artifact.model_dump(mode="json", exclude={"storage_url"}),
         )
         return artifact.artifact_id
 
