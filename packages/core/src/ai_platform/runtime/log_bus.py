@@ -17,10 +17,12 @@ shape; its fields match the `POST /jobs/{id}/logs` body.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import AsyncIterator, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from ai_platform.utilities.time import utc_now
 
 
 LogLevel = Literal["info", "warning", "error", "debug"]
@@ -29,7 +31,7 @@ LogLevel = Literal["info", "warning", "error", "debug"]
 class LogEntry(BaseModel):
     """Single log record emitted by the worker for one job."""
     job_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=utc_now)
     level: LogLevel = "info"
     message: str
     stage: Optional[str] = None  # which graph node emitted it (when known)

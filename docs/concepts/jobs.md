@@ -4,7 +4,7 @@ The platform's job system runs `pydantic_graph` workflows reliably:
 submit → execute step by step → optionally pause for human review →
 resume → produce a typed result. This doc captures the
 **implemented** shape; for adding a new job type, read
-[`onboarding_new_job_type.md`](onboarding_new_job_type.md).
+[`onboarding_new_job_type.md`](../guides/deploy-a-domain.md).
 
 ---
 
@@ -71,7 +71,7 @@ for optimistic concurrency on Postgres), `get`, `list(status, job_type, limit)`,
 offset).
 
 Full breakdown including the Supabase schema and what the contract
-unlocks: [`storage_backends.md`](storage_backends.md).
+unlocks: [`storage_backends.md`](../reference/storage-backends.md).
 
 ---
 
@@ -81,7 +81,7 @@ unlocks: [`storage_backends.md`](storage_backends.md).
 it: `poll` (default — separate worker process), `thread` (in-process
 pool), `celery` (stub). The router calls `compute.enqueue(job_id)`
 right after the record is created or unpaused; that's the only seam.
-See [`compute_backends.md`](compute_backends.md) for full details.
+See [`compute_backends.md`](../reference/compute-backends.md) for full details.
 
 ---
 
@@ -143,7 +143,7 @@ schema):
 | `GET /jobs/{job_id}` | Status snapshot — `JobStatusResponse` with progress fields + result preview. |
 | `GET /jobs/{job_id}/result` | Typed result — discriminated union over every registered `result_type`. |
 | `POST /jobs/{job_id}/review` | Submit a human review. Body is the union of every gate's `review_type`. |
-| `POST /jobs/{job_id}/logs` | Worker → API log emission (used by `WorkerLogger`). See [`live_logs.md`](live_logs.md). |
+| `POST /jobs/{job_id}/logs` | Worker → API log emission (used by `WorkerLogger`). See [`live_logs.md`](../guides/live-logs.md). |
 | `GET /jobs/{job_id}/logs/stream` | SSE: live log stream for one job. |
 
 ---
@@ -175,4 +175,4 @@ schema):
   not implemented (poll backend currently re-runs from the last
   saved checkpoint, which is good enough for dev).
 - Multi-instance API: the `LogBus` is per-process — see
-  [`live_logs.md`](live_logs.md) for the Redis swap-in plan.
+  [`live_logs.md`](../guides/live-logs.md) for the Redis swap-in plan.

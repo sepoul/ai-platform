@@ -7,7 +7,9 @@ artifacts on read.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from typing import Any, Dict
 
 from pydantic import BaseModel, Field
@@ -18,8 +20,6 @@ from ai_platform.workspace.storage.structured.b2 import B2CanonicalRepository
 from ai_platform.workspace.storage.structured.local import LocalCanonicalRepository
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class ArtifactStore(BaseModel):
@@ -32,7 +32,7 @@ class ArtifactStore(BaseModel):
     """
 
     items: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class _ArtifactStoreMixin(SingleStoreMixin[Dict[str, Any], ArtifactStore]):

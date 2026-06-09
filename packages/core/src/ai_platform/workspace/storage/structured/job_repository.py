@@ -1,5 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime
+
+from ai_platform.utilities.time import utc_now
 from enum import Enum
 from typing import Any, Dict, List
 from uuid import UUID, uuid4
@@ -13,10 +15,6 @@ from ai_platform.workspace.storage.structured.base import StoredRecord
 # ---------------------------------------------------------------------------
 # Simplified job models (stripped-down specs.py)
 # ---------------------------------------------------------------------------
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
 
 class JobStatus(str, Enum):
     PENDING = "PENDING"
@@ -32,7 +30,7 @@ class JobSpec(BaseModel):
 
     job_id: UUID = Field(default_factory=uuid4)
     job_type: str
-    created_at: datetime = Field(default_factory=_utc_now)
+    created_at: datetime = Field(default_factory=utc_now)
     created_by: str | None = None
     workspace_ref: str | None = None
 
@@ -51,7 +49,7 @@ class JobState(BaseModel):
 
     job_id: UUID
     status: JobStatus = JobStatus.PENDING
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
     version: int = Field(default=0, ge=0)
     attempt: int = Field(default=0, ge=0)
 
@@ -85,8 +83,8 @@ class JobRecord(BaseModel):
 
     spec: JobSpec
     state: JobState
-    created_at: datetime = Field(default_factory=_utc_now)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     @classmethod
     def create(
@@ -113,7 +111,7 @@ class JobRecord(BaseModel):
         self.state.status = JobStatus.RUNNING
         self.state.attempt += 1
         self.state.claimed_by = worker_id
-        self.state.heartbeat_at = _utc_now()
+        self.state.heartbeat_at = utc_now()
         self._bump()
 
     def mark_waiting(self, reason: str, resume_token: str | None = None) -> None:
@@ -144,7 +142,7 @@ class JobRecord(BaseModel):
         self._bump()
 
     def _bump(self) -> None:
-        now = _utc_now()
+        now = utc_now()
         self.state.version += 1
         self.state.updated_at = now
         self.updated_at = now
@@ -158,7 +156,7 @@ class JobStore(BaseModel):
     """All jobs in one JSON blob."""
 
     items: Dict[str, JobRecord] = Field(default_factory=dict)
-    updated_at: datetime = Field(default_factory=_utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +179,7 @@ class _JobStoreMixin:
             return JobStore()
 
     def _save_store(self, store: JobStore) -> StoredRecord[JobStore]:
-        store.updated_at = _utc_now()
+        store.updated_at = utc_now()
         return super().put_canonical(self.STORE_KEY, store)
 
     # ---- Protocol surface ----

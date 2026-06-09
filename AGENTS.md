@@ -15,7 +15,7 @@ The detailed docs are linked at the end.
 | `math-ui/` | Next.js 16 frontend (was a sibling repo until 2026-05-16; merged in) |
 
 The contract between them is the **OpenAPI schema** that FastAPI
-emits. See [`docs/dev_lifecycle.md`](docs/dev_lifecycle.md) for the
+emits. See [`docs/dev_lifecycle.md`](../reference/typed-clients.md) for the
 regenerate-and-typecheck loop.
 
 Layering:
@@ -69,7 +69,7 @@ via `WorkflowDependencies` populated by `deps_factory` — see
 
 If you write a new agent, the prompt is a registry artifact, not a
 string literal in a `.py` file. See
-[`docs/prompt_registry.md`](docs/prompt_registry.md).
+[`docs/prompt_registry.md`](../guides/prompts.md).
 
 ### Hand-rolling TypeScript types from FastAPI shapes
 
@@ -219,17 +219,17 @@ The whole `docs/` set is also browsable as a website — run
 theme, full-text search, live reload. Index at
 [`docs/README.md`](docs/README.md).
 
-- [`docs/dev_lifecycle.md`](docs/dev_lifecycle.md) — codegen loop,
+- [`docs/dev_lifecycle.md`](../reference/typed-clients.md) — codegen loop,
   cross-repo coherence.
-- [`docs/onboarding_new_job_type.md`](docs/onboarding_new_job_type.md)
+- [`docs/onboarding_new_job_type.md`](../guides/deploy-a-domain.md)
   — adding a new domain workflow.
-- [`docs/jobs_spec.md`](docs/jobs_spec.md) — platform job lifecycle,
+- [`docs/jobs_spec.md`](../concepts/jobs.md) — platform job lifecycle,
   checkpoints, gates, invariants.
-- [`docs/prompt_registry.md`](docs/prompt_registry.md) — prompt
+- [`docs/prompt_registry.md`](../guides/prompts.md) — prompt
   registry, deployment, execution tracking.
-- [`docs/live_logs.md`](docs/live_logs.md) — worker → UI SSE log
+- [`docs/live_logs.md`](../guides/live-logs.md) — worker → UI SSE log
   stream.
-- [`docs/compute_backends.md`](docs/compute_backends.md) — poll /
+- [`docs/compute_backends.md`](../reference/compute-backends.md) — poll /
   thread / celery selection.
 
 If you see a pattern that "feels off" — it probably is. Surface it

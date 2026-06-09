@@ -6,7 +6,7 @@ the operational guides in this directory then go deeper on individual
 seams (jobs, prompts, compute, storage, etc).
 
 For the *conceptual contract* (the planes, the ownership model, the
-why), see [`platform_design.md`](platform_design.md). This doc is the
+why), see [`platform_design.md`](concepts/platform-design.md). This doc is the
 *implementation snapshot* — what's wired up, where it lives, how a
 request flows through it.
 
@@ -80,7 +80,7 @@ graph TB
     Session -- "POST /jobs/runs/submit<br/>GET /jobs/id<br/>GET /jobs/id/result" --> API
 ```
 
-**Plane split** ([`platform_design.md`](platform_design.md) §2 has the
+**Plane split** ([`concepts/platform-design.md`](concepts/platform-design.md) §2 has the
 contract; this is the realization):
 
 - **Control plane** = API process + the three catalogs. Knows
@@ -442,10 +442,10 @@ platform doesn't trip:
 
 ## See also
 
-- [`platform_design.md`](platform_design.md) — the conceptual contract (planes, ownership, vocabulary).
-- [`jobs_spec.md`](jobs_spec.md) — job lifecycle deep-dive (states, checkpoints, gates).
-- [`control_execution_split.md`](control_execution_split.md) — why control and execution are split, and the import rules that keep them split.
-- [`compute_backends.md`](compute_backends.md) — pluggable compute (poll / thread / celery).
-- [`storage_backends.md`](storage_backends.md) — pluggable storage (local / B2 / Supabase).
-- [`onboarding_new_job_type.md`](onboarding_new_job_type.md) — the cookbook for adding a domain workflow.
-- [`deployment_hetzner.md`](deployment_hetzner.md) — the prod box, images, redeploy script.
+- [`platform_design.md`](concepts/platform-design.md) — the conceptual contract (planes, ownership, vocabulary).
+- [`jobs_spec.md`](concepts/jobs.md) — job lifecycle deep-dive (states, checkpoints, gates).
+- [`control_execution_split.md`](concepts/control-execution-split.md) — why control and execution are split, and the import rules that keep them split.
+- [`compute_backends.md`](reference/compute-backends.md) — pluggable compute (poll / thread / celery).
+- [`storage_backends.md`](reference/storage-backends.md) — pluggable storage (local / B2 / Supabase).
+- [`onboarding_new_job_type.md`](guides/deploy-a-domain.md) — the cookbook for adding a domain workflow.
+- [`deployment_hetzner.md`](operations/hetzner-deploy.md) — the prod box, images, redeploy script.

@@ -540,7 +540,7 @@ docker compose logs -f --tail=200 worker
 
 Or from the laptop, the live SSE log stream per job:
 `http://<box-tailnet-ip>:8000/jobs/<id>/logs/stream` — same wiring as
-[live_logs.md](live_logs.md).
+[live_logs.md](../guides/live-logs.md).
 
 ### Re-running Supabase migrations on the box
 
@@ -594,5 +594,5 @@ SUPABASE_BUCKET=app-data
 SUPABASE_CONNECTION_STRING=postgresql://…
 ```
 
-See [storage_backends.md](storage_backends.md) for which vars each
+See [storage_backends.md](../reference/storage-backends.md) for which vars each
 backend needs.

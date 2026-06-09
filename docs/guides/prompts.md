@@ -17,7 +17,7 @@ why.
 | [`src/ai_platform/ai/prompts/registry.py`](../src/ai_platform/ai/prompts/registry.py) | `PROMPT_DEFINITIONS` — every prompt the platform knows about, paired with its instruction file. |
 | [`src/ai_platform/ai/prompts/models.py`](../src/ai_platform/ai/prompts/models.py) | `Prompt`, `PromptSnapshot`, `PromptExecution` — the typed shapes. |
 | [`src/ai_platform/workspace/prompt_registry.py`](../src/ai_platform/workspace/prompt_registry.py) | `PromptRegistry` — service layer (`get_prompt`, `update_instructions`, `list_prompts`). |
-| [`src/ai_platform/workspace/prompt_repositories.py`](../src/ai_platform/workspace/prompt_repositories.py) | `LocalPromptRepository` / `B2PromptRepository` — backend storage (single-blob). The Supabase variant lives in [`storage/structured/supabase.py`](../src/ai_platform/workspace/storage/structured/supabase.py); see [`storage_backends.md`](storage_backends.md). |
+| [`src/ai_platform/workspace/prompt_repositories.py`](../src/ai_platform/workspace/prompt_repositories.py) | `LocalPromptRepository` / `B2PromptRepository` — backend storage (single-blob). The Supabase variant lives in [`storage/structured/supabase.py`](../src/ai_platform/workspace/storage/structured/supabase.py); see [`storage_backends.md`](../reference/storage-backends.md). |
 | [`src/ai_platform/api/routers/prompts.py`](../src/ai_platform/api/routers/prompts.py) | HTTP surface: `GET /prompts`, `GET /prompts/{name}`, `PUT /prompts/{name}`, `GET /prompt-executions/...`. |
 | [`src/scripts/deploy_prompts.py`](../src/scripts/deploy_prompts.py) | Deploy script — reads `PROMPT_DEFINITIONS`, get-or-creates each in the registry. |
 
