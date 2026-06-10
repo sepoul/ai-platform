@@ -155,6 +155,32 @@ in priority order:
   item — a separate realtime service that uses the platform only as an
   artifact sink (reuses PR-1's ingest).
 
+### §SDK — contract-first SDK + auto-regen
+
+From [`sdk-contract-first-plan.md`](sdk-contract-first-plan.md). Core
+loop **landed** (PRs #26 + #27): `aiplatform declare-artifacts`
+(contract-first; register artifact types with no wheel/job),
+`aiplatform snapshot-openapi` (dump the full OpenAPI where you're already
+on the tailnet), and the `sdk-regen` workflow (commit the snapshot →
+CI regenerates `schema.d.ts` → PR; CI never joins the tailnet, no
+secrets). The remaining moves are **deferred — promote when a real need
+appears** (the box snapshot already yields a complete OpenAPI and the
+sibling `file:` consumers already work):
+
+- **GitHub Packages publish** (move 3): only when a *non-sibling*
+  consumer (a friend's repo) needs the SDK. Note: GitHub Packages scopes
+  to the org, so this means publishing as `@sepoul/sdk` and having
+  consumers alias it (`"@aiplatform/sdk": "npm:@sepoul/sdk@^x"`) so their
+  imports don't change — a coordinated change across this repo + math-ui.
+- **`GET /sdk/openapi.json` assembler** (move 4): assemble the full
+  OpenAPI from the catalog's stored `json_schema` rows (with `$defs`
+  hoisting/namespacing) so a snapshot can be produced *without* a
+  fully-booted instance. Only needed if generating off a domain-less
+  API matters.
+- **Auto-fire on deploy** (move 5): largely obviated — the manual
+  `snapshot-openapi` + commit *is* the trigger, and that's the chosen
+  workflow.
+
 ---
 
 ## Conventions

@@ -11,10 +11,16 @@ Usage from a friend's repo:
     # parallel (see sdk-contract-first-plan.md).
     aiplatform declare-artifacts --bundle bundle.toml --api-url http://my.platform
 
+    # Dump a deployment's OpenAPI for the SDK-regen workflow. Run where
+    # you can reach the box (e.g. on the tailnet); commit the result.
+    aiplatform snapshot-openapi --api-url http://mathapp-prod:8000
+
 `deploy` = wheel upload → JobDefinitions → ArtifactTypes (idempotent).
-`declare-artifacts` = ArtifactTypes only. See [[bundle.deploy_bundle]] /
-[[bundle.declare_artifacts]]; this module is a thin argparse +
-pretty-print wrapper.
+`declare-artifacts` = ArtifactTypes only. `snapshot-openapi` = write the
+full `/openapi.json` to a file so CI can regenerate types without any
+privileged network access. See [[bundle.deploy_bundle]] /
+[[bundle.declare_artifacts]] / [[bundle.snapshot_openapi]]; this module is
+a thin argparse + pretty-print wrapper.
 """
 from __future__ import annotations
 
@@ -22,7 +28,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from ai_platform.bundle import DEFAULT_API_URL, declare_artifacts, deploy_bundle
+from ai_platform.bundle import (
+    DEFAULT_API_URL,
+    declare_artifacts,
+    deploy_bundle,
+    snapshot_openapi,
+)
+
+
+_SNAPSHOT_DEFAULT = "sdk-ts/openapi.snapshot.json"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -57,6 +71,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--api-url",
         default=DEFAULT_API_URL,
         help=f"Platform API URL (default: {DEFAULT_API_URL})",
+    )
+
+    snapshot = sub.add_parser(
+        "snapshot-openapi",
+        help="Dump a deployment's /openapi.json to a file for the SDK-regen workflow",
+    )
+    snapshot.add_argument(
+        "--api-url",
+        default=DEFAULT_API_URL,
+        help=f"Platform API URL to snapshot (default: {DEFAULT_API_URL})",
+    )
+    snapshot.add_argument(
+        "--out",
+        default=_SNAPSHOT_DEFAULT,
+        help=f"Where to write the snapshot (default: {_SNAPSHOT_DEFAULT})",
     )
     return parser
 
@@ -105,6 +134,18 @@ def _cmd_declare_artifacts(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_snapshot_openapi(args: argparse.Namespace) -> int:
+    print(f"→ Snapshotting OpenAPI from {args.api_url}")
+    try:
+        out = snapshot_openapi(args.api_url, out_path=args.out)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI surface
+        print(f"snapshot-openapi failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"  ✓ wrote {out}")
+    print("Commit it — the SDK-regen workflow regenerates schema.d.ts from it.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -112,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_deploy(args)
     if args.cmd == "declare-artifacts":
         return _cmd_declare_artifacts(args)
+    if args.cmd == "snapshot-openapi":
+        return _cmd_snapshot_openapi(args)
     parser.error(f"unknown command: {args.cmd}")
     return 2  # unreachable; argparse.error exits
 

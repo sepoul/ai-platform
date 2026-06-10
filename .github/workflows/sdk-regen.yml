@@ -1,0 +1,82 @@
+name: Regenerate SDK schema
+
+# Regenerates `sdk-ts/src/schema.d.ts` (the @aiplatform/sdk typed
+# contract) from a committed OpenAPI snapshot and opens a PR with the
+# diff.
+#
+# Security note — this job has NO access to your private network. The only
+# step that touches the box is `aiplatform snapshot-openapi`, run by an
+# operator who is already on the tailnet; they commit the resulting
+# `sdk-ts/openapi.snapshot.json`. This workflow then does a pure,
+# privilege-free transform of that committed file into TypeScript types.
+# CI never joins the tailnet and needs no secrets.
+#
+# Trigger it by committing a refreshed snapshot:
+#     aiplatform snapshot-openapi --api-url http://mathapp-prod:8000
+#     git commit -am "chore: refresh openapi snapshot" && git push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - sdk-ts/openapi.snapshot.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate the committed snapshot
+        run: |
+          SNAP=sdk-ts/openapi.snapshot.json
+          if [ ! -f "$SNAP" ]; then
+            echo "::error::$SNAP not found. Run 'aiplatform snapshot-openapi' and commit it first."
+            exit 1
+          fi
+          # Landmine guard: refuse to regenerate from a partial (e.g.
+          # _demo-only) snapshot that would silently drop domain types.
+          python3 - <<'PY'
+          import json
+          spec = json.load(open("sdk-ts/openapi.snapshot.json"))
+          schemas = spec.get("components", {}).get("schemas", {})
+          assert any(k.lower().startswith("math") for k in schemas), (
+              "Snapshot has no math_* component schemas — refusing to regen a "
+              "partial schema (was it taken against a _demo-only instance?)"
+          )
+          print(f"Snapshot OK: {len(schemas)} component schemas")
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate the typed contract
+        run: |
+          npm --prefix sdk-ts ci
+          OPENAPI_SOURCE="$PWD/sdk-ts/openapi.snapshot.json" npm --prefix sdk-ts run gen:api
+          npm --prefix sdk-ts run build
+
+      - name: Open a PR if the schema changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/sdk-regen
+          delete-branch: true
+          commit-message: "chore(sdk): regenerate schema.d.ts from the openapi snapshot"
+          title: "chore(sdk): regenerate @aiplatform/sdk types"
+          body: |
+            Automated regeneration of `sdk-ts/src/schema.d.ts` from the
+            committed `sdk-ts/openapi.snapshot.json`.
+
+            Triggered by: `${{ github.event_name }}`.
+
+            Consumers (`platform-ui`, `math-app/math-ui`) pick this up on
+            their next build / dependency bump.
+          add-paths: |
+            sdk-ts/src/schema.d.ts
+            sdk-ts/dist/schema.d.ts
