@@ -109,20 +109,28 @@ they're already published.
 
 ## How `schema.d.ts` stays in sync (automated)
 
-A workflow regenerates the committed schema from the **full** deployed
-catalog and opens a PR with the diff:
+Two steps, deliberately split so **CI never touches your private
+network**:
 
-- **Triggers:** manual (`workflow_dispatch`), nightly (`schedule`), and
-  `repository_dispatch: sdk-regen` — fired on domain deploy.
-- **Source:** the complete OpenAPI from the live deployment (every
-  platform + domain type), fetched over Tailscale. (A later
-  `GET /sdk/openapi.json` assembler will let it read the catalog
-  directly, dropping the box dependency.)
-- **Output:** a PR updating `sdk-ts/src/schema.d.ts`. Consumers pick it
-  up on their next build / dep bump.
+**1. Snapshot** — needs the box, so *you* run it (you're on the tailnet):
 
-One-time setup: a `TAILSCALE_AUTHKEY` repo secret (ephemeral, reusable),
-and ACLs that let the CI node reach the box on `:8000`. See
+```bash
+aiplatform snapshot-openapi --api-url http://mathapp-prod:8000
+git commit -am "chore: refresh openapi snapshot" && git push
+```
+
+This writes `sdk-ts/openapi.snapshot.json` — the full OpenAPI of the
+deployed catalog (every platform + domain type).
+
+**2. Regenerate** — no privileged access, so CI does it: committing the
+snapshot triggers the *Regenerate SDK schema* workflow, which transforms
+the committed JSON into `sdk-ts/src/schema.d.ts` and opens a PR.
+Consumers pick it up on their next build / dependency bump.
+
+The only step that reaches the box is the snapshot dump, run by someone
+already trusted to reach it; CI does a pure transform — no tailnet, no
+secrets. A later `GET /sdk/openapi.json` assembler will be able to
+produce the snapshot from the catalog directly. See
 `.github/workflows/sdk-regen.yml`.
 
 ---

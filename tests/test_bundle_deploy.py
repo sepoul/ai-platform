@@ -11,6 +11,7 @@ Layered:
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Literal
 from unittest.mock import MagicMock
@@ -28,6 +29,7 @@ from ai_platform.bundle import (
     declare_artifact_types,
     declare_artifacts,
     deploy_bundle,
+    snapshot_openapi,
 )
 from ai_platform.bundle.manifest import BundleManifest
 from ai_platform.jobs.artifact import BaseArtifact
@@ -455,3 +457,59 @@ def test_cli_declare_artifacts_missing_manifest_returns_2(tmp_path: Path, capsys
     rc = cli.main(["declare-artifacts", "--bundle", str(tmp_path / "nope.toml")])
     assert rc == 2
     assert "not found" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# snapshot-openapi — dump a deployment's OpenAPI for the regen workflow
+# ---------------------------------------------------------------------------
+
+
+def _route_httpx_get_through_testclient(monkeypatch, api_client: TestClient):
+    """Route `httpx.get` (used by snapshot_openapi) to the in-process app —
+    FastAPI serves `/openapi.json` for free."""
+    import ai_platform.bundle as bundle_mod
+
+    def fake_get(url, timeout=None):  # noqa: ARG001
+        path = "/" + url.split("://", 1)[1].split("/", 1)[1]
+        resp = api_client.get(path)
+
+        class _R:
+            status_code = resp.status_code
+
+            def raise_for_status(self):
+                resp.raise_for_status()
+
+            def json(self):
+                return resp.json()
+
+        return _R()
+
+    monkeypatch.setattr(bundle_mod.httpx, "get", fake_get)
+
+
+def test_snapshot_openapi_writes_full_spec(api_client, tmp_path: Path, monkeypatch):
+    _route_httpx_get_through_testclient(monkeypatch, api_client)
+    out = tmp_path / "openapi.snapshot.json"
+
+    written = snapshot_openapi("http://fake", out_path=out)
+
+    assert written == out
+    spec = json.loads(out.read_text())
+    assert spec["openapi"].startswith("3")  # it's a real OpenAPI document
+    assert "paths" in spec
+
+
+def test_snapshot_openapi_creates_parent_dirs(api_client, tmp_path: Path, monkeypatch):
+    _route_httpx_get_through_testclient(monkeypatch, api_client)
+    out = tmp_path / "nested" / "dir" / "openapi.snapshot.json"
+    snapshot_openapi("http://fake", out_path=out)
+    assert out.exists()
+
+
+def test_cli_snapshot_openapi_returns_0(api_client, tmp_path: Path, monkeypatch, capsys):
+    _route_httpx_get_through_testclient(monkeypatch, api_client)
+    out = tmp_path / "snap.json"
+    rc = cli.main(["snapshot-openapi", "--api-url", "http://fake", "--out", str(out)])
+    assert rc == 0
+    assert out.exists()
+    assert "wrote" in capsys.readouterr().out

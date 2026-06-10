@@ -83,10 +83,15 @@ only `_demo`, so a naive regen drops the `math_*` types.
 Fix: generate from the **catalog** (every deployed type), not an
 instance.
 
-- **Phase 1 (ship first):** a CI workflow regenerates + commits
-  `schema.d.ts`. Source = the catalog (Supabase is internet-reachable —
-  CI needs no tailnet). Triggered by `repository_dispatch` (from
-  deploy/declare), a nightly schedule, and manual dispatch.
+- **Phase 1 (ship first):** split into a privileged "produce the source"
+  step and a privilege-free "transform" step, so **CI never touches the
+  private network** (it doesn't join the tailnet and holds no secrets):
+  1. An operator on the tailnet runs `aiplatform snapshot-openapi
+     --api-url http://mathapp-prod:8000` → writes the full
+     `sdk-ts/openapi.snapshot.json` → commits it.
+  2. That commit triggers a workflow that regenerates `schema.d.ts` from
+     the committed snapshot and opens a PR. Pure transform — the box is
+     never reached from CI.
 - **Phase 2 (instance-proof):** add `GET /sdk/openapi.json` that
   *assembles* a complete OpenAPI from the catalog's `json_schema` +
   `input_schema` + `result_schema` rows — servable even by a
@@ -160,33 +165,41 @@ their own pydantic, before anything is deployed.
 
 ---
 
-## Trigger wiring (the "magic")
+## Trigger wiring (the "magic", without extending the trust boundary)
 
 ```
-aiplatform declare-artifacts / deploy   (the trigger)
-        │ on success
-        ▼
-repository_dispatch  → ai-platform CI
-        │
-        ├─ regenerate schema.d.ts from the catalog (Part B)
-        ├─ commit it
-        └─ publish @aiplatform/sdk to GitHub Packages (Part C)
+operator (already on the tailnet)
+  aiplatform snapshot-openapi --api-url http://mathapp-prod:8000
+        │ writes sdk-ts/openapi.snapshot.json
+        ▼ git push
+push (paths: openapi.snapshot.json)  → ai-platform CI
+        │  pure transform — no tailnet, no secrets
+        ├─ regenerate schema.d.ts from the committed snapshot (Part B)
+        ├─ open a PR with the diff
+        └─ publish @aiplatform/sdk to GitHub Packages (Part C, move 3)
 ```
 
-Plus nightly + manual dispatch as backstops. Decoupled: a regen failure
-never blocks a domain going live.
+The only step that reaches the box is the snapshot dump, run by someone
+already trusted to reach it. CI joins no private network and holds no
+secrets. Decoupled: a regen failure never blocks a domain going live.
+
+> Earlier sketch had CI fetch the OpenAPI from the box over Tailscale —
+> rejected: it puts a GitHub runner inside the private perimeter. The
+> snapshot/push split avoids that entirely.
 
 ---
 
 ## Build order
 
 1. **`aiplatform declare-artifacts`** CLI (Part A) — small, reuses
-   `/artifact-types`. Unblocks parallel dev immediately.
-2. **Catalog-driven regen workflow** (Part B Phase 1) — dispatch +
-   nightly + manual; commit `schema.d.ts`.
+   `/artifact-types`. Unblocks parallel dev immediately. ✅
+2. **Snapshot-driven regen workflow** (Part B Phase 1) — `aiplatform
+   snapshot-openapi` + a workflow that regenerates `schema.d.ts` from the
+   committed snapshot and opens a PR. No CI tailnet/secrets. ✅
 3. **Publish to GitHub Packages** (Part C mode 1) + document the local
    link loop (mode 2).
 4. **`GET /sdk/openapi.json`** assembler (Part B Phase 2) — makes
-   generation instance-proof; tackle `$defs` namespacing.
-5. Fold the `repository_dispatch` emit into `aiplatform deploy` /
-   `declare-artifacts`.
+   generation instance-proof and lets the snapshot come from the catalog
+   directly; tackle `$defs` namespacing.
+5. (Optional) fold the snapshot+push into a one-shot `aiplatform deploy`
+   convenience for operators with repo write access.
