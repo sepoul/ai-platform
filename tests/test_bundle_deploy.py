@@ -22,7 +22,13 @@ from fastapi.testclient import TestClient
 from ai_platform.api.routers import artifact_types as artifact_types_router
 from ai_platform.api.routers import code_packages as code_pkgs_router
 from ai_platform.api.routers import job_definitions as job_defs_router
-from ai_platform.bundle import _resolve_entrypoint, cli, deploy_bundle
+from ai_platform.bundle import (
+    _resolve_entrypoint,
+    cli,
+    declare_artifact_types,
+    declare_artifacts,
+    deploy_bundle,
+)
 from ai_platform.bundle.manifest import BundleManifest
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.jobs.artifact_type_service import ArtifactTypeService
@@ -355,3 +361,97 @@ def test_cli_main_returns_1_on_deploy_failure(
     rc = cli.main(["deploy", "--bundle", str(bundle_manifest)])
     assert rc == 1
     assert "api unreachable" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# declare-artifacts — contract-first (artifact types only, no wheel/job)
+# ---------------------------------------------------------------------------
+
+
+def test_declare_artifacts_posts_only_artifact_types(
+    api_client, services, bundle_manifest, monkeypatch
+):
+    """The whole point of the split: declaring the contract registers the
+    artifact types and touches NEITHER code_packages NOR job_definitions.
+    """
+    jd_svc, at_svc, cp_svc = services
+    _route_httpx_through_testclient(monkeypatch, api_client)
+
+    report = declare_artifacts(bundle_manifest, api_url="http://fake")
+
+    assert report["artifact_types"] == ["toy_artifact@1.0.0"]
+    assert at_svc.get("toy_artifact@1.0.0").domain == "toy"
+    # No wheel, no job — the contract shipped alone.
+    assert cp_svc.list() == []
+    assert jd_svc.list() == []
+
+
+def test_declare_artifacts_works_without_a_wheel(
+    api_client, services, tmp_path, monkeypatch
+):
+    """Contract-first means publishing artifact shapes before the wheel is
+    even built — `declare_artifacts` never reads it.
+    """
+    _jd, _at, cp_svc = services
+    _route_httpx_through_testclient(monkeypatch, api_client)
+
+    manifest = tmp_path / "bundle.toml"
+    manifest.write_text("""
+[package]
+name = "toy_pkg"
+version = "1.0.0"
+runtime = "default"
+wheel = "dist/never-built.whl"
+
+[control]
+domain = "toy"
+control_entrypoint = "tests.test_bundle_deploy:toy_register_control"
+execution_entrypoint = "tests.test_bundle_deploy:toy_register_execution"
+""")
+    # Wheel path points at a file that does not exist — declare succeeds.
+    report = declare_artifacts(manifest, api_url="http://fake")
+    assert report["artifact_types"] == ["toy_artifact@1.0.0"]
+    assert cp_svc.list() == []
+
+
+def test_declare_artifact_types_from_register(api_client, services, monkeypatch):
+    _jd, at_svc, _cp = services
+    _route_httpx_through_testclient(monkeypatch, api_client)
+
+    records = declare_artifact_types(
+        toy_register_control, domain="toy", api_url="http://fake"
+    )
+    assert [r.id for r in records] == ["toy_artifact@1.0.0"]
+    assert at_svc.get("toy_artifact@1.0.0").class_name == "_ToyArtifact"
+
+
+def test_declare_artifacts_is_idempotent(
+    api_client, services, bundle_manifest, monkeypatch
+):
+    _jd, at_svc, _cp = services
+    _route_httpx_through_testclient(monkeypatch, api_client)
+
+    declare_artifacts(bundle_manifest, api_url="http://fake")
+    declare_artifacts(bundle_manifest, api_url="http://fake")
+    assert len(at_svc.list()) == 1
+
+
+def test_cli_declare_artifacts_prints_only_artifacts(
+    api_client, bundle_manifest, monkeypatch, capsys
+):
+    _route_httpx_through_testclient(monkeypatch, api_client)
+    rc = cli.main(
+        ["declare-artifacts", "--bundle", str(bundle_manifest), "--api-url", "http://fake"]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ArtifactType:   toy_artifact@1.0.0" in out
+    # Contract-only path — no wheel/job lines.
+    assert "CodePackage" not in out
+    assert "JobDefinition" not in out
+
+
+def test_cli_declare_artifacts_missing_manifest_returns_2(tmp_path: Path, capsys):
+    rc = cli.main(["declare-artifacts", "--bundle", str(tmp_path / "nope.toml")])
+    assert rc == 2
+    assert "not found" in capsys.readouterr().err

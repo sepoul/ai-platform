@@ -18,18 +18,17 @@ platform API. Idempotent on `(name, version)` — re-running is the
 intended redeploy ergonomic.
 
 What lives here:
-- `deploy_control(register_control, ...)` — deploy every JobControl
-  a domain's `register_control` returns.
-- `deploy_job_control(control, ...)` — deploy one JobControl directly
-  (useful for tests and for callers that already have the object).
-- `build_record(control, ...)` — derive the JobDefinitionRecord
-  without POSTing (also useful for tests).
-
-What does NOT live here yet:
-- Code packaging / wheel upload (next phase — the entrypoint string
-  records the future shape).
-- ArtifactType deployment (next phase).
-- A YAML or TOML manifest reader (next phase).
+- `deploy_bundle(manifest, ...)` — read `bundle.toml`, upload the wheel,
+  register every JobDefinition + ArtifactType (the full deploy).
+- `declare_artifacts(manifest, ...)` — register **only** the artifact
+  types (the contract): no wheel, no job. Contract-first deploy so the
+  SDK can regenerate and frontend + backend build in parallel before the
+  implementation ships (see `sdk-contract-first-plan.md`).
+- `deploy_control` / `deploy_job_control` / `build_record` — JobDefinition
+  primitives (one register / one control / pure record builder).
+- `deploy_artifact_type` / `declare_artifact_types` — ArtifactType
+  primitives (one class / a register's whole set).
+- `deploy_code_package(wheel, ...)` — multipart wheel upload.
 """
 from __future__ import annotations
 
@@ -55,6 +54,39 @@ from ai_platform.workspace.storage.structured.job_definition_repository import (
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 _TIMEOUT_SECONDS = 10.0
+
+
+def _stub_bootstrap_ctx() -> Any:
+    """Minimal stand-in for `ai_platform.jobs.domain.BootstrapContext`.
+
+    A domain's `register_control(ctx)` only needs the dataclass shape at
+    deploy time — it introspects types and never exercises the bootstrap
+    services — so a stub with the right attributes suffices.
+    """
+    from dataclasses import dataclass
+
+    @dataclass
+    class _StubCtx:
+        platform_client: Any = None
+        backend: str = "stub"
+        artifact_service: Any = None
+        root_dir: Optional[str] = None
+
+    return _StubCtx()
+
+
+def _post_artifact_type_record(
+    record: ArtifactTypeRecord, *, api_url: str = DEFAULT_API_URL
+) -> ArtifactTypeRecord:
+    """POST one ArtifactTypeRecord to `/artifact-types`. Idempotent on
+    `(name, version)` server-side."""
+    response = httpx.post(
+        f"{api_url.rstrip('/')}/artifact-types",
+        json=record.model_dump(mode="json"),
+        timeout=_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    return ArtifactTypeRecord.model_validate(response.json())
 
 
 def build_record(
@@ -173,13 +205,34 @@ def deploy_artifact_type(
         raise ValueError(
             f"{artifact_cls.__name__} has no `artifact_type` discriminator default"
         )
-    response = httpx.post(
-        f"{api_url.rstrip('/')}/artifact-types",
-        json=record.model_dump(mode="json"),
-        timeout=_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    return ArtifactTypeRecord.model_validate(response.json())
+    return _post_artifact_type_record(record, api_url=api_url)
+
+
+def declare_artifact_types(
+    register_control: Callable[[Any], Any],
+    *,
+    domain: str,
+    version: str = "1.0.0",
+    api_url: str = DEFAULT_API_URL,
+) -> list[ArtifactTypeRecord]:
+    """Register *only* the artifact types a domain's `register_control`
+    declares — the contract — with no wheel upload and no job definition.
+
+    Contract-first deploy: publishing the artifact JSON Schemas early lets
+    the SDK regenerate, so the producing job and any consuming UI can be
+    built in parallel against typed shapes before the implementation ships
+    (see `sdk-contract-first-plan.md`). Idempotent on `(name, version)`;
+    abstract classes (no `artifact_type` discriminator default) are
+    skipped, matching `deploy_bundle`'s resilience.
+    """
+    control_domain = register_control(_stub_bootstrap_ctx())
+    deployed: list[ArtifactTypeRecord] = []
+    for artifact_cls in control_domain.artifact_types:
+        record = build_artifact_type_record(artifact_cls, domain=domain, version=version)
+        if record is None:
+            continue
+        deployed.append(_post_artifact_type_record(record, api_url=api_url))
+    return deployed
 
 
 def deploy_code_package(
@@ -230,20 +283,8 @@ def deploy_control(
     one — for deploy-time use, the JobControl doesn't actually exercise
     the bootstrap services, so a stub suffices.
     """
-    from dataclasses import dataclass
-
     if bootstrap_ctx is None:
-        # Stand-in for `ai_platform.jobs.domain.BootstrapContext`. The
-        # register_control call only needs the dataclass-shape; it
-        # doesn't invoke any services at deploy time.
-        @dataclass
-        class _StubCtx:
-            platform_client: Any = None
-            backend: str = "stub"
-            artifact_service: Any = None
-            root_dir: Optional[str] = None
-
-        bootstrap_ctx = _StubCtx()
+        bootstrap_ctx = _stub_bootstrap_ctx()
 
     control_domain = register_control(bootstrap_ctx)
     artifact_types_by_owner = tuple(control_domain.artifact_types)
@@ -341,38 +382,45 @@ def deploy_bundle(
         api_url=api_url,
     )
 
-    # 3. ArtifactTypes — same control_domain, separate POSTs. We can't
-    #    just re-invoke register_control (side-effects), so we drive
-    #    off the cached domain.
-    from dataclasses import dataclass
-
-    @dataclass
-    class _StubCtx:
-        platform_client: Any = None
-        backend: str = "stub"
-        artifact_service: Any = None
-        root_dir: Any = None
-
-    control_domain = register_control(_StubCtx())
-    artifact_types: list[ArtifactTypeRecord] = []
-    for artifact_cls in control_domain.artifact_types:
-        record = build_artifact_type_record(
-            artifact_cls,
-            domain=manifest.control.domain,
-            version=manifest.package.version,
-        )
-        if record is None:
-            continue
-        response = httpx.post(
-            f"{api_url.rstrip('/')}/artifact-types",
-            json=record.model_dump(mode="json"),
-            timeout=_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        artifact_types.append(ArtifactTypeRecord.model_validate(response.json()))
+    # 3. ArtifactTypes — same control entrypoint, separate POSTs.
+    artifact_types = declare_artifact_types(
+        register_control,
+        domain=manifest.control.domain,
+        version=manifest.package.version,
+        api_url=api_url,
+    )
 
     return {
         "code_package": code_pkg.id,
         "job_definitions": [jd.id for jd in job_defs],
         "artifact_types": [at.id for at in artifact_types],
     }
+
+
+def declare_artifacts(
+    manifest_path: str | Path,
+    *,
+    api_url: str = DEFAULT_API_URL,
+) -> dict[str, Any]:
+    """Contract-first counterpart to `deploy_bundle`: register *only* the
+    bundle's artifact types (the contract), skipping the wheel upload and
+    job-definition registration.
+
+    Resolves the bundle's `control_entrypoint` in-process (the domain
+    package must be importable) to introspect `ControlDomain.artifact_types`,
+    then POSTs each to `/artifact-types`. Use it to publish artifact shapes
+    early — before the job implementation or even its wheel exists — so the
+    SDK can regenerate and frontend + backend proceed in parallel (see
+    `sdk-contract-first-plan.md`). Idempotent on `(name, version)`.
+    """
+    from ai_platform.bundle.manifest import BundleManifest
+
+    manifest = BundleManifest.load(manifest_path)
+    register_control = _resolve_entrypoint(manifest.control.control_entrypoint)
+    artifact_types = declare_artifact_types(
+        register_control,
+        domain=manifest.control.domain,
+        version=manifest.package.version,
+        api_url=api_url,
+    )
+    return {"artifact_types": [at.id for at in artifact_types]}
