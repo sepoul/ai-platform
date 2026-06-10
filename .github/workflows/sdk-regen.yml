@@ -1,0 +1,97 @@
+name: Regenerate SDK schema
+
+# Keeps `sdk-ts/src/schema.d.ts` (the @aiplatform/sdk typed contract) in
+# sync with the FULL deployed catalog — every platform + domain artifact
+# and job type — by regenerating from a complete OpenAPI and opening a PR
+# with the diff.
+#
+# Why a workflow, not a local regen: post repo-split this repo's local API
+# boots only `_demo`, so a naive local `gen:api` DROPS the `math_*` domain
+# types that math-app/math-ui consumes (see sdk-ts/scripts/gen-api.sh). A
+# deployment that has every domain registered is the only complete source.
+# Phase 1 (this file) reads it from the live box over Tailscale; Phase 2
+# will add `GET /sdk/openapi.json` so it no longer needs the box at all.
+#
+# One-time setup:
+#   - Secret  TAILSCALE_AUTHKEY  — an ephemeral, reusable auth key
+#       (Tailscale admin → Settings → Keys). Lets the runner join the
+#       tailnet to reach the box's API. Ensure ACLs let the CI node reach
+#       the box on :8000.
+#   - (optional) Variable OPENAPI_URL — override the source URL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      openapi_url:
+        description: "Full OpenAPI source URL (defaults to the OPENAPI_URL var / the prod box)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 4 * * *" # nightly safety net
+  repository_dispatch:
+    types: [sdk-regen] # fired by `aiplatform deploy` (a later move)
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    env:
+      OPENAPI_URL: ${{ inputs.openapi_url || vars.OPENAPI_URL || 'http://mathapp-prod:8000/openapi.json' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Join the tailnet
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          args: --accept-dns
+
+      - name: Fetch the full OpenAPI from the deployment
+        run: |
+          echo "Fetching $OPENAPI_URL"
+          curl -fsSL --retry 5 --retry-delay 5 "$OPENAPI_URL" -o openapi.json
+          # Guard against the post-split landmine: if the source is somehow
+          # partial (only _demo), refuse to commit a schema that drops the
+          # domain types. Fail loud instead of silently shrinking the SDK.
+          python3 - <<'PY'
+          import json
+          spec = json.load(open("openapi.json"))
+          schemas = spec.get("components", {}).get("schemas", {})
+          assert any(k.lower().startswith("math") for k in schemas), (
+              "OpenAPI has no math_* component schemas — refusing to regen "
+              "a partial schema (is the source a _demo-only instance?)"
+          )
+          print(f"OpenAPI OK: {len(schemas)} component schemas")
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate the typed contract
+        run: |
+          npm --prefix sdk-ts ci
+          OPENAPI_SOURCE="$PWD/openapi.json" npm --prefix sdk-ts run gen:api
+          npm --prefix sdk-ts run build
+
+      - name: Open a PR if the schema changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/sdk-regen
+          delete-branch: true
+          commit-message: "chore(sdk): regenerate schema.d.ts from the deployed catalog"
+          title: "chore(sdk): regenerate @aiplatform/sdk types"
+          body: |
+            Automated regeneration of `sdk-ts/src/schema.d.ts` from the full
+            deployed OpenAPI (`${{ env.OPENAPI_URL }}`).
+
+            Triggered by: `${{ github.event_name }}`.
+
+            Consumers (`platform-ui`, `math-app/math-ui`) pick this up on
+            their next build / dependency bump.
+          add-paths: |
+            sdk-ts/src/schema.d.ts
+            sdk-ts/dist/schema.d.ts

@@ -71,6 +71,7 @@ nav:
       - Jobs: concepts/jobs.md
   - Guides:
       - Deploy a domain: guides/deploy-a-domain.md
+      - SDK & types (dev loop): guides/sdk-and-types.md
       - Prompt registry: guides/prompts.md
       - Live logs: guides/live-logs.md
   - Reference:
