@@ -1,0 +1,3903 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Math AI API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Get Job Status",
+        "operationId": "get_job_status_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/result": {
+      "get": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Get Job Result",
+        "operationId": "get_job_result_jobs__job_id__result_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "get": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "List Jobs",
+        "operationId": "list_jobs_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "job_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Type"
+            }
+          },
+          {
+            "name": "created_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created After"
+            }
+          },
+          {
+            "name": "created_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created Before"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobStatusResponse"
+                  },
+                  "title": "Response List Jobs Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/runs/submit": {
+      "post": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Submit Job Run",
+        "operationId": "submit_job_run_jobs_runs_submit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/review": {
+      "post": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Review Job",
+        "operationId": "review_job_jobs__job_id__review_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserComment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/job-definitions": {
+      "post": {
+        "tags": [
+          "Platform / Job Definitions"
+        ],
+        "summary": "Deploy a JobDefinition (idempotent on name+version)",
+        "description": "Upsert a JobDefinition record into the catalog.\n\nThe client computes the `id` as `\"{name}@{version}\"`; the service\nvalidates the join, the runtime selector, and writes. Re-POSTing\nthe same `(name, version)` overwrites \u2014 that's the intended bundle-\nredeploy ergonomic.",
+        "operationId": "deploy_job_definition_job_definitions_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobDefinitionRecord-Input"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Platform / Job Definitions"
+        ],
+        "summary": "List deployed JobDefinitions",
+        "operationId": "list_job_definitions_job_definitions_get",
+        "parameters": [
+          {
+            "name": "runtime_selector",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runtime Selector"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                  },
+                  "title": "Response List Job Definitions Job Definitions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/job-definitions/by-name/{name}": {
+      "get": {
+        "tags": [
+          "Platform / Job Definitions"
+        ],
+        "summary": "Latest-deployed version of a named JobDefinition",
+        "operationId": "get_job_definition_by_name_job_definitions_by_name__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/job-definitions/{definition_id}": {
+      "get": {
+        "tags": [
+          "Platform / Job Definitions"
+        ],
+        "summary": "Get a specific JobDefinition by id",
+        "operationId": "get_job_definition_job_definitions__definition_id__get",
+        "parameters": [
+          {
+            "name": "definition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Definition Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifact-types": {
+      "post": {
+        "tags": [
+          "Platform / Artifact Types"
+        ],
+        "summary": "Deploy an ArtifactType (idempotent on name+version)",
+        "operationId": "deploy_artifact_type_artifact_types_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTypeRecord"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTypeRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Platform / Artifact Types"
+        ],
+        "summary": "List deployed ArtifactTypes",
+        "operationId": "list_artifact_types_artifact_types_get",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactTypeRecord"
+                  },
+                  "title": "Response List Artifact Types Artifact Types Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifact-types/by-name/{name}": {
+      "get": {
+        "tags": [
+          "Platform / Artifact Types"
+        ],
+        "summary": "Latest-deployed version of a named ArtifactType",
+        "operationId": "get_artifact_type_by_name_artifact_types_by_name__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTypeRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifact-types/{type_id}": {
+      "get": {
+        "tags": [
+          "Platform / Artifact Types"
+        ],
+        "summary": "Get a specific ArtifactType by id",
+        "operationId": "get_artifact_type_artifact_types__type_id__get",
+        "parameters": [
+          {
+            "name": "type_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Type Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTypeRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-packages": {
+      "post": {
+        "tags": [
+          "Platform / Code Packages"
+        ],
+        "summary": "Upload a wheel (idempotent on name+version)",
+        "operationId": "upload_code_package_code_packages_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_code_package_code_packages_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodePackageRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Platform / Code Packages"
+        ],
+        "summary": "List deployed CodePackages",
+        "operationId": "list_code_packages_code_packages_get",
+        "parameters": [
+          {
+            "name": "runtime_selector",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runtime Selector"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CodePackageRecord"
+                  },
+                  "title": "Response List Code Packages Code Packages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-packages/by-name/{name}": {
+      "get": {
+        "tags": [
+          "Platform / Code Packages"
+        ],
+        "summary": "Latest-deployed version of a named CodePackage",
+        "operationId": "get_code_package_by_name_code_packages_by_name__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodePackageRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-packages/{package_id}": {
+      "get": {
+        "tags": [
+          "Platform / Code Packages"
+        ],
+        "summary": "Get a specific CodePackage by id",
+        "operationId": "get_code_package_code_packages__package_id__get",
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Package Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodePackageRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/code-packages/{package_id}/download": {
+      "get": {
+        "tags": [
+          "Platform / Code Packages"
+        ],
+        "summary": "Download the wheel bytes (sha256-verified)",
+        "operationId": "download_code_package_code_packages__package_id__download_get",
+        "parameters": [
+          {
+            "name": "package_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Package Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media": {
+      "post": {
+        "tags": [
+          "Platform / Media",
+          "Platform / Media"
+        ],
+        "summary": "Upload user bytes; returns a storage_ref",
+        "operationId": "upload_media_media_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_media_media_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaRef"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/media/download": {
+      "get": {
+        "tags": [
+          "Platform / Media",
+          "Platform / Media"
+        ],
+        "summary": "Stream uploaded bytes by storage_ref",
+        "operationId": "download_media_media_download_get",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "storage_ref returned by POST /media",
+              "title": "Ref"
+            },
+            "description": "storage_ref returned by POST /media"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workflows": {
+      "get": {
+        "tags": [
+          "Platform / Workflows"
+        ],
+        "summary": "List Workflows",
+        "operationId": "list_workflows_workflows_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/workflows/{job_type}": {
+      "get": {
+        "tags": [
+          "Platform / Workflows"
+        ],
+        "summary": "Get Workflow Spec",
+        "operationId": "get_workflow_spec_workflows__job_type__get",
+        "parameters": [
+          {
+            "name": "job_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSpecResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/prompts": {
+      "get": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "List Prompts",
+        "operationId": "list_prompts_prompts_get",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/prompts/{name}": {
+      "get": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "Get Prompt",
+        "operationId": "get_prompt_prompts__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "Update Prompt",
+        "operationId": "update_prompt_prompts__name__put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/prompt-executions": {
+      "get": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "List Executions",
+        "operationId": "list_executions_prompt_executions_get",
+        "parameters": [
+          {
+            "name": "prompt_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prompt Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptExecutionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/prompt-executions/{execution_id}": {
+      "get": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "Get Execution",
+        "operationId": "get_execution_prompt_executions__execution_id__get",
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptExecutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifacts/types": {
+      "get": {
+        "tags": [
+          "Platform / Artifacts"
+        ],
+        "summary": "List Artifact Types",
+        "operationId": "list_artifact_types_artifacts_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactTypeListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifacts": {
+      "get": {
+        "tags": [
+          "Platform / Artifacts"
+        ],
+        "summary": "List Artifacts",
+        "operationId": "list_artifacts_artifacts_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by `created_by_job`.",
+              "title": "Job Id"
+            },
+            "description": "Filter by `created_by_job`."
+          },
+          {
+            "name": "artifact_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by discriminator.",
+              "title": "Artifact Type"
+            },
+            "description": "Filter by discriminator."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "Platform / Artifacts"
+        ],
+        "summary": "Get Artifact",
+        "operationId": "get_artifact_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MathQuestionArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GeneratedAnswerArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserCommentArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LatexAnswerArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FigureArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "artifact_type",
+                    "mapping": {
+                      "math_question": "#/components/schemas/MathQuestionArtifact",
+                      "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
+                      "user_comment": "#/components/schemas/UserCommentArtifact",
+                      "latex_answer": "#/components/schemas/LatexAnswerArtifact",
+                      "figure": "#/components/schemas/FigureArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact"
+                    }
+                  },
+                  "title": "Response Get Artifact Artifacts  Artifact Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/logs": {
+      "post": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Emit Log",
+        "operationId": "emit_log_jobs__job_id__logs_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogEntry"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/logs/stream": {
+      "get": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Stream Logs",
+        "operationId": "stream_logs_jobs__job_id__logs_stream_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/math-conversation/event-types/crew-chat": {
+      "get": {
+        "tags": [
+          "Math Conversation"
+        ],
+        "summary": "CrewChatEvent schema (for client codegen)",
+        "description": "Return a representative CrewChatEvent so the OpenAPI schema\ncarries the type and `gen:api` picks it up for typed FE\nparsing. Not for live consumption \u2014 live events flow over\n`/jobs/{id}/logs/stream` and are detected by JSON-parsing each\nlog line and matching the `event` discriminator.",
+        "operationId": "get_crew_chat_event_schema_math_conversation_event_types_crew_chat_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrewChatEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ArtifactListResponse": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactSummary"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifacts",
+          "total"
+        ],
+        "title": "ArtifactListResponse"
+      },
+      "ArtifactSummary": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "created_at"
+        ],
+        "title": "ArtifactSummary",
+        "description": "Lightweight row for the artifact list view \u2014 enough to render\nthe index and filter without hydrating every full artifact."
+      },
+      "ArtifactTypeListResponse": {
+        "properties": {
+          "artifact_types": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactTypeSpec"
+            },
+            "type": "array",
+            "title": "Artifact Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_types"
+        ],
+        "title": "ArtifactTypeListResponse"
+      },
+      "ArtifactTypeRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1.0.0"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "json_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Json Schema"
+          },
+          "display_hints": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Display Hints"
+          },
+          "deployed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deployed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "class_name"
+        ],
+        "title": "ArtifactTypeRecord",
+        "description": "Plain-data record for an artifact type.\n\nKeyed `(name, version)` where `name` is the discriminator string\n(e.g. \"math_question\", \"ai_answer\", \"math_conversation\") and\nversion follows the same defaulting story as JobDefinition."
+      },
+      "ArtifactTypeSpec": {
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "class_name": {
+            "type": "string",
+            "title": "Class Name"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ParamSpec"
+            },
+            "type": "array",
+            "title": "Fields",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "class_name"
+        ],
+        "title": "ArtifactTypeSpec",
+        "description": "One registered artifact type \u2014 `BaseArtifact` subclass projected\ninto a UI-friendly registry entry. Drives the `/artifact-types`\nviewer."
+      },
+      "Body_upload_code_package_code_packages_post": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1.0.0"
+          },
+          "runtime_selector": {
+            "type": "string",
+            "title": "Runtime Selector"
+          },
+          "wheel": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Wheel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "runtime_selector",
+          "wheel"
+        ],
+        "title": "Body_upload_code_package_code_packages_post"
+      },
+      "Body_upload_media_media_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type",
+            "description": "Override the part's content-type (e.g. audio/m4a)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_media_media_post"
+      },
+      "CodePackageRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1.0.0"
+          },
+          "runtime_selector": {
+            "type": "string",
+            "title": "Runtime Selector"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "blob_id": {
+            "type": "string",
+            "title": "Blob Id"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "deployed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deployed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "runtime_selector",
+          "filename",
+          "blob_id",
+          "sha256",
+          "size_bytes"
+        ],
+        "title": "CodePackageRecord",
+        "description": "Metadata pointer to an installable code blob.\n\n`blob_id` is the FileRepository logical name (filename within the\n`code_packages` prefix) \u2014 fetching the bytes goes through the\nfile repository, not this record."
+      },
+      "ConversationTurn": {
+        "properties": {
+          "turn_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Turn Index"
+          },
+          "agent_role": {
+            "type": "string",
+            "title": "Agent Role"
+          },
+          "agent_persona": {
+            "type": "string",
+            "title": "Agent Persona"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "latex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latex"
+          },
+          "figure": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Figure"
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCallRecord"
+            },
+            "type": "array",
+            "title": "Tool Calls"
+          },
+          "cost_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Cost Usd",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "turn_index",
+          "agent_role",
+          "agent_persona",
+          "content"
+        ],
+        "title": "ConversationTurn",
+        "description": "A single agent move in the conversation.\n\nEmbedded in `MathConversationArtifact.turns` and mirrored on\n`MathConversationState.turns` while the run is in flight. `latex`\nand `figure` are inline \u2014 the math-ui `<Latex>` component and figure\nrenderer take these values directly."
+      },
+      "CrewChatEvent": {
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "signed_in",
+              "is_typing",
+              "message",
+              "tool_call",
+              "tool_result",
+              "concluded",
+              "signed_out",
+              "status"
+            ],
+            "title": "Event"
+          },
+          "agent_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Role"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "turn_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Index"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "latex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latex"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "title": "Elapsed Seconds",
+            "default": 0.0
+          },
+          "turns_used": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turns Used"
+          },
+          "turns_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turns Budget"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "CrewChatEvent",
+        "description": "One event in the live conversation stream.\n\nMirrors `docs/math_conversation.md` \u2192 Live visibility. Optional\nfields are populated per event kind (e.g. `content` on `message`,\n`tool_name` on `tool_call`)."
+      },
+      "EdgeResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "EdgeResponse"
+      },
+      "FigureArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "figure",
+            "title": "Artifact Type",
+            "default": "figure"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "template": {
+            "type": "string",
+            "title": "Template",
+            "description": "Top-level template name (also at spec['template'])."
+          },
+          "spec": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Spec",
+            "description": "The validated semantic figure spec \u2014 opaque JSON."
+          },
+          "validation_attempts": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Validation Attempts",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "template",
+          "spec"
+        ],
+        "title": "FigureArtifact",
+        "description": "Validated semantic figure spec (Munkres / Lee / Tu style).\n\nProduced by `RenderFigureStep` after the agent has converged on\na structurally valid spec via the `validate_figure` tool. The\n`spec` is an opaque JSON payload \u2014 the FEATURES.md plan calls\nfor keeping it as `dict[str, Any]` server-side; the renderer\ncontract lives in `math-ui`. `template` is duplicated out of the\nspec for indexable filtering."
+      },
+      "GateSpec-Input": {
+        "properties": {
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "review_type_name": {
+            "type": "string",
+            "title": "Review Type Name"
+          },
+          "review_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Review Schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "node_name",
+          "review_type_name",
+          "review_schema"
+        ],
+        "title": "GateSpec",
+        "description": "A single human-review gate carried by a JobDefinition.\n\n`review_schema` is the pydantic `model_json_schema()` of the review\nbody \u2014 the API uses it to validate `POST /jobs/{id}/review` once the\ncatalog drives routing. For now it's recorded for completeness."
+      },
+      "GeneratedAnswerArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "ai_answer",
+            "title": "Artifact Type",
+            "default": "ai_answer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "answer_text": {
+            "type": "string",
+            "title": "Answer Text"
+          },
+          "reasoning_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasoning Steps"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "model_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Used"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer_text"
+        ],
+        "title": "GeneratedAnswerArtifact"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "JobDefinitionRecord-Input": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1.0.0"
+          },
+          "runtime_selector": {
+            "type": "string",
+            "title": "Runtime Selector"
+          },
+          "code_entrypoint": {
+            "type": "string",
+            "title": "Code Entrypoint"
+          },
+          "control_entrypoint": {
+            "type": "string",
+            "title": "Control Entrypoint",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "result_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Schema"
+          },
+          "output_artifact_type_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Artifact Type Refs"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/GateSpec-Input"
+            },
+            "type": "array",
+            "title": "Gates"
+          },
+          "deployed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deployed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "runtime_selector",
+          "code_entrypoint"
+        ],
+        "title": "JobDefinitionRecord",
+        "description": "Plain-data record of a job's control plane.\n\nKeyed `(name, version)`. The id is the derived `\"{name}@{version}\"`\nstring; downstream callers reference it by `id` (versioned) or by\n`name` (latest) depending on the path."
+      },
+      "JobDefinitionRecord-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1.0.0"
+          },
+          "runtime_selector": {
+            "type": "string",
+            "title": "Runtime Selector"
+          },
+          "code_entrypoint": {
+            "type": "string",
+            "title": "Code Entrypoint"
+          },
+          "control_entrypoint": {
+            "type": "string",
+            "title": "Control Entrypoint",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "result_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result Schema"
+          },
+          "output_artifact_type_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Artifact Type Refs"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/ai_platform__workspace__storage__structured__job_definition_repository__GateSpec"
+            },
+            "type": "array",
+            "title": "Gates"
+          },
+          "deployed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deployed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "runtime_selector",
+          "code_entrypoint"
+        ],
+        "title": "JobDefinitionRecord",
+        "description": "Plain-data record of a job's control plane.\n\nKeyed `(name, version)`. The id is the derived `\"{name}@{version}\"`\nstring; downstream callers reference it by `id` (versioned) or by\n`name` (latest) depending on the path."
+      },
+      "JobResultResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MathQAResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathConversationResult"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "job_type",
+                  "mapping": {
+                    "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_qa": "#/components/schemas/MathQAResult"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "JobResultResponse"
+      },
+      "JobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "job_type": {
+            "type": "string",
+            "title": "Job Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "waiting_for": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting For"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MathQAResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathConversationResult"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "job_type",
+                  "mapping": {
+                    "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_qa": "#/components/schemas/MathQAResult"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "job_type",
+          "status",
+          "created_at"
+        ],
+        "title": "JobStatusResponse"
+      },
+      "LatexAnswerArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "latex_answer",
+            "title": "Artifact Type",
+            "default": "latex_answer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "latex_source": {
+            "type": "string",
+            "title": "Latex Source",
+            "description": "KaTeX-compilable LaTeX body."
+          },
+          "is_valid": {
+            "type": "boolean",
+            "title": "Is Valid",
+            "default": true
+          },
+          "validation_attempts": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Validation Attempts",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "latex_source"
+        ],
+        "title": "LatexAnswerArtifact",
+        "description": "Validated LaTeX rendering of an AI answer.\n\nProduced by `GenerateLatexStep` after the agent has converged on\nKaTeX-compilable source via the `validate_latex` tool. `is_valid`\nis always True at persistence time \u2014 invalid drafts never escape\nthe validation loop. `validation_attempts` records how many\nrounds of tool feedback the agent took to converge."
+      },
+      "LogEntry": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error",
+              "debug"
+            ],
+            "title": "Level",
+            "default": "info"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "message"
+        ],
+        "title": "LogEntry",
+        "description": "Single log record emitted by the worker for one job."
+      },
+      "MathConversationArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "math_conversation",
+            "title": "Artifact Type",
+            "default": "math_conversation"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id"
+          },
+          "seed_question": {
+            "type": "string",
+            "title": "Seed Question"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurn"
+            },
+            "type": "array",
+            "title": "Turns"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Total Cost Usd",
+            "default": 0.0
+          },
+          "stop_reason": {
+            "type": "string",
+            "enum": [
+              "max_turns",
+              "concluded"
+            ],
+            "title": "Stop Reason",
+            "default": "max_turns"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "seed_question"
+        ],
+        "title": "MathConversationArtifact",
+        "description": "The whole brainstorm transcript, persisted once at end-of-run.\n\n`seed_question` is the question the panel explored \u2014 pulled from a\nsource `math_qa` job's artifacts or wrapped from fresh input text.\n`source_job_id` records provenance when seeded from a prior job."
+      },
+      "MathConversationInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "math_conversation",
+            "title": "Job Type",
+            "default": "math_conversation"
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id",
+            "description": "Seed from a completed math_qa job's artifacts."
+          },
+          "question_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Text",
+            "description": "Fresh question to brainstorm (when not seeding from a job)."
+          },
+          "max_turns": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "description": "Hard cap on conversation turns.",
+            "default": 12
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Submitting user."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathConversationInput",
+        "description": "Typed submit input \u2014 a variant of the platform request union.\n\nExactly one of `source_job_id` (seed from a completed `math_qa` job)\nor `question_text` (fresh question) must be set; the validator\nrejects \"both\" and \"neither\" at the API boundary."
+      },
+      "MathConversationResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "math_conversation",
+            "title": "Job Type",
+            "default": "math_conversation"
+          },
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MathConversationArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathConversationResult",
+        "description": "Typed result \u2014 a variant of the platform result union.\n\nThe single `conversation` artifact is resolved from `artifact_refs`\nby the result endpoint's hydrator."
+      },
+      "MathQAInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "math_qa",
+            "title": "Job Type",
+            "default": "math_qa"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text",
+            "description": "The math question."
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic",
+            "description": "E.g. algebra, calculus."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Submitting user."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_text"
+        ],
+        "title": "MathQAInput",
+        "description": "Typed submit input for a Math Q&A job \u2014 variant of the platform request union."
+      },
+      "MathQAResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "math_qa",
+            "title": "Job Type",
+            "default": "math_qa"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MathQuestionArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ai_response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeneratedAnswerArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latex": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatexAnswerArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "figure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FigureArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserCommentArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathQAResult",
+        "description": "Typed result for a Math Q&A job \u2014 variant of the platform result union.\n\nEach typed field is an artifact resolved from `artifact_refs` (defined\non `BaseJobResult`). The result endpoint hydrates them via the\nworkspace artifact store."
+      },
+      "MathQuestionArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "math_question",
+            "title": "Artifact Type",
+            "default": "math_question"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "question_text": {
+            "type": "string",
+            "title": "Question Text"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_text"
+        ],
+        "title": "MathQuestionArtifact"
+      },
+      "MediaRef": {
+        "properties": {
+          "storage_ref": {
+            "type": "string",
+            "title": "Storage Ref"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "type": "integer",
+            "title": "Byte Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storage_ref",
+          "filename",
+          "byte_size"
+        ],
+        "title": "MediaRef",
+        "description": "Handle for an uploaded blob \u2014 what `POST /media` returns and what\na domain stamps onto a `storage_ref`-backed `BaseArtifact`."
+      },
+      "ParamSpec": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ParamSpec"
+      },
+      "PromptExecutionListResponse": {
+        "properties": {
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/PromptExecutionSummary"
+            },
+            "type": "array",
+            "title": "Executions"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "executions",
+          "total"
+        ],
+        "title": "PromptExecutionListResponse"
+      },
+      "PromptExecutionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "prompt_name": {
+            "type": "string",
+            "title": "Prompt Name"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "input_data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Data"
+          },
+          "executed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Executed At"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "output_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Type"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "prompt_name",
+          "prompt_version",
+          "input_data",
+          "executed_at"
+        ],
+        "title": "PromptExecutionResponse"
+      },
+      "PromptExecutionSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "prompt_name": {
+            "type": "string",
+            "title": "Prompt Name"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "executed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Executed At"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "prompt_name",
+          "prompt_version",
+          "executed_at"
+        ],
+        "title": "PromptExecutionSummary"
+      },
+      "PromptListResponse": {
+        "properties": {
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/PromptResponse"
+            },
+            "type": "array",
+            "title": "Prompts"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompts",
+          "total"
+        ],
+        "title": "PromptListResponse"
+      },
+      "PromptResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "description",
+          "instructions",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PromptResponse"
+      },
+      "PromptUpdateRequest": {
+        "properties": {
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          }
+        },
+        "type": "object",
+        "title": "PromptUpdateRequest"
+      },
+      "RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MathQAInput"
+          },
+          {
+            "$ref": "#/components/schemas/MathConversationInput"
+          }
+        ],
+        "title": "RootModel[Annotated[Union[MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "discriminator": {
+          "propertyName": "job_type",
+          "mapping": {
+            "math_conversation": "#/components/schemas/MathConversationInput",
+            "math_qa": "#/components/schemas/MathQAInput"
+          }
+        }
+      },
+      "RunSubmitResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "RunSubmitResponse"
+      },
+      "StageResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_human_step": {
+            "type": "boolean",
+            "title": "Is Human Step",
+            "default": false
+          },
+          "resume_params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamSpec"
+            },
+            "type": "array",
+            "title": "Resume Params",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "StageResponse"
+      },
+      "ToolCallRecord": {
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_name"
+        ],
+        "title": "ToolCallRecord",
+        "description": "One tool invocation an agent made inside a turn."
+      },
+      "UserComment": {
+        "properties": {
+          "comment_text": {
+            "type": "string",
+            "title": "Comment Text"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating",
+            "description": "1-5 star rating."
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct",
+            "description": "Did the user mark the answer correct?"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comment_text"
+        ],
+        "title": "UserComment",
+        "description": "User feedback on an AI response."
+      },
+      "UserCommentArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "user_comment",
+            "title": "Artifact Type",
+            "default": "user_comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "comment_text": {
+            "type": "string",
+            "title": "Comment Text"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "is_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Correct"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comment_text"
+        ],
+        "title": "UserCommentArtifact"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkflowListItem": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "title": "Job Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_type",
+          "label"
+        ],
+        "title": "WorkflowListItem",
+        "description": "Lightweight registry entry \u2014 drives the platform-level workflow index."
+      },
+      "WorkflowListResponse": {
+        "properties": {
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowListItem"
+            },
+            "type": "array",
+            "title": "Workflows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workflows"
+        ],
+        "title": "WorkflowListResponse"
+      },
+      "WorkflowSpecResponse": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "title": "Job Type"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "submit_params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamSpec"
+            },
+            "type": "array",
+            "title": "Submit Params",
+            "default": []
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageResponse"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeResponse"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/ai_platform__jobs__workflow_schemas__GateSpec"
+            },
+            "type": "array",
+            "title": "Gates",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_type",
+          "stages",
+          "edges"
+        ],
+        "title": "WorkflowSpecResponse"
+      },
+      "ai_platform__jobs__workflow_schemas__GateSpec": {
+        "properties": {
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "review_type": {
+            "type": "string",
+            "title": "Review Type"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamSpec"
+            },
+            "type": "array",
+            "title": "Params",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_name",
+          "review_type"
+        ],
+        "title": "GateSpec",
+        "description": "Execution-policy gate \u2014 declares that after `node_name` runs,\na human review of `review_type` must be submitted before the\nworkflow continues."
+      },
+      "ai_platform__workspace__storage__structured__job_definition_repository__GateSpec": {
+        "properties": {
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "review_type_name": {
+            "type": "string",
+            "title": "Review Type Name"
+          },
+          "review_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Review Schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "node_name",
+          "review_type_name",
+          "review_schema"
+        ],
+        "title": "GateSpec",
+        "description": "A single human-review gate carried by a JobDefinition.\n\n`review_schema` is the pydantic `model_json_schema()` of the review\nbody \u2014 the API uses it to validate `POST /jobs/{id}/review` once the\ncatalog drives routing. For now it's recorded for completeness."
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ name: Regenerate SDK schema
 
 on:
   push:
+    branches: [main]
     paths:
       - sdk-ts/openapi.snapshot.json
   workflow_dispatch:

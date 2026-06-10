@@ -267,10 +267,16 @@ def deploy_code_package(
     return CodePackageRecord.model_validate(response.json())
 
 
+# The full OpenAPI is large and FastAPI builds it on demand, so the snapshot
+# fetch gets a generous timeout — far longer than the small catalog POSTs.
+_SNAPSHOT_TIMEOUT_SECONDS = 60.0
+
+
 def snapshot_openapi(
     api_url: str = DEFAULT_API_URL,
     *,
     out_path: str | Path = "sdk-ts/openapi.snapshot.json",
+    timeout: float = _SNAPSHOT_TIMEOUT_SECONDS,
 ) -> Path:
     """Fetch `/openapi.json` from a running platform and write it to a file.
 
@@ -283,9 +289,7 @@ def snapshot_openapi(
 
     Returns the path written.
     """
-    response = httpx.get(
-        f"{api_url.rstrip('/')}/openapi.json", timeout=_TIMEOUT_SECONDS
-    )
+    response = httpx.get(f"{api_url.rstrip('/')}/openapi.json", timeout=timeout)
     response.raise_for_status()
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
