@@ -112,6 +112,13 @@ def _install_all(
         _logger.info("No CodePackages registered for %s", scope)
         return []
 
+    # The catalog can hold several versions of the same package (each deploy
+    # upserts a new (name, version) row). Installing *every* row makes the
+    # final installed version order-dependent — a later-listed older row can
+    # downgrade a newer one that was installed earlier in the same pass. Keep
+    # only the latest version per name so a version bump reliably wins.
+    records = _latest_per_name(records)
+
     installed: list[str] = []
     for record in records:
         if _is_already_installed(record):
@@ -127,6 +134,28 @@ def _install_all(
         except Exception as exc:  # noqa: BLE001 — best-effort
             _logger.warning("Failed to install CodePackage %s: %s", record.id, exc)
     return installed
+
+
+def _latest_per_name(records: list) -> list:
+    """Collapse a CodePackage list to the highest-version row per name.
+
+    Version order uses PEP 440 (`packaging.version`); an unparseable version
+    sorts lowest so a malformed row never shadows a valid one.
+    """
+    from packaging.version import InvalidVersion, Version
+
+    def _key(v: str) -> "Version":
+        try:
+            return Version(v)
+        except InvalidVersion:
+            return Version("0")
+
+    best: dict[str, object] = {}
+    for record in records:
+        current = best.get(record.name)
+        if current is None or _key(record.version) > _key(current.version):
+            best[record.name] = record
+    return list(best.values())
 
 
 def _is_already_installed(record: "CodePackageRecord") -> bool:

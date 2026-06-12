@@ -16,6 +16,7 @@ import pytest
 
 from ai_platform.jobs.code_package_install import (
     _is_already_installed,
+    _latest_per_name,
     install_control_packages_for_api,
     install_packages_for_runtime,
 )
@@ -35,6 +36,23 @@ def _record(name: str = "toy_pkg", version: str = "1.0.0") -> CodePackageRecord:
         sha256="a" * 64,
         size_bytes=10,
     )
+
+
+def test_latest_per_name_keeps_highest_version_per_package():
+    rows = [
+        _record(name="m", version="0.1.0"),
+        _record(name="m", version="0.1.10"),  # > 0.1.2 by PEP 440, not string
+        _record(name="m", version="0.1.2"),
+        _record(name="other", version="2.0.0"),
+    ]
+    got = sorted((r.name, r.version) for r in _latest_per_name(rows))
+    assert got == [("m", "0.1.10"), ("other", "2.0.0")]
+
+
+def test_latest_per_name_unparseable_version_sorts_lowest():
+    rows = [_record(name="m", version="not-a-version"), _record(name="m", version="0.1.0")]
+    kept = _latest_per_name(rows)
+    assert [(r.name, r.version) for r in kept] == [("m", "0.1.0")]
 
 
 def test_is_already_installed_true_for_matching_version():
