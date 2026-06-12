@@ -36,6 +36,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from openai import OpenAI
 
     from ai_platform.jobs.media_service import MediaRef, MediaService
+    from ai_platform.session.session import PlatformSession
     from ai_platform.workspace.storage.blobs.base import FileRepository
 
 
@@ -130,17 +131,21 @@ def transcribe_audio(
 class AudioInterpreter:
     """Media-first-class transcription: a `storage_ref` in, a transcript out.
 
-    Wraps the blob layer the platform's `MediaService` writes to so a domain
-    that ingested a voice note via `POST /media` can turn the resulting ref
-    into text without re-implementing the download. Accepts either a
-    `MediaService` (preferred — prefix-scoped, carries content-type) or a raw
-    `FileRepository`; both are duck-typed so this module imports without a hard
-    dependency on either.
+    A domain that ingested a voice note via `POST /media` can turn the
+    resulting ref into text without re-implementing the download. Accepts any
+    media source, duck-typed so this module imports without a hard dependency
+    on any of them:
+
+    - a `PlatformSession` (**preferred** — the public, typed client; what an
+      execution node should use to read a blob off the storage plane rather
+      than reaching into the backend),
+    - a `MediaService` (in-process, prefix-scoped), or
+    - a raw `FileRepository` (in-process, lowest level).
     """
 
     def __init__(
         self,
-        media: "Union[MediaService, FileRepository]",
+        media: "Union[PlatformSession, MediaService, FileRepository]",
         *,
         model: str = DEFAULT_TRANSCRIBE_MODEL,
         client: "Optional[OpenAI]" = None,
@@ -151,8 +156,12 @@ class AudioInterpreter:
 
     def _read_bytes(self, storage_ref: str) -> bytes:
         src = self.media
-        # MediaService.download(ref) -> (bytes, content_type); prefer it so we
-        # inherit the `media/` prefix scoping.
+        # PlatformSession.download_media(ref) -> bytes. The public-client path,
+        # preferred for domain execution (no reach into the storage backend).
+        if hasattr(src, "download_media"):
+            return src.download_media(storage_ref)
+        # MediaService.download(ref) -> (bytes, content_type); inherits the
+        # `media/` prefix scoping.
         if hasattr(src, "download"):
             data, _ct = src.download(storage_ref)
             return data
@@ -160,8 +169,9 @@ class AudioInterpreter:
         if hasattr(src, "get_canonical_file_bytes"):
             return src.get_canonical_file_bytes(storage_ref)
         raise TypeError(
-            f"{type(src)!r} is neither a MediaService nor a FileRepository: "
-            "expected a `.download` or `.get_canonical_file_bytes` method."
+            f"{type(src)!r} is not a PlatformSession, MediaService, or "
+            "FileRepository: expected a `.download_media`, `.download`, or "
+            "`.get_canonical_file_bytes` method."
         )
 
     def transcribe(

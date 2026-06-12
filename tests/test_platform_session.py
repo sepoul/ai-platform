@@ -376,3 +376,47 @@ def test_session_as_context_manager_closes_client():
     with sess:
         pass
     assert closed["flag"] is True
+
+
+# ---------------------------------------------------------------------------
+# Media primitives — upload_media / download_media over the public client.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def media_session(tmp_path: Path):
+    from ai_platform.api.routers import media as media_router
+    from ai_platform.jobs.media_service import MediaService
+
+    file_repo = LocalFileRepository(
+        LocalFileRepositoryConfig(root_dir=str(tmp_path), prefix="files")
+    )
+    service = MediaService(file_repo)
+    deps_mod._media_service = service
+
+    app = FastAPI()
+    app.include_router(media_router.router)
+    app.dependency_overrides[deps_mod.get_media_service] = lambda: service
+
+    client = TestClient(app, base_url="http://fake")
+    return PlatformSession.connect("http://fake", http_client=client)
+
+
+def test_upload_then_download_media_round_trips(media_session: PlatformSession):
+    ref = media_session.upload_media(
+        filename="voice.m4a", data=b"fake-audio-bytes", content_type="audio/m4a"
+    )
+    assert ref.storage_ref.startswith("media/")
+    assert ref.filename == "voice.m4a"
+    assert ref.content_type == "audio/m4a"
+    assert ref.byte_size == len(b"fake-audio-bytes")
+
+    # download_media returns raw bytes (not JSON-unwrapped).
+    assert media_session.download_media(ref.storage_ref) == b"fake-audio-bytes"
+
+
+def test_download_media_missing_raises(media_session: PlatformSession):
+    from ai_platform.session.session import MediaNotFound
+
+    with pytest.raises(MediaNotFound):
+        media_session.download_media("media/does-not-exist/x.m4a")

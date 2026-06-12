@@ -201,8 +201,31 @@ def test_interpreter_works_over_a_raw_file_repository(file_repo: LocalFileReposi
     assert fake.audio.transcriptions.calls[0]["file"] == ("clip.wav", _AUDIO)
 
 
+def test_interpreter_over_a_platform_session():
+    # A PlatformSession exposes download_media(ref) -> bytes; the interpreter
+    # should prefer it (the public-client path a domain execution node uses).
+    class _FakeSession:
+        def __init__(self, data: bytes):
+            self._data = data
+            self.refs: list[str] = []
+
+        def download_media(self, ref: str) -> bytes:
+            self.refs.append(ref)
+            return self._data
+
+    sess = _FakeSession(_AUDIO)
+    fake = _FakeOpenAI(SimpleNamespace(text="from-session"))
+
+    interp = AudioInterpreter(sess, client=fake)
+    result = interp.transcribe("media/abc/clip.m4a")
+
+    assert result.text == "from-session"
+    assert sess.refs == ["media/abc/clip.m4a"]
+    assert fake.audio.transcriptions.calls[0]["file"] == ("clip.m4a", _AUDIO)
+
+
 def test_interpreter_rejects_an_incompatible_source():
-    interp = AudioInterpreter(object())  # neither MediaService nor FileRepository
+    interp = AudioInterpreter(object())  # not a session / MediaService / repo
     with pytest.raises(TypeError):
         interp.transcribe("media/x/y.wav")
 

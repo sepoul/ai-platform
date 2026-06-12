@@ -17,6 +17,7 @@ from typing import Any, Optional, TYPE_CHECKING
 import httpx
 
 from ai_platform.jobs.input import BaseJobInput
+from ai_platform.jobs.media_service import MediaRef
 from ai_platform.workspace.storage.structured.artifact_type_repository import (
     ArtifactTypeRecord,
 )
@@ -47,6 +48,10 @@ class JobNotFound(PlatformSessionError):
 
 class JobTimeout(PlatformSessionError):
     pass
+
+
+class MediaNotFound(PlatformSessionError):
+    """Raised when a media `storage_ref` doesn't resolve (GET /media/download → 404)."""
 
 
 class PlatformSession:
@@ -144,6 +149,47 @@ class PlatformSession:
         # Probe the API so a wrong id fails fast.
         raw = self._get(f"/jobs/{job_id}", expect=200)
         return JobHandle(session=self, job_id=job_id, job_type=raw["job_type"])
+
+    # ---- media (blob primitives) ----
+
+    def upload_media(
+        self,
+        *,
+        filename: str,
+        data: bytes,
+        content_type: Optional[str] = None,
+    ) -> MediaRef:
+        """Land bytes in the storage plane via `POST /media`; returns a
+        `MediaRef` (storage_ref + filename + content_type + byte_size).
+
+        The public way for a caller (a BFF, a script, a domain) to put a
+        voice note / photo onto the platform without reaching into the
+        storage backend.
+        """
+        files = {"file": (filename, data, content_type or "application/octet-stream")}
+        form = {"content_type": content_type} if content_type else None
+        resp = self._client.post("/media", files=files, data=form)
+        if not (200 <= resp.status_code < 300):
+            raise PlatformSessionError(f"POST /media: {resp.status_code} {resp.text}")
+        return MediaRef.model_validate(resp.json())
+
+    def download_media(self, storage_ref: str) -> bytes:
+        """Fetch the raw bytes for a media `storage_ref` via
+        `GET /media/download`.
+
+        The public, typed way for domain code — e.g. an execution node
+        feeding `AudioInterpreter` — to read a blob off the storage plane
+        without reaching into the storage backend. Raises `MediaNotFound`
+        when the ref doesn't resolve.
+        """
+        resp = self._client.get("/media/download", params={"ref": storage_ref})
+        if resp.status_code == 404:
+            raise MediaNotFound(resp.text)
+        if not (200 <= resp.status_code < 300):
+            raise PlatformSessionError(
+                f"GET /media/download?ref={storage_ref}: {resp.status_code} {resp.text}"
+            )
+        return resp.content
 
     # ---- internal HTTP plumbing ----
 
