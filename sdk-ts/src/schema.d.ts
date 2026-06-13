@@ -270,6 +270,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload user bytes; returns a storage_ref */
+        post: operations["upload_media_media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream uploaded bytes by storage_ref */
+        get: operations["download_media_media_download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows": {
         parameters: {
             query?: never;
@@ -588,6 +622,16 @@ export interface components {
             /** Wheel */
             wheel: string;
         };
+        /** Body_upload_media_media_post */
+        Body_upload_media_media_post: {
+            /** File */
+            file: string;
+            /**
+             * Content Type
+             * @description Override the part's content-type (e.g. audio/m4a).
+             */
+            content_type?: string | null;
+        };
         /**
          * CodePackageRecord
          * @description Metadata pointer to an installable code blob.
@@ -692,6 +736,70 @@ export interface components {
             /** Cost Usd */
             cost_usd?: number | null;
         };
+        /**
+         * DailyNoteArtifact
+         * @description One captured study note, tied to a calendar day.
+         *
+         *     `storage_ref` / `content_type` / `byte_size` are inherited from
+         *     `BaseArtifact` and point at the uploaded **audio** blob. `transcript`
+         *     is populated by the ingest job's transcription node. `image_refs`
+         *     holds any notebook photos captured with the note; `ocr_text` is
+         *     reserved for a later OCR step over those images (declared now so that
+         *     step doesn't force a schema migration).
+         */
+        DailyNoteArtifact: {
+            /**
+             * Artifact Id
+             * Format: uuid
+             */
+            artifact_id?: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            artifact_type: "daily_note";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Created By Job */
+            created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
+            /**
+             * Note Date
+             * Format: date
+             * @description The study day this note belongs to.
+             */
+            note_date: string;
+            /**
+             * Created By
+             * @description The learner who captured it.
+             */
+            created_by?: string | null;
+            /**
+             * Image Refs
+             * @description Attached notebook-photo storage_refs.
+             */
+            image_refs?: string[];
+            /**
+             * Transcript
+             * @description Transcript of the voice note.
+             */
+            transcript?: string | null;
+            /**
+             * Ocr Text
+             * @description Extracted text from photos (later).
+             */
+            ocr_text?: string | null;
+        };
         /** EdgeResponse */
         EdgeResponse: {
             /** Source */
@@ -730,6 +838,14 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /**
              * Template
              * @description Top-level template name (also at spec['template']).
@@ -785,6 +901,14 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /** Answer Text */
             answer_text: string;
             /** Reasoning Steps */
@@ -907,7 +1031,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -933,7 +1057,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -963,6 +1087,14 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /**
              * Latex Source
              * @description KaTeX-compilable LaTeX body.
@@ -1030,6 +1162,14 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /** Source Job Id */
             source_job_id?: string | null;
             /** Seed Question */
@@ -1102,6 +1242,56 @@ export interface components {
             conversation?: components["schemas"]["MathConversationArtifact"] | null;
         };
         /**
+         * MathNotesInput
+         * @description Submit input for a `math_notes` ingest job.
+         *
+         *     `audio_ref` is the voice note to transcribe (a `storage_ref` from the
+         *     `POST /media` response); `image_refs` are optional notebook photos
+         *     captured alongside it. `note_date` defaults to today (resolved in the
+         *     graph node) when omitted.
+         */
+        MathNotesInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            job_type: "math_notes";
+            /**
+             * Audio Ref
+             * @description storage_ref of the uploaded voice note (POST /media).
+             */
+            audio_ref: string;
+            /**
+             * Image Refs
+             * @description Optional notebook-photo storage_refs captured with the note.
+             */
+            image_refs?: string[];
+            /**
+             * Note Date
+             * @description Study day; defaults to today.
+             */
+            note_date?: string | null;
+            /**
+             * Created By
+             * @description The learner capturing the note.
+             */
+            created_by?: string | null;
+        };
+        /**
+         * MathNotesResult
+         * @description Typed result for a `math_notes` job — the minted note, by ref.
+         */
+        MathNotesResult: {
+            /** Artifact Refs */
+            artifact_refs?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            job_type: "math_notes";
+            note?: components["schemas"]["DailyNoteArtifact"] | null;
+        };
+        /**
          * MathQAInput
          * @description Typed submit input for a Math Q&A job — variant of the platform request union.
          */
@@ -1168,12 +1358,35 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /** Question Text */
             question_text: string;
             /** Topic */
             topic?: string | null;
             /** Difficulty */
             difficulty?: string | null;
+        };
+        /**
+         * MediaRef
+         * @description Handle for an uploaded blob — what `POST /media` returns and what
+         *     a domain stamps onto a `storage_ref`-backed `BaseArtifact`.
+         */
+        MediaRef: {
+            /** Storage Ref */
+            storage_ref: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size: number;
         };
         /** ParamSpec */
         ParamSpec: {
@@ -1278,8 +1491,8 @@ export interface components {
             /** Instructions */
             instructions?: string | null;
         };
-        /** RootModel[Annotated[Union[MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -1357,6 +1570,14 @@ export interface components {
             created_at?: string;
             /** Created By Job */
             created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
             /** Comment Text */
             comment_text: string;
             /** Rating */
@@ -1464,9 +1685,11 @@ export type SchemaArtifactTypeListResponse = components['schemas']['ArtifactType
 export type SchemaArtifactTypeRecord = components['schemas']['ArtifactTypeRecord'];
 export type SchemaArtifactTypeSpec = components['schemas']['ArtifactTypeSpec'];
 export type SchemaBodyUploadCodePackageCodePackagesPost = components['schemas']['Body_upload_code_package_code_packages_post'];
+export type SchemaBodyUploadMediaMediaPost = components['schemas']['Body_upload_media_media_post'];
 export type SchemaCodePackageRecord = components['schemas']['CodePackageRecord'];
 export type SchemaConversationTurn = components['schemas']['ConversationTurn'];
 export type SchemaCrewChatEvent = components['schemas']['CrewChatEvent'];
+export type SchemaDailyNoteArtifact = components['schemas']['DailyNoteArtifact'];
 export type SchemaEdgeResponse = components['schemas']['EdgeResponse'];
 export type SchemaFigureArtifact = components['schemas']['FigureArtifact'];
 export type SchemaGateSpecInput = components['schemas']['GateSpec-Input'];
@@ -1481,9 +1704,12 @@ export type SchemaLogEntry = components['schemas']['LogEntry'];
 export type SchemaMathConversationArtifact = components['schemas']['MathConversationArtifact'];
 export type SchemaMathConversationInput = components['schemas']['MathConversationInput'];
 export type SchemaMathConversationResult = components['schemas']['MathConversationResult'];
+export type SchemaMathNotesInput = components['schemas']['MathNotesInput'];
+export type SchemaMathNotesResult = components['schemas']['MathNotesResult'];
 export type SchemaMathQaInput = components['schemas']['MathQAInput'];
 export type SchemaMathQaResult = components['schemas']['MathQAResult'];
 export type SchemaMathQuestionArtifact = components['schemas']['MathQuestionArtifact'];
+export type SchemaMediaRef = components['schemas']['MediaRef'];
 export type SchemaParamSpec = components['schemas']['ParamSpec'];
 export type SchemaPromptExecutionListResponse = components['schemas']['PromptExecutionListResponse'];
 export type SchemaPromptExecutionResponse = components['schemas']['PromptExecutionResponse'];
@@ -1491,7 +1717,7 @@ export type SchemaPromptExecutionSummary = components['schemas']['PromptExecutio
 export type SchemaPromptListResponse = components['schemas']['PromptListResponse'];
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
-export type SchemaRootModelAnnotatedUnionMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -1612,7 +1838,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -2080,6 +2306,71 @@ export interface operations {
             };
         };
     };
+    upload_media_media_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_media_media_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaRef"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_media_media_download_get: {
+        parameters: {
+            query: {
+                /** @description storage_ref returned by POST /media */
+                ref: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_workflows_workflows_get: {
         parameters: {
             query?: never;
@@ -2362,7 +2653,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
                 };
             };
             /** @description Validation Error */
