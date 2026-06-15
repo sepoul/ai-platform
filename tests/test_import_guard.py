@@ -20,9 +20,12 @@ from ai_platform.jobs.import_guard import (
 )
 
 _ROOT = Path(__file__).resolve().parents[1]
-# The three workspace src roots (PEP-420 namespace packages span them).
+# The workspace src roots (PEP-420 namespace packages span them). `_demo` is
+# the synthetic baseline domain the guard tests exercise (its `control` is
+# engine-free; its `execution` pulls pydantic_graph) — included since the
+# repo split made it the in-repo domain in place of math.
 _PYTHONPATH = os.pathsep.join(
-    str(_ROOT / "packages" / p / "src") for p in ("core", "api", "worker")
+    str(_ROOT / "packages" / p / "src") for p in ("core", "api", "worker", "_demo")
 )
 
 

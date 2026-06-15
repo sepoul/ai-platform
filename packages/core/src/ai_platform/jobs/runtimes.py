@@ -20,8 +20,10 @@ How it fits together:
   it claims exactly those (see `ai_platform.jobs.worker_loop`). Jobs for
   other runtimes stay ``PENDING`` for the pool that can run them.
 - Deployment provisions one worker pool per runtime. Each extra installs
-  its own LLM stack on top of a shared base (``pydantic-graph`` only —
-  the platform graph framework): ``packages/worker[default]`` brings
+  its own LLM stack on top of a shared base (``pydantic-graph``, the
+  platform graph framework, plus the framework-neutral ``openai`` SDK —
+  present in *both* runtimes, no otel-sdk dep so it's split-safe):
+  ``packages/worker[default]`` brings
   ``pydantic-ai-slim[anthropic,duckduckgo,logfire]`` (math_qa);
   ``packages/worker[crewai]`` brings ``crewai[anthropic]`` (math_conversation,
   no Logfire — otel-sdk pin conflict). The two are mutually exclusive

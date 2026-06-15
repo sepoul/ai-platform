@@ -65,11 +65,19 @@ def build_run_submit_request_model(
 ) -> type[BaseModel]:
     """Build the typed request body for POST /jobs/runs/submit.
 
+    - 0 inputs registered → a placeholder model. A virgin platform boots
+      with an empty catalog (the API bakes no domain; job types arrive via
+      `aiplatform deploy` → catalog → API restart). The submit route is
+      wired but unreachable until then — return a placeholder so FastAPI
+      can still build the schema. Mirrors `build_review_request_model`'s
+      empty branch and `_build_result_field`'s `not result_types` guard.
     - 1 input registered  → that input type directly.
     - N inputs registered → a `RootModel` over the discriminated union,
       keyed on `job_type`. The wire format stays a flat object; FastAPI
       treats `RootModel[X]` as `X` for body parsing.
     """
+    if not input_types:
+        return create_model("RunSubmitRequest")
     if len(input_types) == 1:
         return input_types[0]
     union = reduce(operator.or_, input_types)

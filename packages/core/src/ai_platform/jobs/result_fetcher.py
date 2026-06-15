@@ -36,7 +36,15 @@ def _extract_refs(record: Any) -> list[UUID]:
         try:
             ckpt = GraphCheckpoint.model_validate_json(token)
             raw = ckpt.state_data.get("artifact_refs") or []
-            return [UUID(str(x)) for x in raw]
+            # Only let the checkpoint win when it actually carries refs. For an
+            # ungated single-node job the checkpoint is saved *before* the
+            # End → persist step appends the minted ids, so its `artifact_refs`
+            # is empty; falling through to `result_payload` (which the job's
+            # `extract_result` populates from `state.artifact_refs`) is what
+            # lets `GET /jobs/{id}/result` hydrate those artifacts. A
+            # gated/resumed job's checkpoint does carry refs and still wins.
+            if raw:
+                return [UUID(str(x)) for x in raw]
         except Exception:
             pass
 

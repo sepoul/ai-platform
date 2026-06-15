@@ -1,7 +1,9 @@
 # Virgin execution-plane image (aiplatform-worker). Ships ONLY the
 # platform: core + worker base + pydantic_graph (the graph framework
-# every runtime needs). No domain source on disk, no runtime-specific
-# LLM stack installed.
+# every runtime needs) + the OpenAI SDK (a framework-neutral capability
+# shared by both runtimes — no otel-sdk dep, so it doesn't clash with the
+# crewai pool). No domain source on disk, no runtime-specific LLM stack
+# (pydantic_ai / crewai) installed — those arrive per-runtime.
 #
 # A domain-bound worker image (aiplatform-worker-mathqa,
 # aiplatform-worker-mathconversation, …) chains on top via
