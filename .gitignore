@@ -263,3 +263,6 @@ mathdata/
 # Wheel build artifacts under packages/*/build/
 packages/*/build/
 packages/*/uv.lock
+
+# tokens
+github_token
