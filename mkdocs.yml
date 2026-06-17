@@ -85,6 +85,8 @@ nav:
       - Overview: project/README.md
       - Agent conventions: project/AGENTS.md
       - Backend backlog: project/NEXT_BEST_STEPS.md
+      - Platform requirements: project/platform-requirements.md
+      - SDK contract-first plan: project/sdk-contract-first-plan.md
 
 markdown_extensions:
   - admonition

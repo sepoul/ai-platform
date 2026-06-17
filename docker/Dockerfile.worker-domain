@@ -24,8 +24,8 @@
 #   PLATFORM_IMAGE — the FROM tag. Defaults to the latest published
 #                    virgin worker image.
 #
-# Example:
-#   docker build -f Dockerfile.worker-domain \
+# Example (run from the repo root — the build context):
+#   docker build -f docker/Dockerfile.worker-domain \
 #                --build-arg DOMAIN=math-qa \
 #                -t aiplatform-worker-mathqa:local .
 #
