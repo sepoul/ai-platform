@@ -64,15 +64,23 @@ uv run aiplatform deploy \
 ## What's in this repo
 
 ```
-packages/
-  core/                # ai_platform — shared substrate (storage, compute, catalogs)
-  api/                 # FastAPI control plane
-  worker/              # execution-plane worker
-  _demo/               # synthetic baseline domain (echo job)
-sdk-ts/                # @aiplatform/sdk — typed TS client + Next.js BFF helper
-platform-ui/           # domain-free admin SPA
-docs/                  # see docs/README.md
+packages/              # BACKEND — the Python platform (a uv workspace)
+  core/                #   ai_platform — shared substrate (storage, compute, catalogs)
+  api/                 #   FastAPI control plane
+  worker/              #   execution-plane worker
+  _demo/               #   synthetic baseline domain (echo job)
+sdk-ts/                # SDK — @aiplatform/sdk typed TS client + Next.js BFF helper
+platform-ui/           # FRONTEND — domain-free admin SPA
+docker/                # DEVOPS — platform image Dockerfiles (context = repo root)
+infra/                 # DEVOPS — Hetzner box (OpenTofu) + redeploy script
+scripts/               # TOOLING — dev/run/test helpers
+supabase/              # DB — SQL migrations
+docs/                  # DOCS — see docs/README.md (mkdocs site)
+tests/                 # platform test suite
 ```
+
+`docker-compose*.yml` + `.dockerignore` stay at the root (compose + the
+prod box's `redeploy.sh` expect them there).
 
 Real domains do **not** live here. They live in their own repos and
 arrive at boot via the CodePackage catalog. The platform image

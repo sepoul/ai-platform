@@ -21,7 +21,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api   # control plane: core + FastAPI, NO engine
+      dockerfile: docker/Dockerfile.api   # control plane: core + FastAPI, NO engine
     image: aiplatform-api:local
     command: >
       python -u -m uvicorn ai_platform.entrypoints.api:app
@@ -62,7 +62,7 @@ services:
   aiplatform-worker:
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: docker/Dockerfile.worker
     image: aiplatform-worker:local
     profiles: [build]
     command: ["true"]   # not meant to run; the image is the artifact
@@ -74,7 +74,7 @@ services:
     # via the CodePackage catalog.
     build:
       context: .
-      dockerfile: Dockerfile.worker
+      dockerfile: docker/Dockerfile.worker
     image: aiplatform-worker:local
     command: >
       python -u -m ai_platform.entrypoints.worker

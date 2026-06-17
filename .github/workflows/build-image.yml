@@ -41,14 +41,14 @@ jobs:
           # Control plane (FastAPI; NO engine).
           - name: aiplatform-api
             context: .
-            file: Dockerfile.api
+            file: docker/Dockerfile.api
             image: ghcr.io/sepoul/aiplatform-api
             build-args: ""
           # Virgin execution-plane image: platform-only, no domain
           # source. Domain-bound workers chain on top of it.
           - name: aiplatform-worker
             context: .
-            file: Dockerfile.worker
+            file: docker/Dockerfile.worker
             image: ghcr.io/sepoul/aiplatform-worker
             build-args: ""
           # math-ui moved to sepoul/math-app (NEXT_BEST_STEPS §7q Phase 3).
