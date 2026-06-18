@@ -1,0 +1,60 @@
+name: Publish SDK to npm
+
+# Publishes @aiplatform/sdk to npmjs.com on a `sdk-v*` tag, so consumers
+# (platform-ui here, math-app/math-ui) depend on a real versioned package
+# instead of a local `file:` path.
+#
+# ── One-time operator setup ───────────────────────────────────────────
+#   1. Own the `@aiplatform` scope on npm: npmjs.com → create the
+#      `aiplatform` org (free for public packages). If that scope is
+#      taken, rename the package to a scope/name you own and update the
+#      13 import sites in math-ui.
+#   2. Create an npm **Automation** access token (npmjs.com → Access
+#      Tokens → Generate → Automation) and add it as the repo secret
+#      `NPM_TOKEN`  (GitHub → Settings → Secrets and variables → Actions).
+#
+# ── Cut a release ─────────────────────────────────────────────────────
+#   - bump `sdk-ts/package.json` "version" (e.g. 0.1.2), commit to main
+#   - git tag sdk-v0.1.2 && git push origin sdk-v0.1.2
+#   The tag must match the package.json version (guarded below).
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Tag must match package.json version
+        if: github.event_name == 'push'
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#sdk-v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::tag sdk-v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+          echo "Publishing @aiplatform/sdk@$PKG"
+
+      - run: npm ci
+      - run: npm run build
+      # `access: public` comes from package.json publishConfig.
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

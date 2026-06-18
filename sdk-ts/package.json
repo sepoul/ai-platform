@@ -1,8 +1,16 @@
 {
   "name": "@aiplatform/sdk",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
   "description": "TypeScript client for ai-platform. Mirror of the Python PlatformSession API plus a Next.js BFF proxy helper.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sepoul/ai-platform.git",
+    "directory": "sdk-ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

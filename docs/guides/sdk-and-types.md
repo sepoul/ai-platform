@@ -86,24 +86,41 @@ the UI against it and mock instances until the producing job ships.
 
 ---
 
-## Published mode — staying current with other domains
+## Published mode — consume the versioned package (npm)
 
-When you need *another* domain's contract (after it deploys), consume the
-published package instead of a sibling checkout. The SDK is published to
-**GitHub Packages** (private npm registry for the org):
+`@aiplatform/sdk` publishes to **npmjs.com** (public). Consumers depend on
+a real version instead of a sibling `file:` checkout — no filesystem
+coupling, reproducible across machines + CI:
 
-```ini
-# .npmrc in the consuming repo
-@aiplatform:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```jsonc
+// package.json in the consuming repo (e.g. math-app/math-ui)
+"dependencies": {
+  "@aiplatform/sdk": "^0.1.1"
+}
 ```
 
 ```bash
 npm update @aiplatform/sdk     # pull the latest contract
 ```
 
-This is a normal dependency bump — by the time you need the new types,
-they're already published.
+It's a **public** package, so no `.npmrc` / auth is needed to install.
+
+**Cutting a release** (`.github/workflows/sdk-publish.yml`): bump
+`sdk-ts/package.json` `"version"`, commit to main, then tag + push:
+
+```bash
+git tag sdk-v0.1.2 && git push origin sdk-v0.1.2   # tag must match the version
+```
+
+The tag triggers the publish workflow. One-time operator setup: own the
+`@aiplatform` scope on npm (create the free `aiplatform` org) and add an
+npm **Automation** token as the `NPM_TOKEN` repo secret. See the workflow
+header.
+
+> **Migrating off `file:`** — math-ui currently uses
+> `"@aiplatform/sdk": "file:../../ai-platform/sdk-ts"`. Switch it to
+> `"^0.1.1"` (and drop any local-path `.npmrc` scope line) once the first
+> version is published.
 
 ---
 
