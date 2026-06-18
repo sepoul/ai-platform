@@ -45,7 +45,11 @@ async def run_graph_job(
         if checkpoint.next_node_key == SENTINEL_DONE:
             _run_persist(job_def.persistence.on_complete, job_id, state)
             result = job_def.extract_result(state)
-            executor.complete_job(job_id, result=result.model_dump(mode="json"))
+            executor.complete_job(
+                job_id,
+                result=result.model_dump(mode="json"),
+                artifact_refs=state.artifact_refs,
+            )
             logger.info("Job %s: completed after review", job_id)
             return
 
@@ -94,7 +98,11 @@ async def run_graph_job(
             if isinstance(current_node, End):
                 _run_persist(job_def.persistence.on_complete, job_id, state)
                 result = job_def.extract_result(state)
-                executor.complete_job(job_id, result=result.model_dump(mode="json"))
+                executor.complete_job(
+                    job_id,
+                    result=result.model_dump(mode="json"),
+                    artifact_refs=state.artifact_refs,
+                )
                 logger.info("Job %s: completed", job_id)
                 return
 

@@ -31,6 +31,16 @@ def hydrate_artifact_refs(
 
 
 def _extract_refs(record: Any) -> list[UUID]:
+    # Primary, authoritative source: the refs `mark_succeeded` persisted onto
+    # the record at completion (PR-3e). Written atomically with the SUCCEEDED
+    # status and independent of the domain's `extract_result`, so a completed
+    # job always carries its refs. The checkpoint / result_payload reads below
+    # remain as fallbacks for records written before this field existed and for
+    # gated jobs read mid-flight (status not yet SUCCEEDED).
+    persisted = getattr(record.state, "artifact_refs", None)
+    if persisted:
+        return [UUID(str(x)) for x in persisted]
+
     token = getattr(record.state, "resume_token", None)
     if token:
         try:
