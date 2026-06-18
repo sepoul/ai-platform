@@ -441,6 +441,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/artifacts/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Get Artifacts
+         * @description Hydrate many artifacts in one round-trip (PR-3d) — kills the
+         *     per-id `GET /artifacts/{id}` fan-out when reading
+         *     `result.artifact_refs` or a SeedStep set. Fail-loud: any missing
+         *     id 404s the whole batch (matches `ArtifactService.get_many`).
+         */
+        post: operations["batch_get_artifacts_artifacts_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
@@ -607,6 +630,16 @@ export interface components {
              * @default []
              */
             fields: components["schemas"]["ParamSpec"][];
+        };
+        /**
+         * BatchArtifactRequest
+         * @description Body for `POST /artifacts/batch` — hydrate many artifacts in one
+         *     round-trip (replaces a `GET /artifacts/{id}` per id). Fails loud:
+         *     any missing id 404s the whole batch, matching `get_many`.
+         */
+        BatchArtifactRequest: {
+            /** Ids */
+            ids: string[];
         };
         /** Body_upload_code_package_code_packages_post */
         Body_upload_code_package_code_packages_post: {
@@ -865,6 +898,13 @@ export interface components {
              */
             validation_attempts: number;
         };
+        /** FullArtifactListResponse */
+        FullArtifactListResponse: {
+            /** Artifacts */
+            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
+            /** Total */
+            total: number;
+        };
         /**
          * GateSpec
          * @description A single human-review gate carried by a JobDefinition.
@@ -1032,7 +1072,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -1058,7 +1098,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -1577,8 +1617,8 @@ export interface components {
             /** Instructions */
             instructions?: string | null;
         };
-        /** RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -1770,6 +1810,7 @@ export type SchemaArtifactSummary = components['schemas']['ArtifactSummary'];
 export type SchemaArtifactTypeListResponse = components['schemas']['ArtifactTypeListResponse'];
 export type SchemaArtifactTypeRecord = components['schemas']['ArtifactTypeRecord'];
 export type SchemaArtifactTypeSpec = components['schemas']['ArtifactTypeSpec'];
+export type SchemaBatchArtifactRequest = components['schemas']['BatchArtifactRequest'];
 export type SchemaBodyUploadCodePackageCodePackagesPost = components['schemas']['Body_upload_code_package_code_packages_post'];
 export type SchemaBodyUploadMediaMediaPost = components['schemas']['Body_upload_media_media_post'];
 export type SchemaCodePackageRecord = components['schemas']['CodePackageRecord'];
@@ -1778,6 +1819,7 @@ export type SchemaCrewChatEvent = components['schemas']['CrewChatEvent'];
 export type SchemaDailyNoteArtifact = components['schemas']['DailyNoteArtifact'];
 export type SchemaEdgeResponse = components['schemas']['EdgeResponse'];
 export type SchemaFigureArtifact = components['schemas']['FigureArtifact'];
+export type SchemaFullArtifactListResponse = components['schemas']['FullArtifactListResponse'];
 export type SchemaGateSpecInput = components['schemas']['GateSpec-Input'];
 export type SchemaGeneratedAnswerArtifact = components['schemas']['GeneratedAnswerArtifact'];
 export type SchemaHttpValidationError = components['schemas']['HTTPValidationError'];
@@ -1804,7 +1846,7 @@ export type SchemaPromptExecutionSummary = components['schemas']['PromptExecutio
 export type SchemaPromptListResponse = components['schemas']['PromptListResponse'];
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
-export type SchemaRootModelAnnotatedUnionMathNotesInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -1925,7 +1967,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -2696,6 +2738,10 @@ export interface operations {
                 /** @description Filter by discriminator. */
                 artifact_type?: string | null;
                 limit?: number;
+                /** @description Rows to skip (pagination). */
+                offset?: number;
+                /** @description Return full typed artifacts inline instead of summaries. */
+                full?: boolean;
             };
             header?: never;
             path?: never;
@@ -2709,7 +2755,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArtifactListResponse"];
+                    "application/json": components["schemas"]["FullArtifactListResponse"] | components["schemas"]["ArtifactListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_get_artifacts_artifacts_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
                 };
             };
             /** @description Validation Error */
@@ -2740,7 +2819,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
                 };
             };
             /** @description Validation Error */
