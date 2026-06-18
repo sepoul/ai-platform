@@ -16,6 +16,7 @@ import { createApiClient, type ApiClient } from "./client";
 import {
   type Artifact,
   type ArtifactListResponse,
+  type FullArtifactListResponse,
   type ArtifactTypeListResponse,
   type ArtifactTypeRecord,
   type CodePackageRecord,
@@ -52,6 +53,32 @@ export class JobTimeoutError extends PlatformSessionError {
 
 export interface PlatformSessionOptions {
   apiUrl: string;
+}
+
+/** Filter + pagination options shared by the artifact list reads. */
+export interface ListArtifactsOpts {
+  jobId?: string;
+  artifactType?: string;
+  limit?: number;
+  offset?: number;
+  /** Equality filters on whitelisted top-level domain fields (PR-3b),
+   * e.g. `{ source_note_id: "<id>" }`. A non-whitelisted field 400s. */
+  fields?: Record<string, string | number | boolean>;
+}
+
+/** Build the `/artifacts` query object from {@link ListArtifactsOpts}.
+ * Domain `fields` are spread in as bare query params (the backend reads
+ * any non-reserved key as a field filter). */
+function artifactQuery(opts: ListArtifactsOpts): Record<string, string | number | boolean> {
+  const query: Record<string, string | number | boolean> = {};
+  if (opts.jobId) query.job_id = opts.jobId;
+  if (opts.artifactType) query.artifact_type = opts.artifactType;
+  if (opts.limit) query.limit = opts.limit;
+  if (opts.offset) query.offset = opts.offset;
+  for (const [key, value] of Object.entries(opts.fields ?? {})) {
+    if (value !== undefined) query[key] = value;
+  }
+  return query;
 }
 
 const TERMINAL_SET = new Set<string>(TERMINAL_STATUSES);
@@ -169,21 +196,50 @@ export class PlatformSession {
 
   // ---- Artifacts (registry surface; coexists with /artifact-types) ----
 
-  async listArtifacts(opts: {
-    jobId?: string;
-    artifactType?: string;
-    limit?: number;
-  } = {}): Promise<ArtifactListResponse> {
-    const query: Record<string, string | number> = {};
-    if (opts.jobId) query.job_id = opts.jobId;
-    if (opts.artifactType) query.artifact_type = opts.artifactType;
-    if (opts.limit) query.limit = opts.limit;
+  /**
+   * Summary list (cheap default). Filters compile to one backend query:
+   * `jobId`/`artifactType` envelope filters, `limit`/`offset` pagination
+   * (PR-3c), and `fields` — equality filters on whitelisted domain fields,
+   * e.g. `{ source_note_id }` (PR-3b). A non-whitelisted field 400s.
+   */
+  async listArtifacts(opts: ListArtifactsOpts = {}): Promise<ArtifactListResponse> {
     const { data, error } = await this.client.GET("/artifacts", {
-      params: { query: query as never },
+      params: { query: artifactQuery(opts) as never },
     });
     if (error) throw new PlatformSessionError(`/artifacts failed: ${JSON.stringify(error)}`);
     if (!data) throw new PlatformSessionError("/artifacts returned empty body");
-    return data;
+    // The 200 schema is a union (summary | full); this path never sends
+    // `full`, so the backend always returns the summary shape.
+    return data as ArtifactListResponse;
+  }
+
+  /**
+   * Full-projection list (PR-3a `full=true`) — full typed artifacts inline
+   * (`concepts`/`latex`/`text`, `storage_url` hydrated), so one request
+   * hydrates a whole page instead of a `getArtifact` per row. Same filter
+   * options as {@link listArtifacts}.
+   */
+  async listArtifactsFull(opts: ListArtifactsOpts = {}): Promise<FullArtifactListResponse> {
+    const { data, error } = await this.client.GET("/artifacts", {
+      params: { query: { ...artifactQuery(opts), full: true } as never },
+    });
+    if (error) throw new PlatformSessionError(`/artifacts?full failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError("/artifacts returned empty body");
+    return data as FullArtifactListResponse;
+  }
+
+  /**
+   * Batch-hydrate artifacts by id in one round-trip (PR-3d) — kills the
+   * per-id `getArtifact` fan-out when reading `result.artifact_refs` or a
+   * SeedStep set. Fail-loud: any missing id 404s the whole batch.
+   */
+  async batchGetArtifacts(ids: string[]): Promise<Artifact[]> {
+    const { data, error } = await this.client.POST("/artifacts/batch", {
+      body: { ids } as never,
+    });
+    if (error) throw new PlatformSessionError(`/artifacts/batch failed: ${JSON.stringify(error)}`);
+    if (!data) throw new PlatformSessionError("/artifacts/batch returned empty body");
+    return data as Artifact[];
   }
 
   async getArtifact(artifactId: string): Promise<Artifact> {

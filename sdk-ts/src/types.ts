@@ -23,6 +23,9 @@ export type UserComment = components["schemas"]["UserComment"];
 // coexist while we converge.
 export type ArtifactSummary = components["schemas"]["ArtifactSummary"];
 export type ArtifactListResponse = components["schemas"]["ArtifactListResponse"];
+/** Full-projection page (`GET /artifacts?full=true`): `artifacts` are the
+ * full typed `Artifact` union, not summaries. */
+export type FullArtifactListResponse = components["schemas"]["FullArtifactListResponse"];
 export type ArtifactTypeSpec = components["schemas"]["ArtifactTypeSpec"];
 export type ArtifactTypeListResponse = components["schemas"]["ArtifactTypeListResponse"];
 /**
