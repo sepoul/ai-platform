@@ -245,21 +245,27 @@ git clone https://github.com/sepoul/ai-platform.git mathapp
 cd mathapp
 ```
 
-From the laptop, scp the `.env`:
+From the laptop, scp **`.prodenv`** (the prod env source-of-truth) to the
+box *as* `.env`. Keep two local files, neither committed: `.env` for
+compose dev (Supabase `test` schema + `app-data-test`) and `.prodenv` for
+the box (`public` + `app-data`). **Never scp the dev `.env`** — prod would
+then run against the `test` schema. Template: `.prodenv.example`.
 
 ```bash
-scp .env root@mathapp-prod:/srv/mathapp/.env
+scp .prodenv root@mathapp-prod:/srv/mathapp/.env
 ssh root@mathapp-prod 'chmod 600 /srv/mathapp/.env'
 ```
 
-The `.env` must include:
+The box `.env` (your `.prodenv`) must include:
 
 - `BACKEND=supabase`
+- `SUPABASE_SCHEMA=public` — set **explicitly** (empty would also resolve to
+  `public`, but being explicit keeps the prod/dev split unambiguous)
+- `SUPABASE_BUCKET=app-data`
 - `ANTHROPIC_API_KEY=…`
 - `LOGFIRE_TOKEN=…` (required — `basic_agent.py` calls `logfire.configure()` at import time)
 - `SUPABASE_URL=…`
 - `SUPABASE_SECRET_KEY=…`
-- `SUPABASE_BUCKET=app-data`
 - `SUPABASE_CONNECTION_STRING=…`
 
 Boot the stack:
@@ -588,11 +594,15 @@ ANTHROPIC_API_KEY=…
 LOGFIRE_TOKEN=…
 WORKER_INTERVAL=5
 
+SUPABASE_SCHEMA=public        # explicit; PROD owns the live `public` tables
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_…
 SUPABASE_BUCKET=app-data
 SUPABASE_CONNECTION_STRING=postgresql://…
 ```
+
+Maintained locally as `.prodenv` (gitignored) and scp'd to the box as
+`.env` — see Step 4 and `.prodenv.example`.
 
 See [storage_backends.md](../reference/storage-backends.md) for which vars each
 backend needs.

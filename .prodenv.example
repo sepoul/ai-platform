@@ -1,0 +1,34 @@
+# PROD env template — copy to `.prodenv` (gitignored) and fill in secrets.
+#
+# Convention: keep TWO local env files, neither committed:
+#   .env      → local docker-compose dev  (Supabase `test` schema + app-data-test)
+#   .prodenv  → the Hetzner box            (Supabase `public` schema + app-data)
+#
+# Deploy copies `.prodenv` to the box AS `.env`:
+#   scp .prodenv root@mathapp-prod:/srv/mathapp/.env
+# This makes the prod-vs-dev split explicit and removes the footgun of
+# scp'ing the dev `.env` (which points at the `test` schema + test bucket)
+# onto prod. See docs/operations/hetzner-deploy.md.
+
+BACKEND=supabase
+
+# Storage scoping — set EXPLICITLY for prod (don't rely on the empty default).
+# PROD owns the live data: `public` schema + `app-data` bucket.
+SUPABASE_SCHEMA=public
+SUPABASE_BUCKET=app-data
+
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_…
+SUPABASE_CONNECTION_STRING=postgresql://…
+
+ANTHROPIC_API_KEY=sk-ant-…
+# Required: basic_agent.py calls logfire.configure() at import time.
+LOGFIRE_TOKEN=pylf_…
+# OpenAI provider helpers (audio/vision/openai_agent). Empty is fine until used.
+OPENAI_API_KEY=sk-…
+
+WORKER_INTERVAL=5
+
+# NOTE: do NOT set UI_TOOL_API_URL here. On the box, math-ui runs as a
+# container and the compose default (http://math-ui:7860) is correct. The
+# host.docker.internal override belongs only in the local `.env`.
