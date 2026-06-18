@@ -176,8 +176,12 @@ class SupabaseBackend:
         secret_key: str,
         bucket_name: str,
         connection_string: str,
+        schema: str | None = None,
     ):
-        self._pool = make_pool(connection_string)
+        # `schema` scopes every pooled connection's `search_path` (PROD uses
+        # `public` by leaving it unset; local dev points at the `test` schema
+        # for full isolation — see `SUPABASE_SCHEMA` in `make_backend`).
+        self._pool = make_pool(connection_string, schema=schema)
 
         self.file_repo: FileRepository = SupabaseFileRepository(
             SupabaseFileRepositoryConfig(
@@ -233,6 +237,10 @@ def make_backend(name: str | None = None, *, root_dir: str | None = None) -> Bac
             secret_key=os.environ["SUPABASE_SECRET_KEY"],
             bucket_name=os.getenv("SUPABASE_BUCKET", "app-data"),
             connection_string=os.environ["SUPABASE_CONNECTION_STRING"],
+            # Postgres schema scoping. Unset → `public` (PROD/Hetzner). Local
+            # dev sets `SUPABASE_SCHEMA=test` (+ a `app-data-test` bucket) to
+            # work against an isolated clone of the tables.
+            schema=os.getenv("SUPABASE_SCHEMA") or None,
         )
 
     raise ValueError(f"Unknown backend: {name}")

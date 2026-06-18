@@ -179,31 +179,39 @@ If you mint a new `BaseArtifact` subclass:
    domain-specific renderer (otherwise it falls back to a JSON dump
    — see `NEXT_BEST_STEPS.md §7b`).
 
-### Pointing local `docker compose` at prod Supabase
+### Pointing local `docker compose` at PROD Supabase data
 
-`.env`'s `BACKEND` decides which storage + DB the `api`/`worker`
-containers bind to, and `docker compose` reads `.env` at container
-**create** time:
+Local compose runs against **Supabase**, but **isolated** from PROD: the
+`test` Postgres schema + the `app-data-test` storage bucket. PROD/Hetzner
+uses the `public` schema + the `app-data` bucket. Two `.env` vars decide
+which side you hit (and `docker compose` reads `.env` at container
+**create** time):
 
-- `BACKEND=local` → the in-container `/data` FS volume (`mathapp-data`).
-  **This is the default for laptop dev — keep it here.**
-- `BACKEND=supabase` → the **shared PROD Supabase** (live DB + the
-  `app-data` storage bucket). With this set, `docker compose up` /
-  `restart` boots an api + worker that **poll and process real PROD jobs
-  from your laptop** and read/write prod storage. Tell-tale: the worker
-  boot log shows `httpx … GET https://<proj>.supabase.co/storage/…`.
+- `SUPABASE_SCHEMA` → scopes every connection's `search_path`. **Local must
+  be `test`.** Empty / `public` = the live PROD tables.
+- `SUPABASE_BUCKET` → the blob bucket. **Local must be `app-data-test`.**
+  `app-data` = the live PROD blobs.
 
-So before any `docker compose up` / `restart`, confirm the target:
+With either pointed at PROD, an api + worker on your laptop **poll and
+process real PROD jobs** and read/write prod storage. Tell-tale in the
+worker boot log: an `httpx` request to `…/storage/v1/object/app-data/…`
+(the bucket is `app-data`, not `app-data-test`).
+
+So before any `docker compose up`, confirm the target:
 
 ```bash
-grep '^BACKEND' .env                       # expect: BACKEND=local
-docker compose exec worker printenv BACKEND  # what's actually running
+grep -E '^SUPABASE_(SCHEMA|BUCKET)' .env   # expect: test / app-data-test
+docker compose exec worker sh -c 'printenv SUPABASE_SCHEMA SUPABASE_BUCKET'
 ```
 
-Only set `supabase` for a deliberate live run. And note: `docker compose
-restart` does **not** re-read `.env` — after editing it you must
-`docker compose up -d worker worker-crewai` (the `crewai` pool is behind
-the `crewai` profile) to recreate the containers with the new env.
+Two gotchas on applying changes: `docker compose restart` does **not**
+re-read `.env` — after editing env you must `docker compose up -d worker
+worker-crewai` (the `crewai` pool is behind the `crewai` profile) to
+recreate the containers. And the package **source is baked into the
+image**, so a backend *code* change needs `docker compose up -d --build`
+(a plain restart keeps the old code). The retired local-FS backend
+(`BACKEND=local` + `/data`) still works for the **test suite**, just not
+for compose dev.
 
 ---
 

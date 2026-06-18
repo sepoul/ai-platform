@@ -36,6 +36,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      # Postgres schema scope. Empty → `public` (PROD/Hetzner). Local dev
+      # sets `test` (+ SUPABASE_BUCKET=app-data-test) for an isolated clone.
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       # Compute selection + broker URL. Both no-ops when COMPUTE=poll
       # (the default); read only by `CeleryComputeBackend.enqueue` when
@@ -94,6 +97,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      # Postgres schema scope. Empty → `public` (PROD/Hetzner). Local dev
+      # sets `test` (+ SUPABASE_BUCKET=app-data-test) for an isolated clone.
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
       # Worker → API live-log POST target. Compose-internal DNS;
@@ -140,6 +146,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      # Postgres schema scope. Empty → `public` (PROD/Hetzner). Local dev
+      # sets `test` (+ SUPABASE_BUCKET=app-data-test) for an isolated clone.
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
       PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
@@ -193,6 +202,9 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      # Postgres schema scope. Empty → `public` (PROD/Hetzner). Local dev
+      # sets `test` (+ SUPABASE_BUCKET=app-data-test) for an isolated clone.
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       CELERY_BROKER_URL: redis://redis:6379/0
       PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
