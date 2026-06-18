@@ -32,8 +32,8 @@ requests. With `full=true` it's one:
 const summaries = (await fetchArtifacts({ artifactType: "daily_note" })).artifacts;
 const full = await Promise.all(summaries.map(s => fetchArtifact(s.artifact_id)));
 
-// AFTER: 1
-const full = (await fetchArtifacts({ artifactType: "daily_note", full: true }))
+// AFTER: 1 — the SDK exposes the full variant directly
+const full = (await session.listArtifactsFull({ artifactType: "daily_note" }))
   .artifacts as DailyNoteArtifact[];
 ```
 
@@ -48,10 +48,9 @@ filter server-side:
 
 ```ts
 // AFTER: O(page), already scoped to one note, full payload inline
-const pages = (await fetchArtifacts({
+const pages = (await session.listArtifactsFull({
   artifactType: "note_page",
-  source_note_id: noteId,   // equality filter on the FK
-  full: true,
+  fields: { source_note_id: noteId },   // equality filter on the FK (PR-3b)
 })).artifacts as NotePageArtifact[];
 pages.sort((a, b) => a.page_index - b.page_index);
 ```
@@ -87,7 +86,7 @@ Turning a job result's refs into artifacts is one round-trip, not N:
 const arts = await Promise.all(result.artifact_refs.map(fetchArtifact));
 
 // AFTER: 1
-const arts = await batchGetArtifacts(result.artifact_refs); // POST /artifacts/batch {ids}
+const arts = await session.batchGetArtifacts(result.artifact_refs); // POST /artifacts/batch
 ```
 
 Fail-loud: any missing id `404`s the whole batch (same contract as the
@@ -102,17 +101,17 @@ completed job.
 
 ## Client plumbing checklist (math-ui)
 
-1. **Pull the regenerated `@aiplatform/sdk`** — confirm `schema.d.ts` has
-   the `POST /artifacts/batch` path, `FullArtifactListResponse`,
-   `BatchArtifactRequest`, and the `full`/`offset` params on
-   `GET /artifacts`.
-2. Extend `ListArtifactsParams` (`lib/platform/artifacts-client.ts`) with
-   `offset?`, `full?`, and arbitrary field filters; pass them through as
-   query params.
-3. Add a typed `fetchArtifactsFull(...)` returning the
-   `FullArtifactListResponse` shape (`Artifact[]`) so callers don't cast,
-   and a `batchGetArtifacts(ids)` calling `POST /artifacts/batch`.
-4. Refactor the two N+1s in `app/math-notes/page.tsx` (daily-note gallery
+The SDK's `PlatformSession` exposes these directly — your
+`lib/platform/artifacts-client.ts` wrappers just forward:
+
+1. **Bump `@aiplatform/sdk`** to the build with the extended client.
+2. `listArtifacts(opts)` — summary page; `opts` now takes `offset` and
+   `fields` (e.g. `{ source_note_id }`) alongside `jobId`/`artifactType`/
+   `limit`.
+3. `listArtifactsFull(opts)` — full typed artifacts inline
+   (`FullArtifactListResponse`); same `opts`.
+4. `batchGetArtifacts(ids)` → `POST /artifacts/batch` → `Artifact[]`.
+5. Refactor the two N+1s in `app/math-notes/page.tsx` (daily-note gallery
    + `note_page` grouping) per §1 and §2.
 
 See [SDK & types (dev loop)](sdk-and-types.md) for regenerating the typed

@@ -18,6 +18,7 @@ export {
   JobNotFoundError,
   JobTimeoutError,
   type PlatformSessionOptions,
+  type ListArtifactsOpts,
 } from "./session";
 
 export { createApiClient, type ApiClient } from "./client";
@@ -43,6 +44,7 @@ export {
   type ArtifactType,
   type ArtifactSummary,
   type ArtifactListResponse,
+  type FullArtifactListResponse,
   type ArtifactTypeSpec,
   type ArtifactTypeListResponse,
   // Workflows
