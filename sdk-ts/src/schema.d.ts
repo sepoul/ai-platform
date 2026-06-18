@@ -743,9 +743,10 @@ export interface components {
          *     `storage_ref` / `content_type` / `byte_size` are inherited from
          *     `BaseArtifact` and point at the uploaded **audio** blob. `transcript`
          *     is populated by the ingest job's transcription node. `image_refs`
-         *     holds any notebook photos captured with the note; `ocr_text` is
-         *     reserved for a later OCR step over those images (declared now so that
-         *     step doesn't force a schema migration).
+         *     holds the notebook photos captured with the note; `ocr_text` is the
+         *     combined text/LaTeX parsed from them by `ParsePagesStep`, with the
+         *     per-photo structured detail (LaTeX, concepts, diagrams) living in the
+         *     sibling `NotePageArtifact`s.
          */
         DailyNoteArtifact: {
             /**
@@ -796,7 +797,7 @@ export interface components {
             transcript?: string | null;
             /**
              * Ocr Text
-             * @description Extracted text from photos (later).
+             * @description Combined text/LaTeX parsed from the note's photos.
              */
             ocr_text?: string | null;
         };
@@ -1388,6 +1389,91 @@ export interface components {
             /** Byte Size */
             byte_size: number;
         };
+        /**
+         * NotePageArtifact
+         * @description A parsed notebook page — the vision interpretation of one photo.
+         *
+         *     Minted per `image_ref` alongside the parent `DailyNoteArtifact`.
+         *     `storage_ref` points at the photo (so `GET /artifacts/{id}` hydrates a
+         *     viewable `storage_url`); `source_note_id` links back to the note. The
+         *     structured fields (`latex`, `concepts`, …) are produced by the domain
+         *     from the platform's *generic* `ImageInterpreter` text — the
+         *     math-specific interpretation lives here, domain-side, per §13.
+         */
+        NotePageArtifact: {
+            /**
+             * Artifact Id
+             * Format: uuid
+             */
+            artifact_id?: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            artifact_type: "note_page";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Created By Job */
+            created_by_job?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Content Type */
+            content_type?: string | null;
+            /** Byte Size */
+            byte_size?: number | null;
+            /** Storage Url */
+            storage_url?: string | null;
+            /**
+             * Note Date
+             * Format: date
+             * @description The study day this page belongs to.
+             */
+            note_date: string;
+            /**
+             * Created By
+             * @description The learner who captured it.
+             */
+            created_by?: string | null;
+            /**
+             * Source Note Id
+             * Format: uuid
+             * @description Parent DailyNoteArtifact id.
+             */
+            source_note_id: string;
+            /**
+             * Image Ref
+             * @description storage_ref of the source photo.
+             */
+            image_ref: string;
+            /**
+             * Page Index
+             * @description Order among the note's photos.
+             */
+            page_index: number;
+            /**
+             * Text
+             * @description Plain-text transcription of the page.
+             */
+            text?: string | null;
+            /**
+             * Latex
+             * @description Math on the page, transcribed as LaTeX.
+             */
+            latex?: string | null;
+            /**
+             * Diagram Description
+             * @description Description of any diagram/figure on the page.
+             */
+            diagram_description?: string | null;
+            /**
+             * Concepts
+             * @description Mathematical concepts the page touches.
+             */
+            concepts?: string[];
+        };
         /** ParamSpec */
         ParamSpec: {
             /** Name */
@@ -1710,6 +1796,7 @@ export type SchemaMathQaInput = components['schemas']['MathQAInput'];
 export type SchemaMathQaResult = components['schemas']['MathQAResult'];
 export type SchemaMathQuestionArtifact = components['schemas']['MathQuestionArtifact'];
 export type SchemaMediaRef = components['schemas']['MediaRef'];
+export type SchemaNotePageArtifact = components['schemas']['NotePageArtifact'];
 export type SchemaParamSpec = components['schemas']['ParamSpec'];
 export type SchemaPromptExecutionListResponse = components['schemas']['PromptExecutionListResponse'];
 export type SchemaPromptExecutionResponse = components['schemas']['PromptExecutionResponse'];
@@ -2653,7 +2740,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
                 };
             };
             /** @description Validation Error */
