@@ -40,6 +40,13 @@ class ArtifactSummary(BaseModel):
     created_by_job: Optional[str] = None
 
 
+class BatchArtifactRequest(BaseModel):
+    """Body for `POST /artifacts/batch` — hydrate many artifacts in one
+    round-trip (replaces a `GET /artifacts/{id}` per id). Fails loud:
+    any missing id 404s the whole batch, matching `get_many`."""
+    ids: List[UUID]
+
+
 class ArtifactListResponse(BaseModel):
     artifacts: List[ArtifactSummary]
     total: int
