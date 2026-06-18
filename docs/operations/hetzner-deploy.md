@@ -537,6 +537,29 @@ bad `:latest` push):
 ssh root@mathapp-prod 'cd /srv/mathapp && IMAGE_TAG=sha-62d3672 infra/hetzner/scripts/redeploy.sh'
 ```
 
+### Refresh the SDK snapshot from prod (post-deploy)
+
+After any deploy that changed the API surface (new routes / response
+models) **or** a domain's artifact / input / result types, refresh the
+committed OpenAPI snapshot **from prod** as the guarantee that the typed
+`@aiplatform/sdk` contract matches what consumers (`platform-ui` here,
+`math-app/math-ui`) actually call. The snapshot is the *source* the SDK
+types are generated from — a regen taken against a local/dev instance
+only reflects whatever domains + versions happen to be installed there,
+so prod is the authoritative dump.
+
+```bash
+# From the laptop (on the tailnet), against the just-deployed box:
+aiplatform snapshot-openapi --api-url http://mathapp-prod:8000
+git commit -am "chore(sdk): refresh openapi snapshot from prod" && git push
+```
+
+The push touches `sdk-ts/openapi.snapshot.json`, which triggers
+`.github/workflows/sdk-regen.yml`: it guards against a partial
+(`_demo`-only) snapshot, regenerates `sdk-ts/src/schema.d.ts`, and
+**opens a PR** with the diff. Review + merge it so the typed contract is
+authoritative. No diff → no PR (the snapshot was already current).
+
 ### Tailing logs
 
 ```bash
