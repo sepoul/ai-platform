@@ -128,6 +128,53 @@ table in the tenant storage plane and exposes a retrieval *tool*. The
 platform gives only cheap *structured* filtering; embeddings never
 become a built-in.
 
+### PR-3 sub-requirements (observed in math-notes integration)  · **P1**
+
+Field-level read pain surfaced while building the math-ui note gallery
+and the math-notes test harness. These sharpen the PR-3 ask above into
+five concrete items. **None touch the §13 boundary** — all are cheap
+*structured* filtering the backend (Supabase) can index; no embeddings,
+no semantic search.
+
+- **PR-3a — Field projection on `GET /artifacts` (kills the N+1).**
+  *P1, small.* Today `GET /artifacts?artifact_type=note_page` returns
+  **summaries only** (`artifact_id` / `artifact_type` / `created_at` /
+  `created_by_job`, every domain field nulled); reading
+  `concepts`/`latex`/`text` needs a `GET /artifacts/{id}` per row, so a
+  gallery page is N+1. Add `?full=true` (or `fields=`) to return the full
+  typed artifact inline so one request hydrates a page. Keep the summary
+  as the cheap default — just make `full` available.
+- **PR-3b — Filter by domain/FK fields, not just the envelope.** *P1.*
+  `GET /artifacts` filters only by type/job_id, but `note_page` links its
+  parent via `source_note_id`. Showing one note's pages currently fetches
+  **all** `note_page`s (`limit 200`) and groups client-side — O(corpus),
+  and will fall over. Add an equality filter on whitelisted/indexed
+  domain fields (at minimum common grouping keys like `source_note_id`):
+  `GET /artifacts?artifact_type=note_page&source_note_id=<id>`.
+  (Supabase: indexed column / JSONB GIN; FS: best-effort scan.)
+- **PR-3c — Push filter + pagination to the backend.** *P1.*
+  `list_by_type` / `list_by_job` behave like load-then-filter today.
+  Compile type/job/field filters + `limit`/`offset` (or a cursor) into a
+  backend query so latency is O(page), with stable ordering
+  (`created_at desc`).
+- **PR-3d — Batch hydrate by ids.** *P1, trivial.* Hydrating
+  `result.artifact_refs` (and any fan-out like SeedStep) is one GET per
+  id. Expose the **already-existing** internal `ArtifactService.get_many`
+  as `POST /artifacts/batch {ids:[…]}` → typed artifacts in one
+  round-trip.
+- **PR-3e — `GET /jobs/{id}/result` ref hydration (correctness, not speed).**
+  A SUCCEEDED job's result intermittently returns empty `artifact_refs`
+  (also seen in the math_notes HANDOFF); a retry was needed to read it.
+  The result must reliably reflect `state.artifact_refs` once `persist`
+  has run. *This matches the known result-hydration quirk for ungated
+  single-node jobs — see `NEXT_BEST_STEPS.md`.*
+
+**Sequencing within PR-3:** PR-3a + PR-3d are the immediate N+1 killers
+(small — do first); PR-3b + PR-3c are the scaling work; PR-3e is a
+correctness fix. The original PR-3 above (metadata/tag filter on the
+envelope) and these field-level items are the same surface — implement
+together against the structured repos.
+
 ---
 
 ## PR-4 — Scheduled / triggered runs  · **P2**

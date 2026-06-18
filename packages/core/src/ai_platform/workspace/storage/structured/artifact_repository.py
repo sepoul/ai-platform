@@ -93,6 +93,37 @@ class _ArtifactStoreMixin(SingleStoreMixin[Dict[str, Any], ArtifactStore]):
         ]
         return out[:limit] if limit is not None else out
 
+    def query(
+        self,
+        *,
+        artifact_type: str | None = None,
+        job_id: str | None = None,
+        fields: dict[str, str] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict]:
+        """In-memory filter + paginate over the single store blob, newest
+        first — mirrors `SupabaseArtifactRepository.query` (one blob read
+        regardless of filters). Values compare as strings, matching the
+        Supabase `payload->>k` text comparison.
+        """
+        out = self._sorted_payloads()
+        if artifact_type is not None:
+            out = [p for p in out if p.get("artifact_type") == artifact_type]
+        if job_id is not None:
+            target = str(job_id)
+            out = [
+                p for p in out
+                if p.get("created_by_job") is not None and str(p["created_by_job"]) == target
+            ]
+        for key, value in (fields or {}).items():
+            out = [p for p in out if p.get(key) is not None and str(p[key]) == str(value)]
+        if offset:
+            out = out[offset:]
+        if limit is not None:
+            out = out[:limit]
+        return out
+
     def _sorted_payloads(self) -> list[dict]:
         """All payloads, newest-first by `created_at` (matches the
         Supabase ORDER BY). Falls back to insertion order if any row

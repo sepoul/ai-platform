@@ -137,6 +137,9 @@ celerybeat.pid
 
 # Environments
 .env
+# Prod env source-of-truth — scp'd to the box as `.env` at deploy time.
+# Real file is local-only (secrets); `.prodenv.example` is the committed template.
+.prodenv
 .envrc
 .venv
 .venv-*

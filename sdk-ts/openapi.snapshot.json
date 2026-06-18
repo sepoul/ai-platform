@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -1333,6 +1333,31 @@
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip (pagination).",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip (pagination)."
+          },
+          {
+            "name": "full",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Return full typed artifacts inline instead of summaries.",
+              "default": false,
+              "title": "Full"
+            },
+            "description": "Return full typed artifacts inline instead of summaries."
           }
         ],
         "responses": {
@@ -1341,7 +1366,99 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArtifactListResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FullArtifactListResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ArtifactListResponse"
+                    }
+                  ],
+                  "title": "Response List Artifacts Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/artifacts/batch": {
+      "post": {
+        "tags": [
+          "Platform / Artifacts"
+        ],
+        "summary": "Batch Get Artifacts",
+        "description": "Hydrate many artifacts in one round-trip (PR-3d) \u2014 kills the\nper-id `GET /artifacts/{id}` fan-out when reading\n`result.artifact_refs` or a SeedStep set. Fail-loud: any missing\nid 404s the whole batch (matches `ArtifactService.get_many`).",
+        "operationId": "batch_get_artifacts_artifacts_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/DailyNoteArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/NotePageArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MathQuestionArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/GeneratedAnswerArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/UserCommentArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LatexAnswerArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/FigureArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
+                      }
+                    ],
+                    "discriminator": {
+                      "propertyName": "artifact_type",
+                      "mapping": {
+                        "daily_note": "#/components/schemas/DailyNoteArtifact",
+                        "note_page": "#/components/schemas/NotePageArtifact",
+                        "math_question": "#/components/schemas/MathQuestionArtifact",
+                        "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
+                        "user_comment": "#/components/schemas/UserCommentArtifact",
+                        "latex_answer": "#/components/schemas/LatexAnswerArtifact",
+                        "figure": "#/components/schemas/FigureArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact"
+                      }
+                    }
+                  },
+                  "type": "array",
+                  "title": "Response Batch Get Artifacts Artifacts Batch Post"
                 }
               }
             }
@@ -1386,6 +1503,12 @@
                 "schema": {
                   "oneOf": [
                     {
+                      "$ref": "#/components/schemas/DailyNoteArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NotePageArtifact"
+                    },
+                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1407,6 +1530,8 @@
                   "discriminator": {
                     "propertyName": "artifact_type",
                     "mapping": {
+                      "daily_note": "#/components/schemas/DailyNoteArtifact",
+                      "note_page": "#/components/schemas/NotePageArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
@@ -1709,6 +1834,24 @@
         ],
         "title": "ArtifactTypeSpec",
         "description": "One registered artifact type \u2014 `BaseArtifact` subclass projected\ninto a UI-friendly registry entry. Drives the `/artifact-types`\nviewer."
+      },
+      "BatchArtifactRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "BatchArtifactRequest",
+        "description": "Body for `POST /artifacts/batch` \u2014 hydrate many artifacts in one\nround-trip (replaces a `GET /artifacts/{id}` per id). Fails loud:\nany missing id 404s the whole batch, matching `get_many`."
       },
       "Body_upload_code_package_code_packages_post": {
         "properties": {
@@ -2016,6 +2159,138 @@
         "title": "CrewChatEvent",
         "description": "One event in the live conversation stream.\n\nMirrors `docs/math_conversation.md` \u2192 Live visibility. Optional\nfields are populated per event kind (e.g. `content` on `message`,\n`tool_name` on `tool_call`)."
       },
+      "DailyNoteArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "daily_note",
+            "title": "Artifact Type",
+            "default": "daily_note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "note_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Note Date",
+            "description": "The study day this note belongs to."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "The learner who captured it."
+          },
+          "image_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Image Refs",
+            "description": "Attached notebook-photo storage_refs."
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript",
+            "description": "Transcript of the voice note."
+          },
+          "ocr_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Text",
+            "description": "Combined text/LaTeX parsed from the note's photos."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note_date"
+        ],
+        "title": "DailyNoteArtifact",
+        "description": "One captured study note, tied to a calendar day.\n\n`storage_ref` / `content_type` / `byte_size` are inherited from\n`BaseArtifact` and point at the uploaded **audio** blob. `transcript`\nis populated by the ingest job's transcription node. `image_refs`\nholds the notebook photos captured with the note; `ocr_text` is the\ncombined text/LaTeX parsed from them by `ParsePagesStep`, with the\nper-photo structured detail (LaTeX, concepts, diagrams) living in the\nsibling `NotePageArtifact`s."
+      },
       "EdgeResponse": {
         "properties": {
           "source": {
@@ -2144,6 +2419,65 @@
         ],
         "title": "FigureArtifact",
         "description": "Validated semantic figure spec (Munkres / Lee / Tu style).\n\nProduced by `RenderFigureStep` after the agent has converged on\na structurally valid spec via the `validate_figure` tool. The\n`spec` is an opaque JSON payload \u2014 the FEATURES.md plan calls\nfor keeping it as `dict[str, Any]` server-side; the renderer\ncontract lives in `math-ui`. `template` is duplicated out of the\nspec for indexable filtering."
+      },
+      "FullArtifactListResponse": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/DailyNoteArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/NotePageArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/MathQuestionArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/GeneratedAnswerArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/UserCommentArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/LatexAnswerArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/FigureArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "artifact_type",
+                "mapping": {
+                  "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
+                  "daily_note": "#/components/schemas/DailyNoteArtifact",
+                  "figure": "#/components/schemas/FigureArtifact",
+                  "latex_answer": "#/components/schemas/LatexAnswerArtifact",
+                  "math_conversation": "#/components/schemas/MathConversationArtifact",
+                  "math_question": "#/components/schemas/MathQuestionArtifact",
+                  "note_page": "#/components/schemas/NotePageArtifact",
+                  "user_comment": "#/components/schemas/UserCommentArtifact"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifacts",
+          "total"
+        ],
+        "title": "FullArtifactListResponse"
       },
       "GateSpec-Input": {
         "properties": {
@@ -2453,6 +2787,9 @@
               {
                 "oneOf": [
                   {
+                    "$ref": "#/components/schemas/MathNotesResult"
+                  },
+                  {
                     "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
@@ -2463,6 +2800,7 @@
                   "propertyName": "job_type",
                   "mapping": {
                     "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_notes": "#/components/schemas/MathNotesResult",
                     "math_qa": "#/components/schemas/MathQAResult"
                   }
                 }
@@ -2559,6 +2897,9 @@
               {
                 "oneOf": [
                   {
+                    "$ref": "#/components/schemas/MathNotesResult"
+                  },
+                  {
                     "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
@@ -2569,6 +2910,7 @@
                   "propertyName": "job_type",
                   "mapping": {
                     "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_notes": "#/components/schemas/MathNotesResult",
                     "math_qa": "#/components/schemas/MathQAResult"
                   }
                 }
@@ -2955,6 +3297,92 @@
         "title": "MathConversationResult",
         "description": "Typed result \u2014 a variant of the platform result union.\n\nThe single `conversation` artifact is resolved from `artifact_refs`\nby the result endpoint's hydrator."
       },
+      "MathNotesInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "math_notes",
+            "title": "Job Type",
+            "default": "math_notes"
+          },
+          "audio_ref": {
+            "type": "string",
+            "title": "Audio Ref",
+            "description": "storage_ref of the uploaded voice note (POST /media)."
+          },
+          "image_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Image Refs",
+            "description": "Optional notebook-photo storage_refs captured with the note."
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date",
+            "description": "Study day; defaults to today."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "The learner capturing the note."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "audio_ref"
+        ],
+        "title": "MathNotesInput",
+        "description": "Submit input for a `math_notes` ingest job.\n\n`audio_ref` is the voice note to transcribe (a `storage_ref` from the\n`POST /media` response); `image_refs` are optional notebook photos\ncaptured alongside it. `note_date` defaults to today (resolved in the\ngraph node) when omitted."
+      },
+      "MathNotesResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "math_notes",
+            "title": "Job Type",
+            "default": "math_notes"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyNoteArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathNotesResult",
+        "description": "Typed result for a `math_notes` job \u2014 the minted note, by ref."
+      },
       "MathQAInput": {
         "properties": {
           "job_type": {
@@ -3215,6 +3643,170 @@
         "title": "MediaRef",
         "description": "Handle for an uploaded blob \u2014 what `POST /media` returns and what\na domain stamps onto a `storage_ref`-backed `BaseArtifact`."
       },
+      "NotePageArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "note_page",
+            "title": "Artifact Type",
+            "default": "note_page"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "note_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Note Date",
+            "description": "The study day this page belongs to."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "The learner who captured it."
+          },
+          "source_note_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Note Id",
+            "description": "Parent DailyNoteArtifact id."
+          },
+          "image_ref": {
+            "type": "string",
+            "title": "Image Ref",
+            "description": "storage_ref of the source photo."
+          },
+          "page_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Page Index",
+            "description": "Order among the note's photos."
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "Plain-text transcription of the page."
+          },
+          "latex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latex",
+            "description": "Math on the page, transcribed as LaTeX."
+          },
+          "diagram_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagram Description",
+            "description": "Description of any diagram/figure on the page."
+          },
+          "concepts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concepts",
+            "description": "Mathematical concepts the page touches."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note_date",
+          "source_note_id",
+          "image_ref",
+          "page_index"
+        ],
+        "title": "NotePageArtifact",
+        "description": "A parsed notebook page \u2014 the vision interpretation of one photo.\n\nMinted per `image_ref` alongside the parent `DailyNoteArtifact`.\n`storage_ref` points at the photo (so `GET /artifacts/{id}` hydrates a\nviewable `storage_url`); `source_note_id` links back to the note. The\nstructured fields (`latex`, `concepts`, \u2026) are produced by the domain\nfrom the platform's *generic* `ImageInterpreter` text \u2014 the\nmath-specific interpretation lives here, domain-side, per \u00a713."
+      },
       "ParamSpec": {
         "properties": {
           "name": {
@@ -3461,8 +4053,11 @@
         "type": "object",
         "title": "PromptUpdateRequest"
       },
-      "RootModel_Annotated_Union_MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
+          {
+            "$ref": "#/components/schemas/MathNotesInput"
+          },
           {
             "$ref": "#/components/schemas/MathQAInput"
           },
@@ -3470,11 +4065,12 @@
             "$ref": "#/components/schemas/MathConversationInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {
             "math_conversation": "#/components/schemas/MathConversationInput",
+            "math_notes": "#/components/schemas/MathNotesInput",
             "math_qa": "#/components/schemas/MathQAInput"
           }
         }

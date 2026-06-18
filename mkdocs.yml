@@ -72,6 +72,7 @@ nav:
   - Guides:
       - Deploy a domain: guides/deploy-a-domain.md
       - SDK & types (dev loop): guides/sdk-and-types.md
+      - Artifact read path (filter/paginate/batch): guides/artifact-read-path.md
       - Prompt registry: guides/prompts.md
       - Live logs: guides/live-logs.md
   - Reference:

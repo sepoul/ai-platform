@@ -63,6 +63,13 @@ class JobState(BaseModel):
 
     # result / error
     result_payload: dict[str, Any] | None = None
+    # IDs of the artifacts the persistence callback minted for this job —
+    # the durable, domain-agnostic source of truth for
+    # `GET /jobs/{id}/result` hydration. Copied from the execution state's
+    # `artifact_refs` at completion (`mark_succeeded`) so it survives
+    # `complete_job`'s record re-read, instead of depending on each
+    # domain's `extract_result` echoing refs into `result_payload`.
+    artifact_refs: list[UUID] = Field(default_factory=list)
     error_message: str | None = None
     error_retryable: bool = False
 
@@ -120,9 +127,18 @@ class JobRecord(BaseModel):
         self.state.resume_token = resume_token
         self._bump()
 
-    def mark_succeeded(self, result: dict[str, Any] | None = None) -> None:
+    def mark_succeeded(
+        self,
+        result: dict[str, Any] | None = None,
+        artifact_refs: list[UUID] | None = None,
+    ) -> None:
         self.state.status = JobStatus.SUCCEEDED
         self.state.result_payload = result
+        # Persist the minted refs onto the record itself — written in the
+        # same `put` as the SUCCEEDED status, so a reader never sees a
+        # completed job without its refs.
+        if artifact_refs is not None:
+            self.state.artifact_refs = list(artifact_refs)
         self._bump()
 
     def mark_failed(self, error: str, retryable: bool = False) -> None:

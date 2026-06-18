@@ -116,10 +116,16 @@ class GraphJobExecutor:
         self,
         job_id: str | UUID,
         result: dict[str, Any] | None = None,
+        artifact_refs: list[UUID] | None = None,
     ) -> JobRecord:
-        """Mark job as succeeded with final result."""
+        """Mark job as succeeded with final result.
+
+        `artifact_refs` is the execution state's minted refs; persisting
+        them here (not re-deriving from the re-read record) is what makes
+        `GET /jobs/{id}/result` hydration reliable — see PR-3e.
+        """
         record = self.repo.get(job_id)
-        record.mark_succeeded(result=result)
+        record.mark_succeeded(result=result, artifact_refs=artifact_refs)
         record.state.stage = "completed"
         record.state.percent = 100.0
         record.state.message = "Job completed successfully"

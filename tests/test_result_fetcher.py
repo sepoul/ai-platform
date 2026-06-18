@@ -17,9 +17,13 @@ from ai_platform.jobs.checkpoint import GraphCheckpoint
 from ai_platform.jobs.result_fetcher import _extract_refs, hydrate_artifact_refs
 
 
-def _record(*, resume_token=None, result_payload=None):
+def _record(*, resume_token=None, result_payload=None, artifact_refs=None):
     return SimpleNamespace(
-        state=SimpleNamespace(resume_token=resume_token, result_payload=result_payload)
+        state=SimpleNamespace(
+            resume_token=resume_token,
+            result_payload=result_payload,
+            artifact_refs=artifact_refs or [],
+        )
     )
 
 
@@ -52,6 +56,43 @@ def test_no_token_uses_result_payload():
     aid = str(uuid4())
     rec = _record(resume_token=None, result_payload={"artifact_refs": [aid]})
     assert _extract_refs(rec) == [UUID(aid)]
+
+
+# --- PR-3e: the durable `record.state.artifact_refs` is the primary source ---
+
+
+def test_persisted_record_refs_are_primary_source():
+    """The fix: a SUCCEEDED job carries its refs on the record itself, so
+    hydration works even when `result_payload` never got them (the exact
+    failure the friend hit — empty refs on a completed job)."""
+    aid = str(uuid4())
+    rec = _record(artifact_refs=[aid], result_payload=None, resume_token=None)
+    assert _extract_refs(rec) == [UUID(aid)]
+
+
+def test_persisted_refs_win_over_payload_and_checkpoint():
+    a, b, c = str(uuid4()), str(uuid4()), str(uuid4())
+    rec = _record(
+        artifact_refs=[a],
+        result_payload={"artifact_refs": [b]},
+        resume_token=_checkpoint_token([c]),
+    )
+    assert _extract_refs(rec) == [UUID(a)]
+
+
+def test_mark_succeeded_persists_refs_through_storage_round_trip():
+    """End-to-end durability: refs set at completion survive the
+    model_dump → model_validate that every repo does on put/get, and
+    `_extract_refs` reads them back — independent of `extract_result`."""
+    from ai_platform.workspace.storage.structured.job_repository import JobRecord
+
+    rec = JobRecord.create(job_type="t", graph_ref="g")
+    aid = uuid4()
+    rec.mark_succeeded(result={"unrelated": 1}, artifact_refs=[aid])  # result has NO refs
+
+    reloaded = JobRecord.model_validate(rec.model_dump(mode="json"))
+    assert reloaded.state.artifact_refs == [aid]
+    assert _extract_refs(reloaded) == [aid]
 
 
 def test_empty_everywhere_returns_empty():

@@ -351,6 +351,47 @@ class SupabaseArtifactRepository:
             rows = conn.execute(sql, params).fetchall()
         return [r[0] for r in rows]
 
+    def query(
+        self,
+        *,
+        artifact_type: str | None = None,
+        job_id: str | None = None,
+        fields: dict[str, str] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict]:
+        """Filter + paginate in one round-trip. Envelope filters and any
+        `fields` equality filters compile to a single `WHERE … = %s`,
+        newest-first, with `LIMIT`/`OFFSET` so latency is O(page). Field
+        *names* bind as parameters (`payload ->> %s`) — never interpolated
+        — and `ArtifactService.query` whitelists them on top. Same JSONB
+        seq-scan caveat as `list_by_type` until functional indexes land.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+        if artifact_type is not None:
+            clauses.append("payload->>'artifact_type' = %s")
+            params.append(artifact_type)
+        if job_id is not None:
+            clauses.append("payload->>'created_by_job' = %s")
+            params.append(job_id)
+        for key, value in (fields or {}).items():
+            clauses.append("payload->>%s = %s")
+            params.extend([key, str(value)])
+        sql = "SELECT payload FROM artifacts"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC"
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+        if offset is not None:
+            sql += " OFFSET %s"
+            params.append(offset)
+        with self._pool.connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [r[0] for r in rows]
+
 
 # ---------------------------------------------------------------------------
 # Prompts

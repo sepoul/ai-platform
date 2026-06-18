@@ -115,6 +115,29 @@ class ArtifactRepository(Protocol):
         """Payloads whose `created_by_job` matches `job_id`."""
         ...
 
+    def query(
+        self,
+        *,
+        artifact_type: str | None = None,
+        job_id: str | None = None,
+        fields: dict[str, str] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict]:
+        """Filtered, paginated payload listing, newest-first by
+        `created_at`. The one read primitive the artifacts router uses —
+        the envelope filters (`artifact_type`, `job_id`) and any equality
+        filters on top-level domain `fields` (e.g. `source_note_id`)
+        compile to a single backend query (`WHERE … = %s AND …
+        ORDER BY created_at DESC LIMIT %s OFFSET %s` on Supabase; an
+        in-memory filter on single-blob backends), so latency is O(page).
+
+        `fields` keys are top-level payload keys; the caller
+        (`ArtifactService.query`) validates them against a whitelist
+        before they reach SQL. Values compare as strings (`payload->>k`).
+        """
+        ...
+
 
 class PromptRepository(Protocol):
     def put(self, prompt: Prompt) -> Prompt: ...

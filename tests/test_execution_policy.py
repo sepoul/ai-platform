@@ -98,6 +98,7 @@ class MockExecutor:
         self.saved_checkpoint: GraphCheckpoint | None = None
         self.completed = False
         self.completed_result: dict | None = None
+        self.completed_refs: list | None = None
         self.failed = False
         self.progress: list[str] = []
 
@@ -110,9 +111,10 @@ class MockExecutor:
             state_data=state, next_node_key=next_node_key, gated_node=gated_node
         )
 
-    def complete_job(self, job_id, result=None):
+    def complete_job(self, job_id, result=None, artifact_refs=None):
         self.completed = True
         self.completed_result = result
+        self.completed_refs = artifact_refs
 
     def fail_job(self, job_id, error, retryable=False):
         self.failed = True
