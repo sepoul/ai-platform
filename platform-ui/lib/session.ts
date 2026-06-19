@@ -6,7 +6,7 @@
  * Browser-side code goes through the BFF proxy at `/api/...`;
  * never imports this file.
  */
-import { PlatformSession } from "@aiplatform/sdk";
+import { PlatformSession } from "@sepoul-packages/sdk";
 
 export function platformSession(): PlatformSession {
   const url = process.env.PLATFORM_API_URL;

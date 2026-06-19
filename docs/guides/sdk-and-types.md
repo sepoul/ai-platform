@@ -1,6 +1,6 @@
 # SDK & types: the dev loop
 
-The platform publishes one typed client — `@aiplatform/sdk`
+The platform publishes one typed client — `@sepoul-packages/sdk`
 (`sdk-ts/`) — generated from the FastAPI OpenAPI schema. Both UIs consume
 it: `platform-ui` (in this repo) and a domain UI such as
 `math-app/math-ui`. Its committed source of truth is
@@ -47,7 +47,7 @@ pydantic models without deploying to any shared environment.
 regenerated types). In the domain UI's `package.json`:
 
 ```jsonc
-"@aiplatform/sdk": "file:../../ai-platform/sdk-ts"   // sibling checkout (or: npm link)
+"@sepoul-packages/sdk": "file:../../ai-platform/sdk-ts"   // sibling checkout (or: npm link)
 ```
 
 `math-ui` already runs `sdk:build` in its `predev`/`prebuild`, so a
@@ -88,19 +88,19 @@ the UI against it and mock instances until the producing job ships.
 
 ## Published mode — consume the versioned package (npm)
 
-`@aiplatform/sdk` publishes to **npmjs.com** (public). Consumers depend on
+`@sepoul-packages/sdk` publishes to **npmjs.com** (public). Consumers depend on
 a real version instead of a sibling `file:` checkout — no filesystem
 coupling, reproducible across machines + CI:
 
 ```jsonc
 // package.json in the consuming repo (e.g. math-app/math-ui)
 "dependencies": {
-  "@aiplatform/sdk": "^0.1.1"
+  "@sepoul-packages/sdk": "^0.1.1"
 }
 ```
 
 ```bash
-npm update @aiplatform/sdk     # pull the latest contract
+npm update @sepoul-packages/sdk     # pull the latest contract
 ```
 
 It's a **public** package, so no `.npmrc` / auth is needed to install.
@@ -112,13 +112,14 @@ It's a **public** package, so no `.npmrc` / auth is needed to install.
 git tag sdk-v0.1.2 && git push origin sdk-v0.1.2   # tag must match the version
 ```
 
-The tag triggers the publish workflow. One-time operator setup: own the
-`@aiplatform` scope on npm (create the free `aiplatform` org) and add an
-npm **Automation** token as the `NPM_TOKEN` repo secret. See the workflow
-header.
+The tag triggers the publish workflow, which publishes via **npm Trusted
+Publishing (OIDC)** — no long-lived token, provenance attached
+automatically. One-time setup: on npmjs.com, add a Trusted Publisher to
+`@sepoul-packages/sdk` pointing at the `sepoul/ai-platform` repo +
+`sdk-publish.yml` workflow. See the workflow header.
 
 > **Migrating off `file:`** — math-ui currently uses
-> `"@aiplatform/sdk": "file:../../ai-platform/sdk-ts"`. Switch it to
+> `"@sepoul-packages/sdk": "file:../../ai-platform/sdk-ts"`. Switch it to
 > `"^0.1.1"` (and drop any local-path `.npmrc` scope line) once the first
 > version is published.
 

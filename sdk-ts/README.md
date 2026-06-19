@@ -1,4 +1,4 @@
-# @aiplatform/sdk
+# @sepoul-packages/sdk
 
 TypeScript client for ai-platform. Mirror of the Python
 [`PlatformSession`](../packages/core/src/ai_platform/session/session.py)
@@ -23,7 +23,7 @@ import {
   type CodePackageRecord,
   type JobStatusResponse,
   type JobResultResponse,
-} from "@aiplatform/sdk";
+} from "@sepoul-packages/sdk";
 
 const session = new PlatformSession({ apiUrl: "http://platform:8000" });
 const jds = await session.listJobDefinitions();
@@ -35,7 +35,7 @@ const result = await handle.result({ timeoutMs: 120_000 });
 
 ```ts
 // app/api/[...path]/route.ts
-import { createBffMethods } from "@aiplatform/sdk";
+import { createBffMethods } from "@sepoul-packages/sdk";
 
 export const { GET, POST, PUT, DELETE, PATCH } = createBffMethods({
   upstreamUrl: process.env.PLATFORM_API_URL!,
@@ -50,7 +50,7 @@ The SDK ships compiled `dist/` output. Consumers add it to their
 ```jsonc
 {
   "dependencies": {
-    "@aiplatform/sdk": "file:../sdk-ts"
+    "@sepoul-packages/sdk": "file:../sdk-ts"
   }
 }
 ```

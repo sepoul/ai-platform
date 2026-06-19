@@ -103,7 +103,7 @@ instance.
 
 ## Part C — Distribution: how a domain repo gets an up-to-date SDK
 
-Today `@aiplatform/sdk` is consumed via a **`file:` path** to a sibling
+Today `@sepoul-packages/sdk` is consumed via a **`file:` path** to a sibling
 checkout (`math-app/math-ui` → `file:../../ai-platform/sdk-ts`). Fine
 for co-located dev, useless for a friend without your checkout.
 
@@ -111,26 +111,32 @@ Recommendation — **two modes**:
 
 ### 1. Published artifact → GitHub Packages (the "npm-like" answer)
 
-Publish `@aiplatform/sdk` to **GitHub Packages** (private npm registry,
+Publish `@sepoul-packages/sdk` to **GitHub Packages** (private npm registry,
 free for the org, GitHub-native). CI publishes a new version whenever
 the schema changes (version = date or short-sha, or semver-on-contract-
 change).
+
+> **Superseded — implemented as npmjs.com (public) + npm Trusted
+> Publishing instead** (no install auth, no token; published on a
+> `sdk-v*` tag). See [SDK & types](../guides/sdk-and-types.md) and
+> `.github/workflows/sdk-publish.yml`. The GitHub Packages sketch below
+> is kept as historical context.
 
 Domain repo consumes it like any dep:
 
 ```ini
 # .npmrc in the domain repo
-@aiplatform:registry=https://npm.pkg.github.com
+@sepoul-packages:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
 ```jsonc
 // package.json
-"dependencies": { "@aiplatform/sdk": "^<version>" }
+"dependencies": { "@sepoul-packages/sdk": "^<version>" }
 ```
 
 ```bash
-npm update @aiplatform/sdk     # pull the latest contract
+npm update @sepoul-packages/sdk     # pull the latest contract
 ```
 
 ### 2. Local inner loop → instant types, zero deploy
@@ -140,7 +146,7 @@ dep with a local link so the UI sees **locally regenerated** types:
 
 ```bash
 # in the domain repo, point at the sibling SDK (or `npm link`)
-npm i @aiplatform/sdk@file:../../ai-platform/sdk-ts
+npm i @sepoul-packages/sdk@file:../../ai-platform/sdk-ts
 ```
 
 Inner loop for a **new** artifact:
@@ -176,7 +182,7 @@ push (paths: openapi.snapshot.json)  → ai-platform CI
         │  pure transform — no tailnet, no secrets
         ├─ regenerate schema.d.ts from the committed snapshot (Part B)
         ├─ open a PR with the diff
-        └─ publish @aiplatform/sdk to GitHub Packages (Part C, move 3)
+        └─ publish @sepoul-packages/sdk to GitHub Packages (Part C, move 3)
 ```
 
 The only step that reaches the box is the snapshot dump, run by someone

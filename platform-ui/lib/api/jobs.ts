@@ -1,9 +1,9 @@
 /**
  * Server-side fetchers for the jobs / runs surface. Thin wrappers
- * over `@aiplatform/sdk`'s `PlatformSession`.
+ * over `@sepoul-packages/sdk`'s `PlatformSession`.
  */
 import { platformSession } from "@/lib/session";
-import type { JobResultResponse, JobStatusResponse } from "@aiplatform/sdk";
+import type { JobResultResponse, JobStatusResponse } from "@sepoul-packages/sdk";
 
 export type { JobResultResponse, JobStatusResponse };
 

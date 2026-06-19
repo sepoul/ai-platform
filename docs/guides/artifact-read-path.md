@@ -104,7 +104,7 @@ completed job.
 The SDK's `PlatformSession` exposes these directly — your
 `lib/platform/artifacts-client.ts` wrappers just forward:
 
-1. **Bump `@aiplatform/sdk`** to the build with the extended client.
+1. **Bump `@sepoul-packages/sdk`** to the build with the extended client.
 2. `listArtifacts(opts)` — summary page; `opts` now takes `offset` and
    `fields` (e.g. `{ source_note_id }`) alongside `jobId`/`artifactType`/
    `limit`.

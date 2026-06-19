@@ -1,7 +1,7 @@
 /**
  * Re-exports of the platform's catalog record types from the generated
  * OpenAPI schema. Consumers `import { JobDefinitionRecord, ... } from
- * "@aiplatform/sdk"` and never deal with the `components["schemas"]`
+ * "@sepoul-packages/sdk"` and never deal with the `components["schemas"]`
  * indirection or naming gotchas (e.g. `JobDefinitionRecord-Output`).
  */
 import type { components, operations } from "./schema";

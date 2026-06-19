@@ -7,7 +7,7 @@
  * Usage in a Next.js app:
  *
  *     // app/api/[...path]/route.ts
- *     import { createBffHandler } from "@aiplatform/sdk/bff";
+ *     import { createBffHandler } from "@sepoul-packages/sdk/bff";
  *
  *     const handler = createBffHandler({
  *       upstreamUrl: process.env.PLATFORM_API_URL!,

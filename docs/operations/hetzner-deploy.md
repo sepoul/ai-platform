@@ -542,7 +542,7 @@ ssh root@mathapp-prod 'cd /srv/mathapp && IMAGE_TAG=sha-62d3672 infra/hetzner/sc
 After any deploy that changed the API surface (new routes / response
 models) **or** a domain's artifact / input / result types, refresh the
 committed OpenAPI snapshot **from prod** as the guarantee that the typed
-`@aiplatform/sdk` contract matches what consumers (`platform-ui` here,
+`@sepoul-packages/sdk` contract matches what consumers (`platform-ui` here,
 `math-app/math-ui`) actually call. The snapshot is the *source* the SDK
 types are generated from — a regen taken against a local/dev instance
 only reflects whatever domains + versions happen to be installed there,

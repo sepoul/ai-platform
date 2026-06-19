@@ -1,17 +1,22 @@
 name: Publish SDK to npm
 
-# Publishes @aiplatform/sdk to npmjs.com on a `sdk-v*` tag, so consumers
+# Publishes @sepoul-packages/sdk to npmjs.com on a `sdk-v*` tag, so consumers
 # (platform-ui here, math-app/math-ui) depend on a real versioned package
-# instead of a local `file:` path.
+# instead of a local `file:` path. Auth is **npm Trusted Publishing
+# (OIDC)** — no long-lived NPM_TOKEN secret; provenance is attached
+# automatically.
 #
-# ── One-time operator setup ───────────────────────────────────────────
-#   1. Own the `@aiplatform` scope on npm: npmjs.com → create the
-#      `aiplatform` org (free for public packages). If that scope is
-#      taken, rename the package to a scope/name you own and update the
-#      13 import sites in math-ui.
-#   2. Create an npm **Automation** access token (npmjs.com → Access
-#      Tokens → Generate → Automation) and add it as the repo secret
-#      `NPM_TOKEN`  (GitHub → Settings → Secrets and variables → Actions).
+# ── One-time npm setup ────────────────────────────────────────────────
+#   On npmjs.com, add a Trusted Publisher to the `@sepoul-packages/sdk`
+#   package (Settings → Trusted Publisher):
+#     Publisher:  GitHub Actions
+#     Repository: sepoul/ai-platform
+#     Workflow:   sdk-publish.yml
+#   Docs: https://docs.npmjs.com/trusted-publishers
+#   First-publish bootstrap: if npm requires the package to exist before
+#   you can add a trusted publisher, do ONE manual `npm publish` (logged
+#   in locally) to create @sepoul-packages/sdk@0.1.1, then enable the
+#   trusted publisher for every release after that.
 #
 # ── Cut a release ─────────────────────────────────────────────────────
 #   - bump `sdk-ts/package.json` "version" (e.g. 0.1.2), commit to main
@@ -26,6 +31,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # OIDC — required for npm Trusted Publishing
 
 jobs:
   publish:
@@ -38,8 +44,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing + automatic provenance need npm >= 11.5.1;
+      # setup-node's bundled npm is older, so upgrade.
+      - run: npm install -g npm@latest
 
       - name: Tag must match package.json version
         if: github.event_name == 'push'
@@ -50,11 +60,10 @@ jobs:
             echo "::error::tag sdk-v$TAG does not match package.json version $PKG"
             exit 1
           fi
-          echo "Publishing @aiplatform/sdk@$PKG"
+          echo "Publishing @sepoul-packages/sdk@$PKG"
 
       - run: npm ci
       - run: npm run build
-      # `access: public` comes from package.json publishConfig.
+      # OIDC handles auth (no NODE_AUTH_TOKEN); `access: public` +
+      # provenance come from package.json publishConfig / the OIDC flow.
       - run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
