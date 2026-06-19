@@ -64,6 +64,19 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+
+      # Guard the ESM packaging: the published package must resolve under
+      # plain Node's native ESM loader (extensionless relative imports +
+      # a missing exports map would pass tsc/bundlers but break Node).
+      - run: npm run check:esm
+      - name: Smoke — packed tarball resolves under plain Node ESM
+        run: |
+          TGZ="$(npm pack | tail -1)"
+          TMP="$(mktemp -d)"
+          ( cd "$TMP" && npm init -y >/dev/null \
+            && npm install "$GITHUB_WORKSPACE/sdk-ts/$TGZ" >/dev/null \
+            && node --input-type=module -e "import('@sepoul-packages/sdk').then(m => { if (!m.PlatformSession) throw new Error('missing PlatformSession export'); console.log('✓ installed tarball resolves under Node ESM:', Object.keys(m).length, 'exports'); })" )
+
       # OIDC handles auth (no NODE_AUTH_TOKEN); `access: public` +
       # provenance come from package.json publishConfig / the OIDC flow.
       - run: npm publish

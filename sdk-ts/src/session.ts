@@ -12,7 +12,7 @@
  * Server-side code (Next.js route handlers) constructs with the
  * upstream URL directly.
  */
-import { createApiClient, type ApiClient } from "./client";
+import { createApiClient, type ApiClient } from "./client.js";
 import {
   type Artifact,
   type ArtifactListResponse,
@@ -28,7 +28,7 @@ import {
   type WorkflowListResponse,
   type WorkflowSpecResponse,
   TERMINAL_STATUSES,
-} from "./types";
+} from "./types.js";
 
 export class PlatformSessionError extends Error {
   constructor(message: string) {
