@@ -1,0 +1,60 @@
+name: Publish aiplatform-core to PyPI
+
+# Publishes the `aiplatform-core` package to PyPI on a `core-v*` tag via
+# PyPI Trusted Publishing (OIDC) — no token, no manual upload, provenance
+# attached automatically.
+#
+# ── One-time PyPI setup (single form, no token) ───────────────────────
+#   pypi.org -> your account -> Publishing -> "Add a pending publisher":
+#     PyPI Project Name: aiplatform-core
+#     Owner:             sepoul
+#     Repository name:   ai-platform
+#     Workflow name:     pypi-publish.yml
+#     Environment:       (leave blank)
+#   A "pending" publisher works before the project exists — the first
+#   tagged run creates AND publishes it. No `twine upload` bootstrap.
+#
+# ── Cut a release ─────────────────────────────────────────────────────
+#   - bump packages/core/pyproject.toml "version" (e.g. 0.1.2), commit to main
+#   - git tag core-v0.1.2 && git push origin core-v0.1.2   (tag == version)
+
+on:
+  push:
+    tags:
+      - "core-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC — required for PyPI Trusted Publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Tag must match pyproject version
+        if: github.event_name == 'push'
+        run: |
+          PKG=$(python -c "import tomllib;print(tomllib.load(open('packages/core/pyproject.toml','rb'))['project']['version'])")
+          TAG="${GITHUB_REF_NAME#core-v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::tag core-v$TAG does not match pyproject version $PKG"
+            exit 1
+          fi
+          echo "Publishing aiplatform-core==$PKG"
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build packages/core --outdir dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
