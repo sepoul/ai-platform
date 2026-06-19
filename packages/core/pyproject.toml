@@ -1,8 +1,15 @@
 [project]
 name = "aiplatform-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared platform: the JobRecord boundary, storage + compute backends, job types, and domain schemas. No web framework, no AI engine."
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
 dependencies = [
     "pydantic>=2.12.5",
     "python-dotenv",
@@ -26,6 +33,10 @@ dependencies = [
 # `aiplatform deploy` — manifest-driven bundle deploy. Friend's repo
 # installs `aiplatform-core` and gets this CLI on PATH.
 aiplatform = "ai_platform.bundle.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/sepoul/ai-platform"
+Repository = "https://github.com/sepoul/ai-platform"
 
 [build-system]
 requires = ["setuptools>=61"]
