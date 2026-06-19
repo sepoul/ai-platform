@@ -1,6 +1,6 @@
 /**
  * Server-side fetchers for the three platform catalogs. Thin
- * wrappers over `@aiplatform/sdk`'s `PlatformSession`. The record
+ * wrappers over `@sepoul-packages/sdk`'s `PlatformSession`. The record
  * types are re-exported here for ergonomic local imports.
  */
 import { platformSession } from "@/lib/session";
@@ -8,7 +8,7 @@ import type {
   ArtifactTypeRecord,
   CodePackageRecord,
   JobDefinitionRecord,
-} from "@aiplatform/sdk";
+} from "@sepoul-packages/sdk";
 
 export type { ArtifactTypeRecord, CodePackageRecord, JobDefinitionRecord };
 

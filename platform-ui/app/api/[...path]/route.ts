@@ -1,6 +1,6 @@
 /**
  * BFF proxy — forwards every `/api/*` request to the upstream
- * platform API. Implementation lives in `@aiplatform/sdk` so
+ * platform API. Implementation lives in `@sepoul-packages/sdk` so
  * math-ui and any friend's domain UI use the exact same code path.
  *
  * The upstream URL is resolved per-request from `PLATFORM_API_URL`
@@ -8,7 +8,7 @@
  * crash Next.js's build-time page-data collection step, which
  * imports route modules with env unset.
  */
-import { createBffMethods } from "@aiplatform/sdk";
+import { createBffMethods } from "@sepoul-packages/sdk";
 
 export const { GET, POST, PUT, DELETE, PATCH } = createBffMethods({
   upstreamUrl: () => {

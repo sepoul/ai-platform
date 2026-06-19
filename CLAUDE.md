@@ -124,7 +124,7 @@ CI runs `npm run gen:api:check` (regenerate + `git diff --exit-code`)
 to catch missing regenerations.
 
 **⚠️ Post repo-split SDK regen caveat.** The typed contract now lives in
-`sdk-ts/src/schema.d.ts` (published as `@aiplatform/sdk`, consumed by
+`sdk-ts/src/schema.d.ts` (published as `@sepoul-packages/sdk`, consumed by
 both `platform-ui/` here and `math-app/math-ui`). Regenerating it
 (`sdk-ts: npm run gen:api`) is **only safe from an OpenAPI dump of a
 deployment that registers every domain whose types consumers need**.

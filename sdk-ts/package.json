@@ -1,5 +1,5 @@
 {
-  "name": "@aiplatform/sdk",
+  "name": "@sepoul-packages/sdk",
   "version": "0.1.1",
   "description": "TypeScript client for ai-platform. Mirror of the Python PlatformSession API plus a Next.js BFF proxy helper.",
   "license": "MIT",

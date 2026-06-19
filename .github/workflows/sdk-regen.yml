@@ -1,6 +1,6 @@
 name: Regenerate SDK schema
 
-# Regenerates `sdk-ts/src/schema.d.ts` (the @aiplatform/sdk typed
+# Regenerates `sdk-ts/src/schema.d.ts` (the @sepoul-packages/sdk typed
 # contract) from a committed OpenAPI snapshot and opens a PR with the
 # diff.
 #
@@ -68,7 +68,7 @@ jobs:
           branch: automation/sdk-regen
           delete-branch: true
           commit-message: "chore(sdk): regenerate schema.d.ts from the openapi snapshot"
-          title: "chore(sdk): regenerate @aiplatform/sdk types"
+          title: "chore(sdk): regenerate @sepoul-packages/sdk types"
           body: |
             Automated regeneration of `sdk-ts/src/schema.d.ts` from the
             committed `sdk-ts/openapi.snapshot.json`.

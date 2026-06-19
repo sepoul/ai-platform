@@ -1,5 +1,5 @@
 /**
- * `@aiplatform/sdk` — TypeScript client for ai-platform.
+ * `@sepoul-packages/sdk` — TypeScript client for ai-platform.
  *
  * Mirror of the Python `PlatformSession` API. Two main entry points:
  *

@@ -69,7 +69,7 @@ packages/              # BACKEND — the Python platform (a uv workspace)
   api/                 #   FastAPI control plane
   worker/              #   execution-plane worker
   _demo/               #   synthetic baseline domain (echo job)
-sdk-ts/                # SDK — @aiplatform/sdk typed TS client + Next.js BFF helper
+sdk-ts/                # SDK — @sepoul-packages/sdk typed TS client + Next.js BFF helper
 platform-ui/           # FRONTEND — domain-free admin SPA
 docker/                # DEVOPS — platform image Dockerfiles (context = repo root)
 infra/                 # DEVOPS — Hetzner box (OpenTofu) + redeploy script

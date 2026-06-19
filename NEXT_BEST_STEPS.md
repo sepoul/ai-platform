@@ -17,7 +17,7 @@ for tracking.
   virgin API + worker images, catalog install on boot, PlatformSession.
 - **§7q — Repo split + TS SDK** ✅ shipped through PRs #19–22 +
   the `sepoul/math-app` repo. Catalog-driven control + execution
-  discovery (PR #19), `@aiplatform/sdk` consumed by both UIs
+  discovery (PR #19), `@sepoul-packages/sdk` consumed by both UIs
   (PRs #20 + #21), math packages and math-ui extracted to math-app,
   synthetic `_demo` baseline (PR #22).
 - **PR-1 — Media ingestion + blob-backed artifacts** ✅
@@ -170,7 +170,7 @@ sibling `file:` consumers already work):
 - **GitHub Packages publish** (move 3): only when a *non-sibling*
   consumer (a friend's repo) needs the SDK. Note: GitHub Packages scopes
   to the org, so this means publishing as `@sepoul/sdk` and having
-  consumers alias it (`"@aiplatform/sdk": "npm:@sepoul/sdk@^x"`) so their
+  consumers alias it (`"@sepoul-packages/sdk": "npm:@sepoul/sdk@^x"`) so their
   imports don't change — a coordinated change across this repo + math-ui.
 - **`GET /sdk/openapi.json` assembler** (move 4): assemble the full
   OpenAPI from the catalog's stored `json_schema` rows (with `$defs`
