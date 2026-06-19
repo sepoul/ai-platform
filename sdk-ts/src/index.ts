@@ -19,15 +19,15 @@ export {
   JobTimeoutError,
   type PlatformSessionOptions,
   type ListArtifactsOpts,
-} from "./session";
+} from "./session.js";
 
-export { createApiClient, type ApiClient } from "./client";
+export { createApiClient, type ApiClient } from "./client.js";
 
 export {
   createBffHandler,
   createBffMethods,
   type BffHandlerOptions,
-} from "./bff";
+} from "./bff.js";
 
 export {
   TERMINAL_STATUSES,
@@ -55,8 +55,8 @@ export {
   type WorkflowSpecResponse,
   type WorkflowListItem,
   type WorkflowListResponse,
-} from "./types";
+} from "./types.js";
 
 // Re-export the raw schema so power users can reach for
 // `components["schemas"]["..."]` directly.
-export type { components, paths } from "./schema";
+export type { components, paths } from "./schema.js";

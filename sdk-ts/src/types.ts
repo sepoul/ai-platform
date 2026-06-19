@@ -4,7 +4,7 @@
  * "@sepoul-packages/sdk"` and never deal with the `components["schemas"]`
  * indirection or naming gotchas (e.g. `JobDefinitionRecord-Output`).
  */
-import type { components, operations } from "./schema";
+import type { components, operations } from "./schema.js";
 
 // FastAPI emits separate input/output variants for models with
 // computed/default fields. List endpoints return Output records.

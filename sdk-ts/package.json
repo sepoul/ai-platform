@@ -1,6 +1,6 @@
 {
   "name": "@sepoul-packages/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "TypeScript client for ai-platform. Mirror of the Python PlatformSession API plus a Next.js BFF proxy helper.",
   "license": "MIT",
   "repository": {
@@ -14,10 +14,18 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": ["dist", "src"],
   "scripts": {
     "build": "tsc && cp src/schema.d.ts dist/schema.d.ts",
     "typecheck": "tsc --noEmit",
+    "check:esm": "node --input-type=module -e \"import('./dist/index.js').then(m => { if (!m.PlatformSession) throw new Error('missing PlatformSession export'); console.log('ok: node ESM resolves', Object.keys(m).length, 'exports'); }).catch(e => { console.error(e.message); process.exit(1); })\"",
     "prepare": "npm run build",
     "gen:api": "./scripts/gen-api.sh",
     "gen:api:check": "./scripts/gen-api.sh && git diff --exit-code src/schema.d.ts"

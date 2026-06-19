@@ -4,7 +4,7 @@
  * level GET/POST against the platform API.
  */
 import createClient from "openapi-fetch";
-import type { paths } from "./schema";
+import type { paths } from "./schema.js";
 
 export type ApiClient = ReturnType<typeof createClient<paths>>;
 

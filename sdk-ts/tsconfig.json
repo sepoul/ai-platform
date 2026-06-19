@@ -1,6 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    // `bundler` resolution (not NodeNext) so Next's subpath types
+    // (`next/server` in bff.ts) resolve as they do in Next's own tsconfig.
+    // ESM correctness comes from authoring explicit `.js` extensions on
+    // relative imports (tsc emits specifiers verbatim) — guarded by the
+    // Node-resolution smoke check in CI, not by NodeNext's typecheck.
     "module": "esnext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
