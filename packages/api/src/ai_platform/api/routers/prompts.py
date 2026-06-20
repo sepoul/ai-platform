@@ -6,7 +6,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from ai_platform.runtime.registry import get_platform_client
+from ai_platform.ai.prompts.models import Prompt
 from ai_platform.api.schemas.prompts import (
+    PromptCreateRequest,
     PromptExecutionListResponse,
     PromptExecutionResponse,
     PromptExecutionSummary,
@@ -41,6 +43,26 @@ def list_prompts(
         prompts=[_to_response(p) for p in prompts],
         total=len(prompts),
     )
+
+
+@router.post("/prompts", response_model=PromptResponse)
+def create_prompt(
+    body: PromptCreateRequest,
+    svc: PromptRegistry = Depends(_get_prompt_service),
+):
+    """Deploy a prompt — the domain-facing write path, mirroring
+    `POST /artifact-types`. Get-or-create / idempotent on `name`: an
+    existing prompt is returned untouched (re-deploys are safe); use
+    `PUT /prompts/{name}` to change instructions on an existing one."""
+    prompt = Prompt(
+        name=body.name,
+        domain=body.domain,
+        description=body.description,
+        instructions=body.instructions,
+        kind=body.kind,  # type: ignore[arg-type]
+        version=body.version,
+    )
+    return _to_response(svc.get_or_create(prompt))
 
 
 @router.get("/prompts/{name:path}", response_model=PromptResponse)

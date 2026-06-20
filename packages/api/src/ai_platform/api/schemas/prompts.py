@@ -22,6 +22,18 @@ class PromptUpdateRequest(BaseModel):
     instructions: Optional[str] = None
 
 
+class PromptCreateRequest(BaseModel):
+    """Body for `POST /prompts` — a domain deploying one of its prompts.
+    Get-or-create / idempotent on `name` (mirrors `POST /artifact-types`):
+    an existing prompt is left untouched; use `PUT` to change instructions."""
+    name: str                       # e.g. "math_qa.answer"
+    domain: str                     # grouping key, e.g. "math_qa"
+    description: str
+    instructions: str
+    kind: str = "prompt"            # "prompt" | "persona" | "skill"
+    version: str = "0.1.0"
+
+
 class PromptListResponse(BaseModel):
     prompts: List[PromptResponse]
     total: int
