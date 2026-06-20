@@ -22,7 +22,6 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 # `aiplatform deploy` → CodePackage catalog → install_control_packages_for_api.
 COPY packages/core               /app/packages/core
 COPY packages/api                /app/packages/api
-COPY instructions                /app/instructions
 COPY supabase                    /app/supabase
 
 # Editable install of the api package + core (path source). Domain
