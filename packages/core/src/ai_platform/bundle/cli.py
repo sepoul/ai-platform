@@ -32,6 +32,7 @@ from ai_platform.bundle import (
     DEFAULT_API_URL,
     declare_artifacts,
     deploy_bundle,
+    deploy_prompts,
     snapshot_openapi,
 )
 
@@ -68,6 +69,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the bundle manifest (default: ./bundle.toml)",
     )
     declare.add_argument(
+        "--api-url",
+        default=DEFAULT_API_URL,
+        help=f"Platform API URL (default: {DEFAULT_API_URL})",
+    )
+
+    prompts = sub.add_parser(
+        "deploy-prompts",
+        help="Deploy a bundle's prompts (the [prompts] instructions dir) to /prompts",
+    )
+    prompts.add_argument(
+        "--bundle",
+        default="bundle.toml",
+        help="Path to the bundle manifest (default: ./bundle.toml)",
+    )
+    prompts.add_argument(
         "--api-url",
         default=DEFAULT_API_URL,
         help=f"Platform API URL (default: {DEFAULT_API_URL})",
@@ -134,6 +150,28 @@ def _cmd_declare_artifacts(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_deploy_prompts(args: argparse.Namespace) -> int:
+    bundle_path = Path(args.bundle)
+    if not bundle_path.exists():
+        print(f"error: bundle manifest not found: {bundle_path}", file=sys.stderr)
+        return 2
+
+    print(f"→ Deploying prompts from {bundle_path} to {args.api_url}")
+    try:
+        report = deploy_prompts(bundle_path, api_url=args.api_url)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI surface
+        print(f"deploy-prompts failed: {exc}", file=sys.stderr)
+        return 1
+
+    prompts = report["prompts"]
+    if not prompts:
+        print("  (no prompts declared by this bundle — add a [prompts] section)")
+    for name in prompts:
+        print(f"  ✓ Prompt:  {name}")
+    print("Done.")
+    return 0
+
+
 def _cmd_snapshot_openapi(args: argparse.Namespace) -> int:
     print(f"→ Snapshotting OpenAPI from {args.api_url}")
     try:
@@ -153,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_deploy(args)
     if args.cmd == "declare-artifacts":
         return _cmd_declare_artifacts(args)
+    if args.cmd == "deploy-prompts":
+        return _cmd_deploy_prompts(args)
     if args.cmd == "snapshot-openapi":
         return _cmd_snapshot_openapi(args)
     parser.error(f"unknown command: {args.cmd}")

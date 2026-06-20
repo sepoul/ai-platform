@@ -1,6 +1,6 @@
 [project]
 name = "aiplatform-core"
-version = "0.1.1"
+version = "0.1.2"
 description = "Shared platform: the JobRecord boundary, storage + compute backends, job types, and domain schemas. No web framework, no AI engine."
 readme = "README.md"
 license = { text = "MIT" }

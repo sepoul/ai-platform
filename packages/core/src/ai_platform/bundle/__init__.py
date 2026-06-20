@@ -455,3 +455,46 @@ def declare_artifacts(
         api_url=api_url,
     )
     return {"artifact_types": [at.id for at in artifact_types]}
+
+
+def _post_prompt(prompt: Any, *, api_url: str = DEFAULT_API_URL) -> dict[str, Any]:
+    """POST one Prompt to `/prompts`. Get-or-create / idempotent on name."""
+    response = httpx.post(
+        f"{api_url.rstrip('/')}/prompts",
+        json={
+            "name": prompt.name,
+            "domain": prompt.domain,
+            "description": prompt.description,
+            "instructions": prompt.instructions,
+            "kind": prompt.kind,
+            "version": prompt.version,
+        },
+        timeout=_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def deploy_prompts(
+    manifest_path: str | Path,
+    *,
+    api_url: str = DEFAULT_API_URL,
+) -> dict[str, Any]:
+    """Deploy a domain's prompts — the prompt counterpart to
+    `declare_artifacts`. The domain owns the instruction files; this walks
+    the bundle's `[prompts].dir` (relative to the manifest) and POSTs each
+    `.md` to `/prompts`, get-or-create / idempotent on name. Returns the
+    deployed prompt names; a no-op (`[]`) when the bundle declares no
+    `[prompts]`.
+    """
+    from ai_platform.ai.prompts.registry import load_prompts_from_dir
+    from ai_platform.bundle.manifest import BundleManifest
+
+    manifest = BundleManifest.load(manifest_path)
+    if manifest.prompts is None:
+        return {"prompts": []}
+    base = Path(manifest_path).resolve().parent
+    instructions_dir = (base / manifest.prompts.dir).resolve()
+    prompts = load_prompts_from_dir(instructions_dir, domain=manifest.prompts.domain)
+    deployed = [_post_prompt(p, api_url=api_url)["name"] for p in prompts]
+    return {"prompts": deployed}

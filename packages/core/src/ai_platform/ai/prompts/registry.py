@@ -66,6 +66,49 @@ def parse_frontmatter(markdown: str) -> Tuple[dict, str]:
     return meta, parts[2].strip()
 
 
+_VALID_KINDS = ("prompt", "persona", "skill")
+
+
+def load_prompts_from_dir(instructions_dir: "Path | str", domain: str) -> List[Prompt]:
+    """Build deployable `Prompt`s from a domain's instructions directory —
+    the generic, domain-agnostic loader behind `aiplatform deploy-prompts`.
+    The domain owns the files; this never hardcodes a platform path.
+
+    Naming mirrors the registry convention:
+      - top-level `<name>.md`       -> name `<domain>.<name>`, kind "prompt"
+      - nested `<kind>/<name>.md`   -> name `<domain>.<kind>.<name>`, kind=`<kind>`
+    Front-matter overrides where present: `name`, `kind`, `description`
+    (or `role`), `version`. The whole file (front-matter + body) is stored as
+    `instructions` so a `/prompts` round-trip is lossless. `README.md` skipped.
+    """
+    base = Path(instructions_dir)
+    out: List[Prompt] = []
+    for path in sorted(base.rglob("*.md")):
+        if path.name.lower() == "readme.md":
+            continue
+        text = path.read_text(encoding="utf-8")
+        meta, _body = parse_frontmatter(text)
+        rel = path.relative_to(base).with_suffix("")
+        parts = rel.parts
+        if len(parts) == 1:
+            kind = str(meta.get("kind") or "prompt")
+            name = str(meta.get("name") or f"{domain}.{parts[0]}")
+        else:
+            kind = str(meta.get("kind") or parts[0])
+            name = str(meta.get("name") or f"{domain}.{'.'.join(parts)}")
+        if kind not in _VALID_KINDS:
+            kind = "prompt"
+        out.append(Prompt(
+            name=name,
+            domain=domain,
+            description=str(meta.get("description") or meta.get("role") or rel.name),
+            instructions=text,
+            kind=kind,  # type: ignore[arg-type]
+            version=str(meta.get("version") or "0.1.0"),
+        ))
+    return out
+
+
 def discover_kinded(domain: str, subdir: str, kind: str) -> List[Prompt]:
     """Build registry entries for every persona/skill Markdown file under
     `instructions/<domain>/<subdir>/`.

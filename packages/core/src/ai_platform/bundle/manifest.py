@@ -55,11 +55,28 @@ class ControlSection(BaseModel):
     execution_entrypoint: str
 
 
+class PromptsSection(BaseModel):
+    """Optional — declares a domain's deployable prompts (instructions).
+
+        [prompts]
+        dir    = "instructions"   # path relative to bundle.toml
+        domain = "math_qa"        # grouping key for the deployed prompts
+
+    `aiplatform deploy-prompts` walks `dir` and POSTs each `.md` to
+    `/prompts` (see `load_prompts_from_dir` for the naming convention).
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    dir: str
+    domain: str
+
+
 class BundleManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     package: PackageSection
     control: ControlSection
+    prompts: PromptsSection | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "BundleManifest":
