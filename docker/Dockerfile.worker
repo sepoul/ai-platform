@@ -38,7 +38,6 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY packages/core   /app/packages/core
 COPY packages/worker /app/packages/worker
 COPY packages/_demo  /app/packages/_demo
-COPY instructions    /app/instructions
 COPY supabase        /app/supabase
 
 # Editable install with the [demo] extra — pulls aiplatform-demo so a
