@@ -25,4 +25,16 @@ resource "hcloud_server" "mathapp" {
     managed-by = "opentofu"
     app        = "mathapp"
   }
+
+  # Past day one: the box is bootstrapped, so `user_data` (cloud-init) only
+  # ever ran at first boot and can't be applied in place. Ignore its drift
+  # so routine changes (e.g. a `server_type` resize) happen IN-PLACE instead
+  # of destroy-and-recreate. (The live box was built from the pre-82866da
+  # cloud-init — docker-compose-plugin — and the yaml was corrected to
+  # docker-compose-v2 minutes after creation; that historical, first-boot-only
+  # diff was the recreate trigger.) To re-bootstrap from new cloud-init,
+  # recreate deliberately: `tofu apply -replace=hcloud_server.mathapp`.
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }
