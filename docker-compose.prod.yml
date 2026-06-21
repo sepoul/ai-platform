@@ -17,6 +17,11 @@
 services:
   api:
     image: ghcr.io/sepoul/aiplatform-api:${IMAGE_TAG:-latest}
+    # Per-container memory ceilings (prod only) so a leaking/spiking
+    # container is OOM-killed + restarted in isolation instead of wedging
+    # the whole box (the 2026-06-21 hang). Sized for an 8 GB host with
+    # headroom; safe ceilings on 4 GB since they cap, not reserve.
+    mem_limit: 1g
 
   # Both worker services now run the VIRGIN aiplatform-worker image:
   # zero domain code baked in. Domains arrive at boot via the
@@ -27,15 +32,19 @@ services:
   # installed at boot. See docs/architecture.md §4.2.
   worker:
     image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    mem_limit: 1500m
 
   worker-crewai:
     image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    mem_limit: 1500m
 
   celery-worker:
     image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    mem_limit: 1500m
 
   math-ui:
     image: ghcr.io/sepoul/math-ui:${IMAGE_TAG:-latest}
+    mem_limit: 512m
     profiles: [ui]
     environment:
       # BFF routes proxy to the API over the compose network.
@@ -52,6 +61,7 @@ services:
   # redeploy ships both. Host port 3001 → container 7861.
   platform-ui:
     image: ghcr.io/sepoul/platform-ui:${IMAGE_TAG:-latest}
+    mem_limit: 256m
     profiles: [ui]
     environment:
       # BFF routes proxy to the API over the compose network.
