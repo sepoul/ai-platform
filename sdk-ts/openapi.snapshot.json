@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -1072,6 +1072,46 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Platform / Prompts"
+        ],
+        "summary": "Create Prompt",
+        "description": "Deploy a prompt \u2014 the domain-facing write path, mirroring\n`POST /artifact-types`. Get-or-create / idempotent on `name`: an\nexisting prompt is returned untouched (re-deploys are safe); use\n`PUT /prompts/{name}` to change instructions on an existing one.",
+        "operationId": "create_prompt_prompts_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/prompts/{name}": {
@@ -1425,6 +1465,9 @@
                         "$ref": "#/components/schemas/NotePageArtifact"
                       },
                       {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
+                      },
+                      {
                         "$ref": "#/components/schemas/MathQuestionArtifact"
                       },
                       {
@@ -1438,9 +1481,6 @@
                       },
                       {
                         "$ref": "#/components/schemas/FigureArtifact"
-                      },
-                      {
-                        "$ref": "#/components/schemas/MathConversationArtifact"
                       }
                     ],
                     "discriminator": {
@@ -1448,12 +1488,12 @@
                       "mapping": {
                         "daily_note": "#/components/schemas/DailyNoteArtifact",
                         "note_page": "#/components/schemas/NotePageArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact",
                         "math_question": "#/components/schemas/MathQuestionArtifact",
                         "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                         "user_comment": "#/components/schemas/UserCommentArtifact",
                         "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                        "figure": "#/components/schemas/FigureArtifact",
-                        "math_conversation": "#/components/schemas/MathConversationArtifact"
+                        "figure": "#/components/schemas/FigureArtifact"
                       }
                     }
                   },
@@ -1509,6 +1549,9 @@
                       "$ref": "#/components/schemas/NotePageArtifact"
                     },
                     {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
+                    },
+                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1522,9 +1565,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/FigureArtifact"
-                    },
-                    {
-                      "$ref": "#/components/schemas/MathConversationArtifact"
                     }
                   ],
                   "discriminator": {
@@ -1532,12 +1572,12 @@
                     "mapping": {
                       "daily_note": "#/components/schemas/DailyNoteArtifact",
                       "note_page": "#/components/schemas/NotePageArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
                       "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                      "figure": "#/components/schemas/FigureArtifact",
-                      "math_conversation": "#/components/schemas/MathConversationArtifact"
+                      "figure": "#/components/schemas/FigureArtifact"
                     }
                   },
                   "title": "Response Get Artifact Artifacts  Artifact Id  Get"
@@ -2270,6 +2310,25 @@
             "title": "Transcript",
             "description": "Transcript of the voice note."
           },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/NotePage"
+            },
+            "type": "array",
+            "title": "Pages",
+            "description": "Raw per-photo extraction (children)."
+          },
+          "synthesis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteSynthesis"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Note-level synthesised, always-correct math."
+          },
           "ocr_text": {
             "anyOf": [
               {
@@ -2280,7 +2339,14 @@
               }
             ],
             "title": "Ocr Text",
-            "description": "Combined text/LaTeX parsed from the note's photos."
+            "description": "Legacy combined text/LaTeX parsed from the note's photos."
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "description": "Document shape version (1 = pre-redesign).",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -2289,7 +2355,7 @@
           "note_date"
         ],
         "title": "DailyNoteArtifact",
-        "description": "One captured study note, tied to a calendar day.\n\n`storage_ref` / `content_type` / `byte_size` are inherited from\n`BaseArtifact` and point at the uploaded **audio** blob. `transcript`\nis populated by the ingest job's transcription node. `image_refs`\nholds the notebook photos captured with the note; `ocr_text` is the\ncombined text/LaTeX parsed from them by `ParsePagesStep`, with the\nper-photo structured detail (LaTeX, concepts, diagrams) living in the\nsibling `NotePageArtifact`s."
+        "description": "One captured study note, tied to a calendar day \u2014 a self-contained document.\n\n`storage_ref` / `content_type` / `byte_size` are inherited from\n`BaseArtifact` and point at the uploaded **audio** blob. `transcript` is\nthe voice-note transcription; `pages` holds the raw per-photo extraction\n(children); `synthesis` is the cleaned-up note-level math. `image_refs`\nholds the notebook-photo storage_refs.\n\n`pages`, `synthesis`, and `schema_version` are additive (optional with\ndefaults) so old rows \u2014 written before the redesign \u2014 still hydrate under\nthe current class. `schema_version` is the migration's idempotency marker:\nold rows default to 1; new/migrated documents are 2."
       },
       "EdgeResponse": {
         "properties": {
@@ -2432,6 +2498,9 @@
                   "$ref": "#/components/schemas/NotePageArtifact"
                 },
                 {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
+                },
+                {
                   "$ref": "#/components/schemas/MathQuestionArtifact"
                 },
                 {
@@ -2445,9 +2514,6 @@
                 },
                 {
                   "$ref": "#/components/schemas/FigureArtifact"
-                },
-                {
-                  "$ref": "#/components/schemas/MathConversationArtifact"
                 }
               ],
               "discriminator": {
@@ -2790,10 +2856,10 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
@@ -2900,10 +2966,10 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
@@ -3643,6 +3709,52 @@
         "title": "MediaRef",
         "description": "Handle for an uploaded blob \u2014 what `POST /media` returns and what\na domain stamps onto a `storage_ref`-backed `BaseArtifact`."
       },
+      "NotePage": {
+        "properties": {
+          "page_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Page Index"
+          },
+          "image_ref": {
+            "type": "string",
+            "title": "Image Ref",
+            "description": "storage_ref of the source photo."
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text",
+            "description": "Faithful plain-text transcription of the page."
+          },
+          "diagram_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagram Description",
+            "description": "Description of any diagram/figure on the page."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "page_index",
+          "image_ref"
+        ],
+        "title": "NotePage",
+        "description": "Faithful extraction of one notebook photo \u2014 a nested child of the note.\n\nRaw-only by design: `raw_text` is a faithful transcription of what's on\nthe page (no LaTeX, no concepts \u2014 those are reconstructed note-level in\n`NoteSynthesis`). Held on `MathNotesState` in-flight and stored inline on\n`DailyNoteArtifact.pages`; never an artifact of its own."
+      },
       "NotePageArtifact": {
         "properties": {
           "artifact_id": {
@@ -3805,7 +3917,66 @@
           "page_index"
         ],
         "title": "NotePageArtifact",
-        "description": "A parsed notebook page \u2014 the vision interpretation of one photo.\n\nMinted per `image_ref` alongside the parent `DailyNoteArtifact`.\n`storage_ref` points at the photo (so `GET /artifacts/{id}` hydrates a\nviewable `storage_url`); `source_note_id` links back to the note. The\nstructured fields (`latex`, `concepts`, \u2026) are produced by the domain\nfrom the platform's *generic* `ImageInterpreter` text \u2014 the\nmath-specific interpretation lives here, domain-side, per \u00a713."
+        "description": "LEGACY per-photo artifact \u2014 no longer minted, kept for back-compat.\n\nBefore the document redesign, each photo was minted as its own\n`note_page` row linked to the parent via `source_note_id`. New ingests\nembed page data on `DailyNoteArtifact.pages` instead, but this class stays\nregistered so old rows still hydrate on read and the migration\n(`scripts/migrate_notes_to_document.py`) can query them as its source."
+      },
+      "NoteSynthesis": {
+        "properties": {
+          "markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markdown",
+            "description": "Prose + embedded KaTeX-validated LaTeX for the whole note."
+          },
+          "concepts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concepts",
+            "description": "Mathematical concepts the note touches."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "A short prose summary of the note."
+          },
+          "model_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Used",
+            "description": "The model that produced the synthesis."
+          },
+          "validation_attempts": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Validation Attempts",
+            "description": "How many validate_latex calls before converging.",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NoteSynthesis",
+        "description": "The note-level synthesis \u2014 one coherent, always-correct view of the math.\n\nProduced by the synthesis pass over the transcript + all page extractions.\n`markdown` is prose with embedded KaTeX-validated LaTeX (document mode);\n`concepts` and `summary` are note-level. Never reproduces an error the\nlearner made \u2014 it reconstructs the intended math silently."
       },
       "ParamSpec": {
         "properties": {
@@ -3834,6 +4005,45 @@
           "type"
         ],
         "title": "ParamSpec"
+      },
+      "PromptCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "prompt"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "0.1.0"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "domain",
+          "description",
+          "instructions"
+        ],
+        "title": "PromptCreateRequest",
+        "description": "Body for `POST /prompts` \u2014 a domain deploying one of its prompts.\nGet-or-create / idempotent on `name` (mirrors `POST /artifact-types`):\nan existing prompt is left untouched; use `PUT` to change instructions."
       },
       "PromptExecutionListResponse": {
         "properties": {
@@ -4053,19 +4263,19 @@
         "type": "object",
         "title": "PromptUpdateRequest"
       },
-      "RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/MathNotesInput"
           },
           {
-            "$ref": "#/components/schemas/MathQAInput"
+            "$ref": "#/components/schemas/MathConversationInput"
           },
           {
-            "$ref": "#/components/schemas/MathConversationInput"
+            "$ref": "#/components/schemas/MathQAInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {
