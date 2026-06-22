@@ -348,7 +348,14 @@ export interface paths {
         /** List Prompts */
         get: operations["list_prompts_prompts_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Prompt
+         * @description Deploy a prompt — the domain-facing write path, mirroring
+         *     `POST /artifact-types`. Get-or-create / idempotent on `name`: an
+         *     existing prompt is returned untouched (re-deploys are safe); use
+         *     `PUT /prompts/{name}` to change instructions on an existing one.
+         */
+        post: operations["create_prompt_prompts_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -771,15 +778,18 @@ export interface components {
         };
         /**
          * DailyNoteArtifact
-         * @description One captured study note, tied to a calendar day.
+         * @description One captured study note, tied to a calendar day — a self-contained document.
          *
          *     `storage_ref` / `content_type` / `byte_size` are inherited from
-         *     `BaseArtifact` and point at the uploaded **audio** blob. `transcript`
-         *     is populated by the ingest job's transcription node. `image_refs`
-         *     holds the notebook photos captured with the note; `ocr_text` is the
-         *     combined text/LaTeX parsed from them by `ParsePagesStep`, with the
-         *     per-photo structured detail (LaTeX, concepts, diagrams) living in the
-         *     sibling `NotePageArtifact`s.
+         *     `BaseArtifact` and point at the uploaded **audio** blob. `transcript` is
+         *     the voice-note transcription; `pages` holds the raw per-photo extraction
+         *     (children); `synthesis` is the cleaned-up note-level math. `image_refs`
+         *     holds the notebook-photo storage_refs.
+         *
+         *     `pages`, `synthesis`, and `schema_version` are additive (optional with
+         *     defaults) so old rows — written before the redesign — still hydrate under
+         *     the current class. `schema_version` is the migration's idempotency marker:
+         *     old rows default to 1; new/migrated documents are 2.
          */
         DailyNoteArtifact: {
             /**
@@ -829,10 +839,23 @@ export interface components {
              */
             transcript?: string | null;
             /**
+             * Pages
+             * @description Raw per-photo extraction (children).
+             */
+            pages?: components["schemas"]["NotePage"][];
+            /** @description Note-level synthesised, always-correct math. */
+            synthesis?: components["schemas"]["NoteSynthesis"] | null;
+            /**
              * Ocr Text
-             * @description Combined text/LaTeX parsed from the note's photos.
+             * @description Legacy combined text/LaTeX parsed from the note's photos.
              */
             ocr_text?: string | null;
+            /**
+             * Schema Version
+             * @description Document shape version (1 = pre-redesign).
+             * @default 1
+             */
+            schema_version: number;
         };
         /** EdgeResponse */
         EdgeResponse: {
@@ -901,7 +924,7 @@ export interface components {
         /** FullArtifactListResponse */
         FullArtifactListResponse: {
             /** Artifacts */
-            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
+            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
             /** Total */
             total: number;
         };
@@ -1072,7 +1095,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -1098,7 +1121,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -1430,15 +1453,42 @@ export interface components {
             byte_size: number;
         };
         /**
-         * NotePageArtifact
-         * @description A parsed notebook page — the vision interpretation of one photo.
+         * NotePage
+         * @description Faithful extraction of one notebook photo — a nested child of the note.
          *
-         *     Minted per `image_ref` alongside the parent `DailyNoteArtifact`.
-         *     `storage_ref` points at the photo (so `GET /artifacts/{id}` hydrates a
-         *     viewable `storage_url`); `source_note_id` links back to the note. The
-         *     structured fields (`latex`, `concepts`, …) are produced by the domain
-         *     from the platform's *generic* `ImageInterpreter` text — the
-         *     math-specific interpretation lives here, domain-side, per §13.
+         *     Raw-only by design: `raw_text` is a faithful transcription of what's on
+         *     the page (no LaTeX, no concepts — those are reconstructed note-level in
+         *     `NoteSynthesis`). Held on `MathNotesState` in-flight and stored inline on
+         *     `DailyNoteArtifact.pages`; never an artifact of its own.
+         */
+        NotePage: {
+            /** Page Index */
+            page_index: number;
+            /**
+             * Image Ref
+             * @description storage_ref of the source photo.
+             */
+            image_ref: string;
+            /**
+             * Raw Text
+             * @description Faithful plain-text transcription of the page.
+             */
+            raw_text?: string | null;
+            /**
+             * Diagram Description
+             * @description Description of any diagram/figure on the page.
+             */
+            diagram_description?: string | null;
+        };
+        /**
+         * NotePageArtifact
+         * @description LEGACY per-photo artifact — no longer minted, kept for back-compat.
+         *
+         *     Before the document redesign, each photo was minted as its own
+         *     `note_page` row linked to the parent via `source_note_id`. New ingests
+         *     embed page data on `DailyNoteArtifact.pages` instead, but this class stays
+         *     registered so old rows still hydrate on read and the migration
+         *     (`scripts/migrate_notes_to_document.py`) can query them as its source.
          */
         NotePageArtifact: {
             /**
@@ -1514,6 +1564,43 @@ export interface components {
              */
             concepts?: string[];
         };
+        /**
+         * NoteSynthesis
+         * @description The note-level synthesis — one coherent, always-correct view of the math.
+         *
+         *     Produced by the synthesis pass over the transcript + all page extractions.
+         *     `markdown` is prose with embedded KaTeX-validated LaTeX (document mode);
+         *     `concepts` and `summary` are note-level. Never reproduces an error the
+         *     learner made — it reconstructs the intended math silently.
+         */
+        NoteSynthesis: {
+            /**
+             * Markdown
+             * @description Prose + embedded KaTeX-validated LaTeX for the whole note.
+             */
+            markdown?: string | null;
+            /**
+             * Concepts
+             * @description Mathematical concepts the note touches.
+             */
+            concepts?: string[];
+            /**
+             * Summary
+             * @description A short prose summary of the note.
+             */
+            summary?: string | null;
+            /**
+             * Model Used
+             * @description The model that produced the synthesis.
+             */
+            model_used?: string | null;
+            /**
+             * Validation Attempts
+             * @description How many validate_latex calls before converging.
+             * @default 0
+             */
+            validation_attempts: number;
+        };
         /** ParamSpec */
         ParamSpec: {
             /** Name */
@@ -1530,6 +1617,32 @@ export interface components {
              * @default
              */
             description: string;
+        };
+        /**
+         * PromptCreateRequest
+         * @description Body for `POST /prompts` — a domain deploying one of its prompts.
+         *     Get-or-create / idempotent on `name` (mirrors `POST /artifact-types`):
+         *     an existing prompt is left untouched; use `PUT` to change instructions.
+         */
+        PromptCreateRequest: {
+            /** Name */
+            name: string;
+            /** Domain */
+            domain: string;
+            /** Description */
+            description: string;
+            /** Instructions */
+            instructions: string;
+            /**
+             * Kind
+             * @default prompt
+             */
+            kind: string;
+            /**
+             * Version
+             * @default 0.1.0
+             */
+            version: string;
         };
         /** PromptExecutionListResponse */
         PromptExecutionListResponse: {
@@ -1617,8 +1730,8 @@ export interface components {
             /** Instructions */
             instructions?: string | null;
         };
-        /** RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -1838,15 +1951,18 @@ export type SchemaMathQaInput = components['schemas']['MathQAInput'];
 export type SchemaMathQaResult = components['schemas']['MathQAResult'];
 export type SchemaMathQuestionArtifact = components['schemas']['MathQuestionArtifact'];
 export type SchemaMediaRef = components['schemas']['MediaRef'];
+export type SchemaNotePage = components['schemas']['NotePage'];
 export type SchemaNotePageArtifact = components['schemas']['NotePageArtifact'];
+export type SchemaNoteSynthesis = components['schemas']['NoteSynthesis'];
 export type SchemaParamSpec = components['schemas']['ParamSpec'];
+export type SchemaPromptCreateRequest = components['schemas']['PromptCreateRequest'];
 export type SchemaPromptExecutionListResponse = components['schemas']['PromptExecutionListResponse'];
 export type SchemaPromptExecutionResponse = components['schemas']['PromptExecutionResponse'];
 export type SchemaPromptExecutionSummary = components['schemas']['PromptExecutionSummary'];
 export type SchemaPromptListResponse = components['schemas']['PromptListResponse'];
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
-export type SchemaRootModelAnnotatedUnionMathNotesInputMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -1967,7 +2083,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -2582,6 +2698,39 @@ export interface operations {
             };
         };
     };
+    create_prompt_prompts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_prompt_prompts__name__get: {
         parameters: {
             query?: never;
@@ -2788,7 +2937,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
+                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
                 };
             };
             /** @description Validation Error */
@@ -2819,7 +2968,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
                 };
             };
             /** @description Validation Error */
