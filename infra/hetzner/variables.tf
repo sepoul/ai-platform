@@ -17,9 +17,9 @@ variable "server_name" {
 }
 
 variable "server_type" {
-  description = "Hetzner server type. cx23 = 2 vCPU / 4 GB / 40 GB SSD, shared x86 (~€4/mo). Hetzner renamed the CX line, so the box the deploy doc calls 'CX22' is the cx23 slug today."
+  description = "Hetzner server type. cx33 = 4 vCPU / 8 GB / 80 GB SSD, shared x86 (~€8.49/mo net). Upgrade from cx23 (2 vCPU / 4 GB) — deferred 2026-06-22 because fsn1 had no 8 GB migration capacity. Apply when it returns; resize is in-place (lifecycle ignore_changes on user_data)."
   type        = string
-  default     = "cx23"
+  default     = "cx33"
 }
 
 variable "location" {
