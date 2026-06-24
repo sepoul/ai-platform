@@ -9,7 +9,13 @@ dependencies = [
     # The platform graph framework — both runtimes need it (job_runner imports
     # `End` from pydantic_graph). Direct dep so the worker base resolves
     # without depending on which runtime extra is picked.
-    "pydantic-graph>=1.58.0",
+    # Capped <2: pydantic_graph 2.x changed the `Graph(...)` constructor
+    # (the builder-based API), which breaks every domain that builds a graph
+    # with `Graph(nodes=..., state_type=...)` (math_qa, math_notes). The base
+    # image has no lockfile, so an unbounded `>=1.58.0` silently resolved to
+    # 2.x at build time and crash-looped the worker. Lift the cap only after
+    # the domains migrate to the GraphBuilder API.
+    "pydantic-graph>=1.58.0,<2",
     # OpenAI SDK — a *framework-neutral* platform capability, present in BOTH
     # runtimes (it lives in the shared virgin worker base, like pydantic-graph,
     # not in a runtime-specific extra and not pulled by domain wheels). It has
