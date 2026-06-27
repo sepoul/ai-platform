@@ -84,9 +84,16 @@ def deploy_catalog(
         result = client.create_artifact_type(record)
         report["artifact_types"].append((result or {}).get("id"))
 
-    # 4. Prompts.
+    # 4. Prompts. The server upserts by content and reports the action
+    #    (created / updated / unchanged) so a stale edit can't hide behind a
+    #    blanket success (issue #59).
     for prompt in catalog.get("prompts", []):
-        result = client.create_prompt(prompt)
-        report["prompts"].append((result or {}).get("name", prompt.get("name")))
+        result = client.create_prompt(prompt) or {}
+        report["prompts"].append(
+            {
+                "name": result.get("name", prompt.get("name")),
+                "action": result.get("action", "deployed"),
+            }
+        )
 
     return report

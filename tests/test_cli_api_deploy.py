@@ -138,7 +138,22 @@ def test_deploy_catalog_posts_in_order(tmp_path: Path):
     # Wheel went up as multipart, not JSON.
     assert captured[0].headers["content-type"].startswith("multipart/form-data")
     assert report["job_definitions"] == ["srv-id"]
-    assert report["prompts"] == ["srv-name"]
+    # Prompts record name + the server's upsert action (issue #59); the
+    # default mock body has no action, so it falls back to "deployed".
+    assert report["prompts"] == [{"name": "srv-name", "action": "deployed"}]
+
+
+def test_deploy_catalog_surfaces_prompt_action(tmp_path: Path):
+    """The server's created/updated/unchanged action is carried into the
+    deploy report so a silently-dropped edit can't hide (issue #59)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/prompts":
+            return httpx.Response(200, json={"name": "demo.greet", "action": "updated"})
+        return httpx.Response(200, json={"id": "x"})
+
+    with ApiClient("https://p", transport=httpx.MockTransport(handler)) as client:
+        report = deploy_catalog(client, _sample_catalog(), skip_wheel=True)
+    assert report["prompts"] == [{"name": "demo.greet", "action": "updated"}]
 
 
 def test_deploy_catalog_skip_wheel_omits_code_package(tmp_path: Path):

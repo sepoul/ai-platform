@@ -56,6 +56,28 @@ class PromptRegistry:
         except ObjectNotFound:
             return self._repo.put(prompt)
 
+    def upsert(self, prompt: Prompt) -> tuple[Prompt, str]:
+        """Deploy a prompt idempotently **by content**, returning
+        `(prompt, action)` where action is `"created" | "updated" | "unchanged"`.
+
+        - name absent → store as-is (`created`).
+        - name present, identical instructions → no-op (`unchanged`).
+        - name present, different instructions → store a version-bumped copy
+          (`updated`).
+
+        Fixes the silent-drop where get-or-create on `name` returned the
+        existing prompt and ignored edited instructions, so a deploy onto a
+        platform that already had the name never updated the content
+        (issue #59).
+        """
+        try:
+            current = self._latest_by_name(prompt.name)
+        except ObjectNotFound:
+            return self._repo.put(prompt), "created"
+        if current.instructions == prompt.instructions:
+            return current, "unchanged"
+        return self.update_instructions(prompt.name, prompt.instructions), "updated"
+
     def update_instructions(self, name: str, new_instructions: str) -> Prompt:
         """Update the instructions of an existing prompt, bumping the version."""
         current = self._latest_by_name(name)
