@@ -1,0 +1,60 @@
+name: Publish aiplatform-cli to PyPI
+
+# Publishes the standalone `aiplatform-cli` package to PyPI on a `cli-v*`
+# tag via PyPI Trusted Publishing (OIDC). Versioned independently of
+# `aiplatform-core` — that independence is the whole point of issue #49:
+# the ops/deploy tool ships on its own cadence, never in lockstep with the
+# platform.
+#
+# ── One-time PyPI setup (single form, no token) ───────────────────────
+#   pypi.org -> your account -> Publishing -> "Add a pending publisher":
+#     PyPI Project Name: aiplatform-cli
+#     Owner:             sepoul
+#     Repository name:   ai-platform
+#     Workflow name:     pypi-publish-cli.yml
+#     Environment:       (leave blank)
+#
+# ── Cut a release ─────────────────────────────────────────────────────
+#   - bump packages/cli/pyproject.toml "version" (e.g. 0.1.1), commit to main
+#   - git tag cli-v0.1.1 && git push origin cli-v0.1.1   (tag == version)
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC — required for PyPI Trusted Publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Tag must match pyproject version
+        if: github.event_name == 'push'
+        run: |
+          PKG=$(python -c "import tomllib;print(tomllib.load(open('packages/cli/pyproject.toml','rb'))['project']['version'])")
+          TAG="${GITHUB_REF_NAME#cli-v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::tag cli-v$TAG does not match pyproject version $PKG"
+            exit 1
+          fi
+          echo "Publishing aiplatform-cli==$PKG"
+
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build packages/cli --outdir dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

@@ -8,6 +8,8 @@
 #                                              with the platform so local dev / CI
 #                                              stays runnable when no real domain
 #                                              is deployed yet.
+#   packages/cli       (aiplatform-cli)      — standalone, pure-HTTP ops CLI (`aip`);
+#                                              imports ZERO platform internals (issue #49).
 #
 # Each service installs standalone with uv from core + the packages it
 # needs. NOT a uv workspace: a workspace forbids path sources for members,
@@ -26,4 +28,5 @@ pythonpath = [
     "packages/api/src",
     "packages/worker/src",
     "packages/_demo/src",
+    "packages/cli/src",
 ]
