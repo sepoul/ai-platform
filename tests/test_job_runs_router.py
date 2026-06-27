@@ -312,6 +312,73 @@ def test_review_calls_compute_enqueue_to_resume_run():
     compute.enqueue.assert_called_once_with(str(record.spec.job_id))
 
 
+# ---------------------------------------------------------------------------
+# Cancel / recovery endpoint (#48)
+# ---------------------------------------------------------------------------
+
+def _wire_record(executor: MagicMock, job_def: JobControl, status: JobStatus) -> JobRecord:
+    record = JobRecord.create(job_type=job_def.name, graph_ref=job_def.label)
+    record.state.status = status
+    executor.repo.get.return_value = record
+    return record
+
+
+def test_cancel_marks_running_job_cancelled_and_persists():
+    """The core recovery path: an orphaned RUNNING job is forced to the
+    terminal CANCELLED state via the supported endpoint, not a direct DB
+    write."""
+    job_def = _base_job_def()
+    client, executor, _ = _make_app([job_def])
+    record = _wire_record(executor, job_def, JobStatus.RUNNING)
+
+    resp = client.post(f"/jobs/{record.spec.job_id}/cancel")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == JobStatus.CANCELLED.value
+
+    executor.repo.put.assert_called_once()
+    persisted = executor.repo.put.call_args.args[0]
+    assert persisted.state.status == JobStatus.CANCELLED
+    # Also signals cooperative cancellation for a still-live worker.
+    assert persisted.state.cancel_requested is True
+
+
+def test_cancel_allows_pending_and_waiting_input():
+    for status in (JobStatus.PENDING, JobStatus.WAITING_INPUT):
+        job_def = _base_job_def()
+        client, executor, _ = _make_app([job_def])
+        record = _wire_record(executor, job_def, status)
+        resp = client.post(f"/jobs/{record.spec.job_id}/cancel")
+        assert resp.status_code == 200, (status, resp.text)
+        assert resp.json()["status"] == JobStatus.CANCELLED.value
+
+
+def test_cancel_404_for_unknown_job():
+    client, executor, _ = _make_app([_base_job_def()])
+    executor.repo.get.side_effect = Exception("not found")
+    resp = client.post("/jobs/does-not-exist/cancel")
+    assert resp.status_code == 404
+
+
+def test_cancel_409_when_already_terminal():
+    """Cancelling a finished job is a no-op error, not a silent success —
+    avoids clobbering a SUCCEEDED record's result."""
+    for status in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED):
+        job_def = _base_job_def()
+        client, executor, _ = _make_app([job_def])
+        record = _wire_record(executor, job_def, status)
+        resp = client.post(f"/jobs/{record.spec.job_id}/cancel")
+        assert resp.status_code == 409, (status, resp.text)
+        executor.repo.put.assert_not_called()
+
+
+def test_cancel_exposed_in_openapi():
+    client, _, _ = _make_app([_base_job_def()])
+    schema = client.app.openapi()
+    assert "/jobs/{job_id}/cancel" in schema["paths"]
+    assert "post" in schema["paths"]["/jobs/{job_id}/cancel"]
+
+
 def test_openapi_uses_typed_review_schema():
     job_def = _base_job_def(gates=[_gate()])
     client, _, _ = _make_app([job_def])
