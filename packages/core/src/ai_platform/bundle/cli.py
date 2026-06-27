@@ -30,6 +30,7 @@ from pathlib import Path
 
 from ai_platform.bundle import (
     DEFAULT_API_URL,
+    build_manifest,
     declare_artifacts,
     deploy_bundle,
     deploy_prompts,
@@ -38,6 +39,7 @@ from ai_platform.bundle import (
 
 
 _SNAPSHOT_DEFAULT = "sdk-ts/openapi.snapshot.json"
+_MANIFEST_DEFAULT = "catalog.json"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -87,6 +89,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--api-url",
         default=DEFAULT_API_URL,
         help=f"Platform API URL (default: {DEFAULT_API_URL})",
+    )
+
+    export = sub.add_parser(
+        "export-manifest",
+        help=(
+            "Introspect a bundle and write its deploy catalog to JSON — the "
+            "domain-side build step a pure-HTTP CLI (aiplatform-cli) consumes"
+        ),
+    )
+    export.add_argument(
+        "--bundle",
+        default="bundle.toml",
+        help="Path to the bundle manifest (default: ./bundle.toml)",
+    )
+    export.add_argument(
+        "--out",
+        "-o",
+        default=_MANIFEST_DEFAULT,
+        help=f"Where to write the catalog JSON (default: {_MANIFEST_DEFAULT})",
     )
 
     snapshot = sub.add_parser(
@@ -172,6 +193,34 @@ def _cmd_deploy_prompts(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_export_manifest(args: argparse.Namespace) -> int:
+    import json
+
+    bundle_path = Path(args.bundle)
+    if not bundle_path.exists():
+        print(f"error: bundle manifest not found: {bundle_path}", file=sys.stderr)
+        return 2
+
+    print(f"→ Building deploy catalog from {bundle_path}")
+    try:
+        catalog = build_manifest(bundle_path)
+    except Exception as exc:  # noqa: BLE001 — top-level CLI surface
+        print(f"export-manifest failed: {exc}", file=sys.stderr)
+        return 1
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
+
+    print(f"  ✓ JobDefinitions: {len(catalog['job_definitions'])}")
+    print(f"  ✓ ArtifactTypes:  {len(catalog['artifact_types'])}")
+    print(f"  ✓ Prompts:        {len(catalog['prompts'])}")
+    print(f"  ✓ wrote {out}")
+    print("Deploy it with the pure-HTTP CLI: `aip deploy --catalog "
+          f"{out}` (see aiplatform-cli).")
+    return 0
+
+
 def _cmd_snapshot_openapi(args: argparse.Namespace) -> int:
     print(f"→ Snapshotting OpenAPI from {args.api_url}")
     try:
@@ -193,6 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_declare_artifacts(args)
     if args.cmd == "deploy-prompts":
         return _cmd_deploy_prompts(args)
+    if args.cmd == "export-manifest":
+        return _cmd_export_manifest(args)
     if args.cmd == "snapshot-openapi":
         return _cmd_snapshot_openapi(args)
     parser.error(f"unknown command: {args.cmd}")

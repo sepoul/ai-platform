@@ -428,6 +428,105 @@ def deploy_bundle(
     }
 
 
+def build_manifest(
+    manifest_path: str | Path,
+    *,
+    version: Optional[str] = None,
+) -> dict[str, Any]:
+    """Introspect a `bundle.toml`'s domain and emit the deploy **catalog**
+    as plain JSON — the transport-ready shape, no I/O to the platform.
+
+    This is the *domain-side build* step from issue #49: it runs in the
+    domain's own venv (which has `aiplatform-core` + the domain installed),
+    resolves the control entrypoint in-process to derive every
+    JobDefinition / ArtifactType / prompt, and returns a dict that a
+    pure-HTTP transport tool (the standalone `aiplatform-cli`) can POST
+    to the platform without importing a single platform internal.
+
+    The records here are exactly what `deploy_bundle` POSTs — `build_record`
+    / `build_artifact_type_record` produce the same shapes — so the catalog
+    is a faithful, replayable description of a deploy. The wheel itself is
+    referenced by path (relative to the manifest); the transport tool
+    uploads the bytes.
+
+    Shape::
+
+        {
+          "aiplatform_manifest_version": 1,
+          "code_package": {"name", "version", "runtime_selector", "wheel"},
+          "job_definitions": [<JobDefinitionRecord json>, ...],
+          "artifact_types":  [<ArtifactTypeRecord json>, ...],
+          "prompts":         [{name, domain, description, instructions,
+                               kind, version}, ...]
+        }
+    """
+    from ai_platform.bundle.manifest import BundleManifest
+
+    manifest = BundleManifest.load(manifest_path)
+    effective_version = version or manifest.package.version
+
+    register_control = _resolve_entrypoint(manifest.control.control_entrypoint)
+    control_domain = register_control(_stub_bootstrap_ctx())
+    artifact_types = tuple(control_domain.artifact_types)
+    # Prefer the bundle's explicit entrypoint, else what the domain
+    # self-described — mirrors `deploy_control`.
+    effective_control_entrypoint = (
+        manifest.control.control_entrypoint
+        or getattr(control_domain, "control_entrypoint", "")
+    )
+
+    job_def_records = [
+        build_record(
+            control,
+            runtime=manifest.package.runtime,
+            code_entrypoint=manifest.control.execution_entrypoint,
+            control_entrypoint=effective_control_entrypoint,
+            version=effective_version,
+            artifact_types=artifact_types,
+        )
+        for control in control_domain.job_controls
+    ]
+
+    artifact_type_records = []
+    for artifact_cls in artifact_types:
+        record = build_artifact_type_record(
+            artifact_cls, domain=manifest.control.domain, version=effective_version
+        )
+        if record is not None:  # skip abstract classes, like deploy_bundle
+            artifact_type_records.append(record)
+
+    prompts: list[dict[str, Any]] = []
+    if manifest.prompts is not None:
+        from ai_platform.ai.prompts.registry import load_prompts_from_dir
+
+        base = Path(manifest_path).resolve().parent
+        instructions_dir = (base / manifest.prompts.dir).resolve()
+        for prompt in load_prompts_from_dir(instructions_dir, domain=manifest.prompts.domain):
+            prompts.append(
+                {
+                    "name": prompt.name,
+                    "domain": prompt.domain,
+                    "description": prompt.description,
+                    "instructions": prompt.instructions,
+                    "kind": prompt.kind,
+                    "version": prompt.version,
+                }
+            )
+
+    return {
+        "aiplatform_manifest_version": 1,
+        "code_package": {
+            "name": manifest.package.name,
+            "version": manifest.package.version,
+            "runtime_selector": manifest.package.runtime,
+            "wheel": manifest.package.wheel,
+        },
+        "job_definitions": [r.model_dump(mode="json") for r in job_def_records],
+        "artifact_types": [r.model_dump(mode="json") for r in artifact_type_records],
+        "prompts": prompts,
+    }
+
+
 def declare_artifacts(
     manifest_path: str | Path,
     *,

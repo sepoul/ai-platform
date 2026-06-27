@@ -11,6 +11,20 @@ for tracking.
 
 ## Recent landings
 
+- **#49 — Standalone `aiplatform-cli` (`aip`)** ✅ first cut. New
+  `packages/cli/` ships a pure-HTTP ops CLI that imports **zero**
+  platform internals (guarded by `tests/test_cli_no_platform_imports.py`)
+  and installs/versions independently (`pipx install aiplatform-cli`;
+  `cli-v*` tag → `pypi-publish-cli.yml`). The introspection that a
+  pure-HTTP tool can't do is split out to a domain-side build step,
+  `aiplatform export-manifest` (in `aiplatform-core`, `build_manifest`),
+  which emits a plain-JSON catalog the CLI replays over HTTP. Commands:
+  `login` (profile/config), `deploy`, `job-definitions`, `artifact-types`,
+  `jobs`, `cancel` (uses #48's endpoint), `snapshot-openapi`. Builds on
+  #45 (control plane now importable off a plain PyPI install). Follow-ups:
+  auth wiring once tokens land; consider retiring the in-core deploy CLI
+  once `export-manifest` + `aip` cover every path.
+
 - **§7p — Platform/domain split (Phases A–D)** ✅ shipped end-to-end
   through PRs #3–18. Catalogs (JobDefinitions, ArtifactTypes,
   CodePackages), `aiplatform deploy` CLI, `bundle.toml` manifest,
