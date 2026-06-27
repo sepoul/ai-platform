@@ -103,7 +103,25 @@ def make_pool(
 
 from ai_platform.utilities.paths import find_ancestor_containing
 
-_MIGRATIONS_DIR = find_ancestor_containing("supabase") / "supabase" / "migrations"
+
+def _migrations_dir() -> Path:
+    """Locate `supabase/migrations/` — lazily, on first use.
+
+    Resolved when migrations actually run (the migrate CLI script and
+    the integration-test fixture), never at import time. The lookup
+    walks up from this module for an ancestor containing a `supabase/`
+    dir, which only exists in the monorepo source layout; a wheel
+    installed into `site-packages` has no such ancestor.
+
+    Doing this at module top-level meant *any* standalone import of the
+    control plane crashed with `RuntimeError`: the CLI imports a
+    domain's control module, which transitively pulls in this module.
+    Migrations aren't needed for `deploy` / `declare-artifacts`, so
+    deferring the walk keeps those paths importable on a plain
+    `pip install aiplatform-core`. See issue #45.
+    """
+    return find_ancestor_containing("supabase") / "supabase" / "migrations"
+
 
 _TRACKING_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS _schema_migrations (
@@ -126,7 +144,7 @@ def apply_migrations(connection_string: str, *, schema: str | None = None) -> in
         # libpq per-connection options; runs at connect time.
         extra["options"] = f"-c search_path={schema}"
 
-    files = sorted(_MIGRATIONS_DIR.glob("*.sql"))
+    files = sorted(_migrations_dir().glob("*.sql"))
     if not files:
         return 0
 
