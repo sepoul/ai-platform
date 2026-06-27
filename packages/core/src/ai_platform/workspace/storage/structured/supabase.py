@@ -76,23 +76,57 @@ def make_pool(
     min_size: int = 1,
     max_size: int = 4,
     schema: str | None = None,
+    statement_timeout_ms: int = 30_000,
+    connect_timeout: int = 10,
 ) -> ConnectionPool:
     """Open a connection pool. Caller owns the lifetime.
 
-    When `schema` is given, every connection in the pool runs
-    `SET search_path = <schema>` on checkout, so all queries are
-    scoped to that schema. Used by integration tests to isolate
-    destructive operations from `public`.
+    Hardened against the Supabase-pooler flakiness that otherwise wedges a
+    worker forever (issue #57). A dead/stale pooled connection used to block
+    in `psycopg`'s `wait` with no timeout — one such connection took down a
+    whole single-job poll worker indefinitely. We now:
+
+    - set `statement_timeout` so no single query can hang forever,
+    - set `connect_timeout` + TCP keepalives so a silently-dropped pooler
+      connection is detected instead of blocking on a dead socket,
+    - give the pool a `check` that runs `SELECT 1` on checkout and recycles
+      dead connections before handing one to a caller (also kills the
+      `SSL error: unexpected eof while reading` surprises).
+
+    When `schema` is given, every connection runs `SET search_path = <schema>`
+    so all queries are scoped to that schema (test isolation).
     """
     params = parse_connection_string(connection_string)
-    parts = [f"{k}={v}" for k, v in params.items()]
+
+    # libpq per-connection `-c` options. `statement_timeout` bounds every
+    # query; `search_path` scopes to a schema when requested. Passed as a
+    # real connect kwarg (not via the conninfo string), so the spaces need
+    # no backslash escaping.
+    options = [f"-c statement_timeout={statement_timeout_ms}"]
     if schema:
-        # libpq per-connection options; runs at connect time and persists
-        # for the connection lifetime. Spaces in option values are
-        # backslash-escaped in conninfo strings.
-        parts.append(rf"options=-c\ search_path={schema}")
-    kwargs = " ".join(parts)
-    return ConnectionPool(kwargs, min_size=min_size, max_size=max_size, open=True)
+        options.append(f"-c search_path={schema}")
+
+    connect_kwargs: dict[str, Any] = {
+        **params,
+        "connect_timeout": connect_timeout,
+        # TCP keepalives — surface a dropped connection as an error rather
+        # than an indefinite block on a half-open socket.
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "options": " ".join(options),
+    }
+    return ConnectionPool(
+        "",
+        kwargs=connect_kwargs,
+        min_size=min_size,
+        max_size=max_size,
+        open=True,
+        # Validate (and recycle) a connection on checkout so a caller never
+        # gets a stale one that blocks forever.
+        check=ConnectionPool.check_connection,
+    )
 
 
 # ---------------------------------------------------------------------------
