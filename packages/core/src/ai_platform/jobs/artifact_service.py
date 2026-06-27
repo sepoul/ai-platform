@@ -6,15 +6,32 @@ stored payloads back into typed artifacts.
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Iterable
 from uuid import UUID
+
+from pydantic import ValidationError
 
 from ai_platform.jobs.artifact import BaseArtifact
 from ai_platform.workspace.storage.protocols import ArtifactRepository
 
 
+_log = logging.getLogger(__name__)
+
+
 ArtifactRegistry = dict[str, type[BaseArtifact]]
+
+
+class UnknownArtifactType(ValueError):
+    """Raised when a stored row's `artifact_type` has no registered class.
+
+    A distinct `ValueError` subclass so the batched list path can tell
+    "domain unregistered → reasonable to skip" apart from a recognized
+    type that failed to validate (`pydantic.ValidationError`, also a
+    `ValueError` subclass) — the latter is silent data loss and must be
+    loud. See issue #47.
+    """
 
 
 class ArtifactService:
@@ -151,16 +168,40 @@ class ArtifactService:
         for raw in payloads:
             try:
                 out.append(self._hydrate(raw))
-            except ValueError:
-                # Unknown artifact_type (e.g. a domain was unregistered
-                # after the row was written). Skip silently to match the
-                # router's existing resilience contract.
-                continue
+            except UnknownArtifactType:
+                # No registered class (e.g. a domain was unregistered
+                # after the row was written). Skipping is reasonable —
+                # but never silent: log so it's diagnosable. See #47.
+                _log.warning(
+                    "ArtifactService: skipping artifact id=%s — unknown "
+                    "artifact_type=%r (no registered class)",
+                    raw.get("artifact_id"),
+                    raw.get("artifact_type"),
+                )
+            except ValidationError as exc:
+                # Recognized type that failed to validate — class/payload
+                # skew (additive field on an older class, a newly-required
+                # field, or genuine corruption). This is silent data loss
+                # if dropped quietly, so log LOUDLY with the row id + the
+                # validation error. We still skip (don't 5xx the whole
+                # list on one bad row) but it's no longer invisible. See #47.
+                _log.error(
+                    "ArtifactService: DROPPING artifact id=%s type=%r — "
+                    "payload failed validation against the registered "
+                    "class. This is class/payload skew (deploy the new "
+                    "artifact class to the API before migrating rows). "
+                    "Details: %s",
+                    raw.get("artifact_id"),
+                    raw.get("artifact_type"),
+                    exc,
+                )
         return out
 
     def _hydrate(self, raw: dict) -> BaseArtifact:
         artifact_type = raw.get("artifact_type")
         cls = self.registry.get(artifact_type)
         if cls is None:
-            raise ValueError(f"No registered class for artifact_type={artifact_type!r}")
+            raise UnknownArtifactType(
+                f"No registered class for artifact_type={artifact_type!r}"
+            )
         return cls.model_validate(raw)

@@ -249,6 +249,52 @@ def test_service_skips_unknown_artifact_types_in_list(repo, service: ArtifactSer
     assert items[0].artifact_type == "type_a"
 
 
+def test_service_logs_unknown_artifact_type_at_warning(repo, service, caplog):
+    """Skipping an unknown type is reasonable, but must NOT be silent —
+    it logs at WARNING with the row id + type so it's diagnosable (#47).
+    """
+    ghost_id = str(uuid4())
+    repo.put(str(uuid4()), {
+        "artifact_id": ghost_id,
+        "artifact_type": "ghost",
+        "created_at": "2026-05-30T00:00:00Z",
+    })
+    with caplog.at_level("WARNING", logger="ai_platform.jobs.artifact_service"):
+        assert service.list_all() == []
+    assert any(
+        r.levelname == "WARNING" and ghost_id in r.getMessage() and "ghost" in r.getMessage()
+        for r in caplog.records
+    ), caplog.text
+
+
+def test_service_drops_validation_skew_loudly_not_silently(repo, service, caplog):
+    """A *recognized* type whose payload fails to validate (class/payload
+    skew — here an extra field rejected by `extra='forbid'`) must NOT
+    vanish silently. It's logged LOUDLY at ERROR with the row id + the
+    validation error. This is the landmine #47 is about: pydantic's
+    ValidationError is a ValueError subclass, so the old blanket
+    `except ValueError` swallowed it as if it were an unknown type.
+    """
+    service.put(_TypeA(value="good"))
+    skewed_id = str(uuid4())
+    # Smuggle a known-type row carrying a field the installed class
+    # doesn't know about (API on vN, row written by vN+1).
+    repo.put(str(uuid4()), {
+        "artifact_id": skewed_id,
+        "artifact_type": "type_a",
+        "value": "from-newer-class",
+        "created_at": "2026-05-30T00:00:00Z",
+        "field_added_in_a_newer_version": "boom",
+    })
+    with caplog.at_level("ERROR", logger="ai_platform.jobs.artifact_service"):
+        items = service.list_all()
+    # The good row still comes back; the skewed one is dropped...
+    assert [a.value for a in items] == ["good"]
+    # ...but loudly, at ERROR, naming the row id.
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert any(skewed_id in r.getMessage() for r in errors), caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Router — GET /artifacts uses the batched path
 # ---------------------------------------------------------------------------
