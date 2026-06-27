@@ -121,8 +121,8 @@ def _cmd_deploy(args: argparse.Namespace) -> int:
         print(f"  ✓ JobDefinition:  {jd}")
     for at in report["artifact_types"]:
         print(f"  ✓ ArtifactType:   {at}")
-    for name in report["prompts"]:
-        print(f"  ✓ Prompt:         {name}")
+    for p in report["prompts"]:
+        print(f"  ✓ Prompt:         {p['name']} ({p['action']})")
     print("Done.")
     return 0
 

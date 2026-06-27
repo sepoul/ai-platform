@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -16,6 +16,14 @@ class PromptResponse(BaseModel):
     version: str
     created_at: datetime
     updated_at: datetime
+
+
+class PromptDeployResponse(PromptResponse):
+    """`POST /prompts` result. `action` tells a deploy tool whether the
+    request created a new prompt, version-bumped an edited one, or was a
+    no-op — so `aip deploy` can report created/updated/unchanged instead of
+    a blanket "✓" that hides silently-dropped edits (issue #59)."""
+    action: Literal["created", "updated", "unchanged"]
 
 
 class PromptUpdateRequest(BaseModel):

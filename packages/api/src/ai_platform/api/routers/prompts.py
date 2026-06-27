@@ -9,6 +9,7 @@ from ai_platform.runtime.registry import get_platform_client
 from ai_platform.ai.prompts.models import Prompt
 from ai_platform.api.schemas.prompts import (
     PromptCreateRequest,
+    PromptDeployResponse,
     PromptExecutionListResponse,
     PromptExecutionResponse,
     PromptExecutionSummary,
@@ -45,15 +46,17 @@ def list_prompts(
     )
 
 
-@router.post("/prompts", response_model=PromptResponse)
+@router.post("/prompts", response_model=PromptDeployResponse)
 def create_prompt(
     body: PromptCreateRequest,
     svc: PromptRegistry = Depends(_get_prompt_service),
 ):
     """Deploy a prompt — the domain-facing write path, mirroring
-    `POST /artifact-types`. Get-or-create / idempotent on `name`: an
-    existing prompt is returned untouched (re-deploys are safe); use
-    `PUT /prompts/{name}` to change instructions on an existing one."""
+    `POST /artifact-types`. **Upsert by content** (issue #59): a new name is
+    created, an edited one is stored as a version-bumped copy, and an
+    unchanged one is a no-op. The `action` field reports which, so a deploy
+    tool can show created/updated/unchanged. Re-deploys stay safe and
+    idempotent; identical content never churns the version."""
     prompt = Prompt(
         name=body.name,
         domain=body.domain,
@@ -62,7 +65,8 @@ def create_prompt(
         kind=body.kind,  # type: ignore[arg-type]
         version=body.version,
     )
-    return _to_response(svc.get_or_create(prompt))
+    result, action = svc.upsert(prompt)
+    return PromptDeployResponse(**result.model_dump(), action=action)
 
 
 @router.get("/prompts/{name:path}", response_model=PromptResponse)
