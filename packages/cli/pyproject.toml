@@ -2,7 +2,16 @@
 name = "aiplatform-cli"
 version = "0.1.0"
 description = "Standalone, pure-HTTP control/ops CLI for the ai-platform. Talks to a deployment over its OpenAPI surface only — imports zero platform internals (issue #49). Installable independently of aiplatform-core: `pipx install aiplatform-cli`."
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Environment :: Console",
+    "Topic :: Software Development :: Build Tools",
+]
 
 # The whole point: a deploy/ops tool that depends on the API *contract*,
 # not the API's source. Its only runtime dependency is an HTTP client —
@@ -10,6 +19,10 @@ requires-python = ">=3.9"
 dependencies = [
     "httpx>=0.27",
 ]
+
+[project.urls]
+Homepage = "https://github.com/sepoul/ai-platform"
+Repository = "https://github.com/sepoul/ai-platform"
 
 [project.scripts]
 # `aip` (not `aiplatform`) so it can coexist with the in-core `aiplatform`
