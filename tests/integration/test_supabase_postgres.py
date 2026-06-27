@@ -1,9 +1,12 @@
 """Live round-trip tests for the four Supabase Postgres repositories.
 
-Runs against the `test` schema, not `public`. Every TRUNCATE and
-INSERT here is scoped via `search_path` to `test.*`, so production
-data in `public` is untouchable from this module. Schema is created
-on demand and migrations applied idempotently on fixture setup.
+Runs against a dedicated, **throwaway** `integration_tests` schema —
+never `public` (PROD) and never `test` (the local-dev schema, whose
+data we don't want wiped). Every TRUNCATE and INSERT here is scoped via
+`search_path` to that schema, so neither production data in `public`
+nor your local dev data in `test` is touchable from this module. The
+schema is created on demand and migrations applied idempotently on
+fixture setup. Override it with `INTEGRATION_TEST_SCHEMA` if needed.
 
 Skipped unless `SUPABASE_CONNECTION_STRING` is set.
 """
@@ -38,16 +41,31 @@ load_dotenv()
 if not os.getenv("SUPABASE_CONNECTION_STRING"):
     pytest.skip("SUPABASE_CONNECTION_STRING not set", allow_module_level=True)
 
-TEST_SCHEMA = "test"
+# A dedicated, throwaway schema for integration tests. Isolated from
+# `public` (PROD) and `test` (local dev). The fixture TRUNCATEs it on
+# every run, so it must be neither. Underscore (not a hyphen): a
+# hyphenated name isn't a bare SQL identifier and breaks `search_path`
+# scoping — the very mechanism keeping these TRUNCATEs in-schema.
+INTEGRATION_SCHEMA = os.getenv("INTEGRATION_TEST_SCHEMA", "integration_tests")
+
+# Hard safety rail: this module wipes its schema, so refuse to point it
+# at PROD (`public`) or local dev (`test`).
+if INTEGRATION_SCHEMA in ("", "public", "test"):
+    raise RuntimeError(
+        f"Refusing to run destructive integration tests against schema "
+        f"{INTEGRATION_SCHEMA!r}: it must not be 'public' (PROD) or 'test' "
+        f"(local dev). Set INTEGRATION_TEST_SCHEMA to a throwaway schema."
+    )
 
 
 @pytest.fixture(scope="module")
 def pool():
     conn_str = os.environ["SUPABASE_CONNECTION_STRING"]
-    # Create the test schema (idempotent) and run migrations inside it.
-    apply_migrations(conn_str, schema=TEST_SCHEMA)
-    p = make_pool(conn_str, schema=TEST_SCHEMA)
-    # TRUNCATE is now scoped to test.* via search_path — public is untouched.
+    # Create the dedicated schema (idempotent) and run migrations inside it.
+    apply_migrations(conn_str, schema=INTEGRATION_SCHEMA)
+    p = make_pool(conn_str, schema=INTEGRATION_SCHEMA)
+    # TRUNCATE is scoped to <INTEGRATION_SCHEMA>.* via search_path —
+    # `public` and `test` are untouched.
     with p.connection() as conn:
         conn.execute("TRUNCATE jobs, artifacts, prompts, prompt_executions")
     yield p
