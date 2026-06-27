@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from ai_platform.api.routers import workflows as workflows_mod
-from ai_platform.jobs.workflow_descriptor import build_workflow_descriptor
+from ai_platform.jobs.workflow_descriptor import build_descriptors_map, build_workflow_descriptor
 from ai_platform.jobs.execution_policy import (
     EdgeSpec,
     ExecutionPolicy,
@@ -144,3 +144,87 @@ def test_router_optional_when_ungenerated():
     client = _client(None)
     assert client.get("/workflows").json() == {"workflows": []}
     assert client.get("/workflows/demo").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# build_descriptors_map — intersection of both planes (issue #56)
+# ---------------------------------------------------------------------------
+
+def test_build_descriptors_map_only_emits_job_types_in_both_planes():
+    controls = {"demo": _control(), "control_only": _control()}
+    executions = {"demo": _execution(), "orphan_exec": _execution()}
+    out = build_descriptors_map(controls, executions)
+    # Only "demo" is in both planes; the control-only and execution-only
+    # entries are skipped (that's what makes the per-runtime split mergeable).
+    assert set(out) == {"demo"}
+    assert out["demo"]["job_type"] == "demo"
+    assert [s["id"] for s in out["demo"]["stages"]] == ["A", "B"]
+
+
+# ---------------------------------------------------------------------------
+# POST /workflows — merge-upsert into the blob (issue #56)
+# ---------------------------------------------------------------------------
+
+class _StatefulFileRepo:
+    """In-memory canonical-file store so POST→GET round-trips in one test."""
+
+    def __init__(self, initial: bytes | None = None):
+        self._blob = initial
+
+    def get_canonical_file_bytes(self, logical_name: str) -> bytes:
+        if self._blob is None:
+            raise ObjectNotFound(logical_name)
+        return self._blob
+
+    def put_canonical_file(self, payload):
+        self._blob = payload.bytes_data
+        return None
+
+
+def _rw_client(initial: bytes | None = None) -> TestClient:
+    fake = MagicMock()
+    fake.file_repo = _StatefulFileRepo(initial)
+    app = FastAPI()
+    app.include_router(workflows_mod.router)
+    app.dependency_overrides[deps_mod.get_platform_client] = lambda: fake
+    return TestClient(app)
+
+
+def _descriptor(job_type: str) -> dict:
+    d = build_workflow_descriptor(_control(), _execution()).model_dump(mode="json")
+    d["job_type"] = job_type
+    return d
+
+
+def test_push_workflows_creates_blob_then_serves_it():
+    client = _rw_client(None)  # nothing generated yet
+    resp = client.post("/workflows", json={"workflows": {"demo": _descriptor("demo")}})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["job_types"] == ["demo"]
+    # Now the GET surface is populated from the same store.
+    assert client.get("/workflows").json()["workflows"] == [
+        {"job_type": "demo", "label": "demo_graph"}
+    ]
+    assert client.get("/workflows/demo").status_code == 200
+
+
+def test_push_workflows_merges_across_runtimes():
+    client = _rw_client(None)
+    client.post("/workflows", json={"workflows": {"demo": _descriptor("demo")}})
+    # A second runtime pushes a different job type — must accumulate, not replace.
+    resp = client.post("/workflows", json={"workflows": {"other": _descriptor("other")}})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["job_types"] == ["demo", "other"]
+    listed = {w["job_type"] for w in client.get("/workflows").json()["workflows"]}
+    assert listed == {"demo", "other"}
+
+
+def test_push_workflows_upserts_existing_job_type():
+    client = _rw_client(None)
+    client.post("/workflows", json={"workflows": {"demo": _descriptor("demo")}})
+    updated = _descriptor("demo")
+    updated["label"] = "demo_graph_v2"
+    client.post("/workflows", json={"workflows": {"demo": updated}})
+    body = client.get("/workflows/demo").json()
+    assert body["label"] == "demo_graph_v2"  # replaced, not duplicated
+    assert len(client.get("/workflows").json()["workflows"]) == 1

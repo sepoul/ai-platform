@@ -121,6 +121,14 @@ class ApiClient:
             params["job_type"] = job_type
         return self._request("GET", "/jobs", params=params or None)
 
+    def list_workflows(self) -> Any:
+        return self._request("GET", "/workflows")
+
+    def push_workflows(self, workflows: dict[str, Any]) -> dict[str, Any]:
+        """Merge-upsert workflow descriptors (`{job_type: descriptor}`) into
+        the platform's workflows blob (POST /workflows, issue #56)."""
+        return self._request("POST", "/workflows", json={"workflows": workflows})
+
     # -- recovery (relies on POST /jobs/{id}/cancel, issue #48) -------------
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         return self._request("POST", f"/jobs/{job_id}/cancel")

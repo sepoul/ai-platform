@@ -42,6 +42,8 @@ aip deploy --catalog catalog.json            # uploads wheel + POSTs catalog
 | `aip artifact-types` | List registered artifact types |
 | `aip jobs [--status S] [--job-type T]` | List jobs |
 | `aip cancel JOB_ID` | Cancel / reclaim a job (`POST /jobs/{id}/cancel`) |
+| `aip workflows list` | List registered workflow descriptors |
+| `aip workflows push --file workflows.json` | Push descriptors (from `gen_workflows --out`), merge-upsert into the blob |
 | `aip snapshot-openapi [--out PATH]` | Dump `/openapi.json` for the SDK-regen workflow |
 
 ### Connection resolution

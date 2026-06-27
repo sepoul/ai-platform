@@ -84,6 +84,21 @@ def test_cancel_job_posts_to_cancel_path():
     assert out["status"] == "CANCELLED"
 
 
+def test_push_workflows_posts_wrapped_map():
+    captured: list[httpx.Request] = []
+    body = {"job_types": ["demo", "other"]}
+    with ApiClient("https://p", transport=_record_transport(captured, json_body=body)) as client:
+        out = client.push_workflows({"demo": {"job_type": "demo", "stages": [], "edges": []}})
+    req = captured[-1]
+    assert req.method == "POST"
+    assert str(req.url) == "https://p/workflows"
+    # The map is wrapped under the "workflows" key the endpoint expects.
+    assert json.loads(req.content) == {
+        "workflows": {"demo": {"job_type": "demo", "stages": [], "edges": []}}
+    }
+    assert out["job_types"] == ["demo", "other"]
+
+
 # ---------------------------------------------------------------------------
 # deploy_catalog
 # ---------------------------------------------------------------------------
