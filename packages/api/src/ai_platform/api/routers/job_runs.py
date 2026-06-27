@@ -115,4 +115,40 @@ def make_job_runs_router(jobs: dict[str, JobControl]) -> APIRouter:
 
         return RunSubmitResponse(job_id=str(record.spec.job_id), status=record.state.status.value)
 
+    # Terminal states a job can already be in — nothing to cancel.
+    _TERMINAL = (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED)
+
+    @router.post("/jobs/{job_id}/cancel", response_model=RunSubmitResponse)
+    def cancel_job(
+        job_id: str,
+        executor: GraphJobExecutor = Depends(get_executor),
+    ):
+        """Operator/recovery endpoint: force a job to the terminal
+        CANCELLED state.
+
+        The supported alternative to hand-editing the prod `jobs` table
+        when a job is orphaned in RUNNING (e.g. a poll worker wedged on a
+        no-timeout call and was restarted; nothing reclaims a stale
+        RUNNING row). Also sets `cancel_requested` so a still-live worker
+        can cooperatively bail. See issue #48.
+        """
+        try:
+            record = executor.repo.get(job_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+        if record.state.status in _TERMINAL:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job is already {record.state.status.value}; nothing to cancel",
+            )
+
+        # Signal cooperative cancellation for a live worker, then mark the
+        # row terminal so an orphaned RUNNING job is reclaimed immediately.
+        record.state.cancel_requested = True
+        record.mark_cancelled()
+        executor.repo.put(record)
+
+        return RunSubmitResponse(job_id=str(record.spec.job_id), status=record.state.status.value)
+
     return router
