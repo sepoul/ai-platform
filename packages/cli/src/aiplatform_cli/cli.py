@@ -76,6 +76,18 @@ def _build_parser() -> argparse.ArgumentParser:
     cancel.add_argument("job_id", help="Job id to cancel")
     _add_connection_args(cancel)
 
+    workflows = sub.add_parser("workflows", help="List or push workflow descriptors")
+    wf_sub = workflows.add_subparsers(dest="wf_action", required=True)
+    wf_list = wf_sub.add_parser("list", help="List registered workflow descriptors")
+    _add_connection_args(wf_list)
+    wf_push = wf_sub.add_parser(
+        "push",
+        help="Push descriptor JSON (from `gen_workflows --out`) to the platform",
+    )
+    wf_push.add_argument("--file", "-f", default="workflows.json",
+                         help="Descriptors JSON to push (default: ./workflows.json)")
+    _add_connection_args(wf_push)
+
     snapshot = sub.add_parser("snapshot-openapi", help="Write /openapi.json to a file")
     snapshot.add_argument("--out", default=_SNAPSHOT_DEFAULT, help=f"Output path (default: {_SNAPSHOT_DEFAULT})")
     _add_connection_args(snapshot)
@@ -181,6 +193,44 @@ def _cmd_cancel(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_workflows(args: argparse.Namespace) -> int:
+    if args.wf_action == "list":
+        with _client(args) as client:
+            try:
+                rows = client.list_workflows()
+            except ApiError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+        _print_rows(rows, fields=("job_type", "label"))
+        return 0
+
+    # push
+    path = Path(args.file)
+    if not path.exists():
+        print(f"error: descriptors file not found: {path}", file=sys.stderr)
+        return 2
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"error: {path} is not valid JSON: {exc}", file=sys.stderr)
+        return 2
+    # Accept either the raw {job_type: descriptor} map (what `gen_workflows
+    # --out` writes) or a {"workflows": {...}} wrapper.
+    workflows = loaded.get("workflows", loaded) if isinstance(loaded, dict) else loaded
+
+    with _client(args) as client:
+        print(f"→ Pushing {len(workflows)} workflow descriptor(s) from {path} to {client.base_url}")
+        try:
+            result = client.push_workflows(workflows)
+        except ApiError as exc:
+            print(f"workflows push failed: {exc}", file=sys.stderr)
+            return 1
+    for jt in (result or {}).get("job_types", []):
+        print(f"  ✓ {jt}")
+    print("Done.")
+    return 0
+
+
 def _cmd_snapshot_openapi(args: argparse.Namespace) -> int:
     with _client(args) as client:
         print(f"→ Snapshotting OpenAPI from {client.base_url}")
@@ -203,6 +253,7 @@ _HANDLERS = {
     "artifact-types": _cmd_artifact_types,
     "jobs": _cmd_jobs,
     "cancel": _cmd_cancel,
+    "workflows": _cmd_workflows,
     "snapshot-openapi": _cmd_snapshot_openapi,
 }
 

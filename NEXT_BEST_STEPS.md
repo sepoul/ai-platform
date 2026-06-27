@@ -11,6 +11,20 @@ for tracking.
 
 ## Recent landings
 
+- **#56 — Workflow descriptors in the deploy flow** ✅. `/workflows` no
+  longer comes up empty after a deploy. New seam mirrors the
+  export-manifest split: a pure `build_descriptors_map(controls,
+  executions)` (core, intersection of both planes); `gen_workflows`
+  gained `--out FILE` (emit descriptors JSON for transport) and
+  `--runtime` (scope to one runtime); a **merge-upsert** `POST /workflows`
+  (api) accumulates each runtime's contribution into the single blob; and
+  `aip workflows list|push` (cli, pure HTTP) drives it. Flow:
+  `python -m ai_platform.entrypoints.gen_workflows --runtime <rt> --out
+  wf.json` (per runtime) → `aip workflows push --file wf.json`. The
+  in-cluster `gen_workflows` (no args, writes the blob directly) still
+  works. Follow-up: fold the push into `aip deploy` once per-runtime
+  generation is wired into CI/deploy.
+
 - **#49 — Standalone `aiplatform-cli` (`aip`)** ✅ first cut. New
   `packages/cli/` ships a pure-HTTP ops CLI that imports **zero**
   platform internals (guarded by `tests/test_cli_no_platform_imports.py`)

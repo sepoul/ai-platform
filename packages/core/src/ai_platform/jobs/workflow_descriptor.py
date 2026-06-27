@@ -65,3 +65,24 @@ def build_workflow_descriptor(
         edges=[EdgeResponse(source=e.source, target=e.target, label=e.label) for e in execution.edges],
         gates=gates,
     )
+
+
+def build_descriptors_map(
+    controls: dict[str, JobControl],
+    executions: dict[str, JobExecution],
+) -> dict[str, dict]:
+    """Build `{job_type: descriptor-dict}` for every job type present in
+    **both** planes.
+
+    A descriptor needs the control (submit/review schemas) *and* the
+    execution (topology), so a job type registered in only one plane is
+    skipped. That's exactly what makes the per-runtime split work
+    (issue #56): a worker only imports the execution modules for *its*
+    runtime, so it emits only the job types it can actually see, and the
+    API merges each runtime's contribution into the single descriptors blob.
+    """
+    return {
+        name: build_workflow_descriptor(controls[name], executions[name]).model_dump(mode="json")
+        for name in executions
+        if name in controls
+    }
