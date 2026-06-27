@@ -109,9 +109,9 @@ def control_registers_from_catalog(
     records) are silently skipped — they'll be overwritten on the
     next auto-deploy.
 
-    Best-effort, mirrors [[control_registers]]: ModuleNotFoundError
-    → log + skip so a missing wheel degrades the API into serving
-    only the domains it could resolve.
+    Best-effort, mirrors [[control_registers]]: *any* import failure
+    → log + skip so a missing or incompatible wheel degrades the API
+    into serving only the domains it could resolve (issue #46).
 
     Returns an empty list if the catalog query itself fails (DB down
     on cold boot) — the caller can then fall back to
@@ -138,10 +138,15 @@ def control_registers_from_catalog(
             module_path, attr = _split_entrypoint(ep)
             module = importlib.import_module(module_path)
             out.append(getattr(module, attr))
-        except (ModuleNotFoundError, AttributeError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, isolate one bad domain
+            # A malformed/incompatible domain (import raising *anything* —
+            # TypeError, RuntimeError, an incompatible-dep break, …) must
+            # degrade to "that job type is unavailable", never take down
+            # every other domain on this runtime. Log the traceback so the
+            # offending domain is diagnosable. See issue #46.
             _log.warning(
                 "control_registers_from_catalog: skipping %s — %s",
-                ep, exc,
+                ep, exc, exc_info=True,
             )
     return out
 
@@ -176,10 +181,15 @@ def execution_registers_from_catalog(
             module_path, attr = _split_entrypoint(ep)
             module = importlib.import_module(module_path)
             out.append(getattr(module, attr))
-        except (ModuleNotFoundError, AttributeError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 — best-effort, isolate one bad domain
+            # A malformed/incompatible domain (import raising *anything* —
+            # TypeError, RuntimeError, an incompatible-dep break, …) must
+            # degrade to "that job type is unavailable", never crash-loop
+            # the whole worker runtime. Log the traceback so the offending
+            # domain is diagnosable. See issue #46.
             _log.warning(
                 "execution_registers_from_catalog: skipping %s — %s",
-                ep, exc,
+                ep, exc, exc_info=True,
             )
     return out
 

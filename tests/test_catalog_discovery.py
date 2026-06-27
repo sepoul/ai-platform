@@ -228,3 +228,66 @@ def test_execution_from_catalog_returns_empty_on_list_failure():
     svc = MagicMock()
     svc.list.side_effect = RuntimeError("DB down")
     assert execution_registers_from_catalog(svc, "default") == []
+
+
+# ---------------------------------------------------------------------------
+# One bad domain must not take down the rest (issue #46). A domain whose
+# module raises at import — with *any* exception, not just the narrow
+# ModuleNotFoundError/AttributeError/ValueError set — must be logged and
+# skipped, while every other domain on the runtime keeps registering.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def exploding_domain_module():
+    """Register a parent package + a module that raises a non-narrow
+    exception (TypeError) when imported, mimicking an incompatible-dep
+    break like the pydantic-graph 2.x `Graph.__init__()` regression.
+    """
+    name = "explodingdomain.execution"
+
+    class _Boom(types.ModuleType):
+        def __getattr__(self, attr):
+            raise TypeError(
+                "Graph.__init__() missing 8 required positional arguments"
+            )
+
+    sys.modules.setdefault("explodingdomain", types.ModuleType("explodingdomain"))
+    sys.modules[name] = _Boom(name)
+    yield "explodingdomain.execution:register_execution"
+    sys.modules.pop(name, None)
+    sys.modules.pop("explodingdomain", None)
+
+
+@pytest.mark.parametrize(
+    "registers_from_catalog, ep_kwarg, sentinel_key",
+    [
+        (control_registers_from_catalog, "control_entrypoint", "a_control"),
+        (execution_registers_from_catalog, "code_entrypoint", "a_execution"),
+    ],
+)
+def test_from_catalog_isolates_non_narrow_import_failure(
+    fake_domain_modules,
+    exploding_domain_module,
+    registers_from_catalog,
+    ep_kwarg,
+    sentinel_key,
+):
+    """A domain whose import raises TypeError (outside the old narrow
+    catch tuple) is skipped, not propagated — the healthy domain still
+    registers. Before the fix this leaked out and crash-looped the
+    whole runtime.
+    """
+    healthy_ep = (
+        "syntheticdomain.a.control:register_control"
+        if ep_kwarg == "control_entrypoint"
+        else "syntheticdomain.a.execution:register_execution"
+    )
+    svc = MagicMock()
+    svc.list.return_value = [
+        _record("boom", **{ep_kwarg: exploding_domain_module}),
+        _record("healthy", **{ep_kwarg: healthy_ep}),
+    ]
+    args = (svc,) if registers_from_catalog is control_registers_from_catalog else (svc, "default")
+    out = registers_from_catalog(*args)
+    assert out == [fake_domain_modules[sentinel_key]]
