@@ -89,6 +89,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Job
+         * @description Operator/recovery endpoint: force a job to the terminal
+         *     CANCELLED state.
+         *
+         *     The supported alternative to hand-editing the prod `jobs` table
+         *     when a job is orphaned in RUNNING (e.g. a poll worker wedged on a
+         *     no-timeout call and was restarted; nothing reclaims a stale
+         *     RUNNING row). Also sets `cancel_requested` so a still-live worker
+         *     can cooperatively bail. See issue #48.
+         */
+        post: operations["cancel_job_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/job-definitions": {
         parameters: {
             query?: never;
@@ -786,10 +813,12 @@ export interface components {
          *     (children); `synthesis` is the cleaned-up note-level math. `image_refs`
          *     holds the notebook-photo storage_refs.
          *
-         *     `pages`, `synthesis`, and `schema_version` are additive (optional with
-         *     defaults) so old rows — written before the redesign — still hydrate under
-         *     the current class. `schema_version` is the migration's idempotency marker:
-         *     old rows default to 1; new/migrated documents are 2.
+         *     `pages`, `synthesis`, `magnitude`, and `schema_version` are additive
+         *     (optional with defaults) so old rows — written before the redesign — still
+         *     hydrate under the current class. `schema_version` is the migration's
+         *     idempotency marker: old rows default to 1; the document redesign is 2; rows
+         *     carrying `magnitude` (and the enriched, section-capable `synthesis` shape)
+         *     are 3.
          */
         DailyNoteArtifact: {
             /**
@@ -845,6 +874,8 @@ export interface components {
             pages?: components["schemas"]["NotePage"][];
             /** @description Note-level synthesised, always-correct math. */
             synthesis?: components["schemas"]["NoteSynthesis"] | null;
+            /** @description Fused content-density signal (transcript + pages + duration). */
+            magnitude?: components["schemas"]["NoteMagnitude"] | null;
             /**
              * Ocr Text
              * @description Legacy combined text/LaTeX parsed from the note's photos.
@@ -852,7 +883,7 @@ export interface components {
             ocr_text?: string | null;
             /**
              * Schema Version
-             * @description Document shape version (1 = pre-redesign).
+             * @description Document shape version (1=pre-redesign, 2=document, 3=magnitude + enriched synthesis shape, 4=adaptive/sectioned synthesis).
              * @default 1
              */
             schema_version: number;
@@ -924,7 +955,7 @@ export interface components {
         /** FullArtifactListResponse */
         FullArtifactListResponse: {
             /** Artifacts */
-            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
+            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
             /** Total */
             total: number;
         };
@@ -1095,7 +1126,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -1121,7 +1152,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -1312,7 +1343,8 @@ export interface components {
          *     `audio_ref` is the voice note to transcribe (a `storage_ref` from the
          *     `POST /media` response); `image_refs` are optional notebook photos
          *     captured alongside it. `note_date` defaults to today (resolved in the
-         *     graph node) when omitted.
+         *     graph node) when omitted. `flairs` are learner directives that steer the
+         *     synthesis (e.g. `dont_spoil` — don't finish/reveal an unfinished exercise).
          */
         MathNotesInput: {
             /**
@@ -1340,6 +1372,11 @@ export interface components {
              * @description The learner capturing the note.
              */
             created_by?: string | null;
+            /**
+             * Flairs
+             * @description Learner directives steering the synthesis (e.g. dont_spoil).
+             */
+            flairs?: components["schemas"]["NoteFlair"][];
         };
         /**
          * MathNotesResult
@@ -1451,6 +1488,63 @@ export interface components {
             content_type?: string | null;
             /** Byte Size */
             byte_size: number;
+        };
+        /**
+         * NoteFlair
+         * @description A learner directive attached to a note that steers the synthesis.
+         *
+         *     A flair is a structured, first-class instruction (vs. one buried in the
+         *     transcript) the synthesis pass MUST honor — it overrides the default
+         *     silent-corrector behavior. The directive *text* for each flair lives in the
+         *     prompt registry as `math_notes.flair.<value>` (deployed via
+         *     `aiplatform deploy-prompts` from `instructions/flair/<value>.md`) and is
+         *     fetched at synthesis time, so the wording is tunable without a redeploy;
+         *     this enum is just the typed, validated set of keys the UI offers.
+         * @enum {string}
+         */
+        NoteFlair: "dont_spoil";
+        /**
+         * NoteMagnitude
+         * @description Multi-modal density signal for a note — "how much" it contains.
+         *
+         *     Fuses the three modalities into one struct: `transcript_chars` (what they
+         *     said), `page_count` + `page_chars` (what they wrote, the strongest scope
+         *     proxy), and `duration_seconds` (a minor, often-absent signal — the default
+         *     transcription model doesn't surface it). `density_tier` is the coarse bucket
+         *     downstream synthesis reads to scale its depth/effort. Threaded on
+         *     `MathNotesState` and persisted on `DailyNoteArtifact` (additive).
+         */
+        NoteMagnitude: {
+            /**
+             * Transcript Chars
+             * @description Character length of the voice-note transcript.
+             * @default 0
+             */
+            transcript_chars: number;
+            /**
+             * Page Count
+             * @description Number of notebook pages captured (strongest scope proxy).
+             * @default 0
+             */
+            page_count: number;
+            /**
+             * Page Chars
+             * @description Total chars of faithful per-page transcription.
+             * @default 0
+             */
+            page_chars: number;
+            /**
+             * Density Tier
+             * @description Coarse content-volume bucket (page_count-weighted): brief|standard|deep.
+             * @default brief
+             * @enum {string}
+             */
+            density_tier: "brief" | "standard" | "deep";
+            /**
+             * Duration Seconds
+             * @description Audio duration if the transcription surfaced it (minor signal).
+             */
+            duration_seconds?: number | null;
         };
         /**
          * NotePage
@@ -1565,6 +1659,37 @@ export interface components {
             concepts?: string[];
         };
         /**
+         * NoteSection
+         * @description One topical section of a note's synthesis — a heading, its prose+math,
+         *     and the concepts it touches.
+         *
+         *     The structured counterpart to the flat `markdown` blob: a multi-topic study
+         *     session can render as one `NoteSection` per topic (each its own
+         *     KaTeX-validated Markdown + concepts) instead of collapsing into a single
+         *     block. Additive — short, single-topic notes leave `sections` empty and keep
+         *     using the flat `markdown` field. Populating these is the adaptive/segmented
+         *     synthesis pass's job (epic #14, S4); this story (S5) just owns the shape.
+         */
+        NoteSection: {
+            /**
+             * Heading
+             * @description Short topical heading for the section (e.g. a `##` title).
+             * @default
+             */
+            heading: string;
+            /**
+             * Markdown
+             * @description Prose + embedded KaTeX-validated LaTeX for this section.
+             * @default
+             */
+            markdown: string;
+            /**
+             * Concepts
+             * @description Mathematical concepts this section touches.
+             */
+            concepts?: string[];
+        };
+        /**
          * NoteSynthesis
          * @description The note-level synthesis — one coherent, always-correct view of the math.
          *
@@ -1572,6 +1697,13 @@ export interface components {
          *     `markdown` is prose with embedded KaTeX-validated LaTeX (document mode);
          *     `concepts` and `summary` are note-level. Never reproduces an error the
          *     learner made — it reconstructs the intended math silently.
+         *
+         *     Enriched (epic #14, S5) so a substantial session is more than one flat blob:
+         *     `sections` carries per-topic structure, `depth_tier` marks how deep the
+         *     synthesis rendered, and `magnitude` embeds the fused density signal the
+         *     depth was scaled to. All three are additive (optional / default-empty) — the
+         *     flat `markdown` stays the canonical field for short notes and back-compat,
+         *     and rows written before the enrichment hydrate unchanged.
          */
         NoteSynthesis: {
             /**
@@ -1589,6 +1721,18 @@ export interface components {
              * @description A short prose summary of the note.
              */
             summary?: string | null;
+            /**
+             * Sections
+             * @description Per-topic sections for a multi-topic note (empty for short notes).
+             */
+            sections?: components["schemas"]["NoteSection"][];
+            /**
+             * Depth Tier
+             * @description Depth the synthesis rendered at (brief|standard|deep); None if unset.
+             */
+            depth_tier?: ("brief" | "standard" | "deep") | null;
+            /** @description Density signal the synthesis depth was scaled to (S1's NoteMagnitude). */
+            magnitude?: components["schemas"]["NoteMagnitude"] | null;
             /**
              * Model Used
              * @description The model that produced the synthesis.
@@ -1730,8 +1874,8 @@ export interface components {
             /** Instructions */
             instructions?: string | null;
         };
-        /** RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -1951,8 +2095,11 @@ export type SchemaMathQaInput = components['schemas']['MathQAInput'];
 export type SchemaMathQaResult = components['schemas']['MathQAResult'];
 export type SchemaMathQuestionArtifact = components['schemas']['MathQuestionArtifact'];
 export type SchemaMediaRef = components['schemas']['MediaRef'];
+export type SchemaNoteFlair = components['schemas']['NoteFlair'];
+export type SchemaNoteMagnitude = components['schemas']['NoteMagnitude'];
 export type SchemaNotePage = components['schemas']['NotePage'];
 export type SchemaNotePageArtifact = components['schemas']['NotePageArtifact'];
+export type SchemaNoteSection = components['schemas']['NoteSection'];
 export type SchemaNoteSynthesis = components['schemas']['NoteSynthesis'];
 export type SchemaParamSpec = components['schemas']['ParamSpec'];
 export type SchemaPromptCreateRequest = components['schemas']['PromptCreateRequest'];
@@ -1962,7 +2109,7 @@ export type SchemaPromptExecutionSummary = components['schemas']['PromptExecutio
 export type SchemaPromptListResponse = components['schemas']['PromptListResponse'];
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
-export type SchemaRootModelAnnotatedUnionMathNotesInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -2083,7 +2230,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -2121,6 +2268,37 @@ export interface operations {
                 "application/json": components["schemas"]["UserComment"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubmitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_job_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2937,7 +3115,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
+                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
                 };
             };
             /** @description Validation Error */
@@ -2968,7 +3146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
                 };
             };
             /** @description Validation Error */

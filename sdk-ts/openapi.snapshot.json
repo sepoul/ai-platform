@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -284,6 +284,49 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "Platform / Jobs"
+        ],
+        "summary": "Cancel Job",
+        "description": "Operator/recovery endpoint: force a job to the terminal\nCANCELLED state.\n\nThe supported alternative to hand-editing the prod `jobs` table\nwhen a job is orphaned in RUNNING (e.g. a poll worker wedged on a\nno-timeout call and was restarted; nothing reclaims a stale\nRUNNING row). Also sets `cancel_requested` so a still-live worker\ncan cooperatively bail. See issue #48.",
+        "operationId": "cancel_job_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1465,9 +1508,6 @@
                         "$ref": "#/components/schemas/NotePageArtifact"
                       },
                       {
-                        "$ref": "#/components/schemas/MathConversationArtifact"
-                      },
-                      {
                         "$ref": "#/components/schemas/MathQuestionArtifact"
                       },
                       {
@@ -1481,6 +1521,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/FigureArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
                       }
                     ],
                     "discriminator": {
@@ -1488,12 +1531,12 @@
                       "mapping": {
                         "daily_note": "#/components/schemas/DailyNoteArtifact",
                         "note_page": "#/components/schemas/NotePageArtifact",
-                        "math_conversation": "#/components/schemas/MathConversationArtifact",
                         "math_question": "#/components/schemas/MathQuestionArtifact",
                         "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                         "user_comment": "#/components/schemas/UserCommentArtifact",
                         "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                        "figure": "#/components/schemas/FigureArtifact"
+                        "figure": "#/components/schemas/FigureArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact"
                       }
                     }
                   },
@@ -1549,9 +1592,6 @@
                       "$ref": "#/components/schemas/NotePageArtifact"
                     },
                     {
-                      "$ref": "#/components/schemas/MathConversationArtifact"
-                    },
-                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1565,6 +1605,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/FigureArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
                     }
                   ],
                   "discriminator": {
@@ -1572,12 +1615,12 @@
                     "mapping": {
                       "daily_note": "#/components/schemas/DailyNoteArtifact",
                       "note_page": "#/components/schemas/NotePageArtifact",
-                      "math_conversation": "#/components/schemas/MathConversationArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
                       "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                      "figure": "#/components/schemas/FigureArtifact"
+                      "figure": "#/components/schemas/FigureArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact"
                     }
                   },
                   "title": "Response Get Artifact Artifacts  Artifact Id  Get"
@@ -2329,6 +2372,17 @@
             ],
             "description": "Note-level synthesised, always-correct math."
           },
+          "magnitude": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteMagnitude"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fused content-density signal (transcript + pages + duration)."
+          },
           "ocr_text": {
             "anyOf": [
               {
@@ -2345,7 +2399,7 @@
             "type": "integer",
             "minimum": 1.0,
             "title": "Schema Version",
-            "description": "Document shape version (1 = pre-redesign).",
+            "description": "Document shape version (1=pre-redesign, 2=document, 3=magnitude + enriched synthesis shape, 4=adaptive/sectioned synthesis).",
             "default": 1
           }
         },
@@ -2355,7 +2409,7 @@
           "note_date"
         ],
         "title": "DailyNoteArtifact",
-        "description": "One captured study note, tied to a calendar day \u2014 a self-contained document.\n\n`storage_ref` / `content_type` / `byte_size` are inherited from\n`BaseArtifact` and point at the uploaded **audio** blob. `transcript` is\nthe voice-note transcription; `pages` holds the raw per-photo extraction\n(children); `synthesis` is the cleaned-up note-level math. `image_refs`\nholds the notebook-photo storage_refs.\n\n`pages`, `synthesis`, and `schema_version` are additive (optional with\ndefaults) so old rows \u2014 written before the redesign \u2014 still hydrate under\nthe current class. `schema_version` is the migration's idempotency marker:\nold rows default to 1; new/migrated documents are 2."
+        "description": "One captured study note, tied to a calendar day \u2014 a self-contained document.\n\n`storage_ref` / `content_type` / `byte_size` are inherited from\n`BaseArtifact` and point at the uploaded **audio** blob. `transcript` is\nthe voice-note transcription; `pages` holds the raw per-photo extraction\n(children); `synthesis` is the cleaned-up note-level math. `image_refs`\nholds the notebook-photo storage_refs.\n\n`pages`, `synthesis`, `magnitude`, and `schema_version` are additive\n(optional with defaults) so old rows \u2014 written before the redesign \u2014 still\nhydrate under the current class. `schema_version` is the migration's\nidempotency marker: old rows default to 1; the document redesign is 2; rows\ncarrying `magnitude` (and the enriched, section-capable `synthesis` shape)\nare 3."
       },
       "EdgeResponse": {
         "properties": {
@@ -2498,9 +2552,6 @@
                   "$ref": "#/components/schemas/NotePageArtifact"
                 },
                 {
-                  "$ref": "#/components/schemas/MathConversationArtifact"
-                },
-                {
                   "$ref": "#/components/schemas/MathQuestionArtifact"
                 },
                 {
@@ -2514,6 +2565,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/FigureArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
                 }
               ],
               "discriminator": {
@@ -2856,10 +2910,10 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   }
                 ],
                 "discriminator": {
@@ -2966,10 +3020,10 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   }
                 ],
                 "discriminator": {
@@ -3408,6 +3462,14 @@
             ],
             "title": "Created By",
             "description": "The learner capturing the note."
+          },
+          "flairs": {
+            "items": {
+              "$ref": "#/components/schemas/NoteFlair"
+            },
+            "type": "array",
+            "title": "Flairs",
+            "description": "Learner directives steering the synthesis (e.g. dont_spoil)."
           }
         },
         "additionalProperties": false,
@@ -3416,7 +3478,7 @@
           "audio_ref"
         ],
         "title": "MathNotesInput",
-        "description": "Submit input for a `math_notes` ingest job.\n\n`audio_ref` is the voice note to transcribe (a `storage_ref` from the\n`POST /media` response); `image_refs` are optional notebook photos\ncaptured alongside it. `note_date` defaults to today (resolved in the\ngraph node) when omitted."
+        "description": "Submit input for a `math_notes` ingest job.\n\n`audio_ref` is the voice note to transcribe (a `storage_ref` from the\n`POST /media` response); `image_refs` are optional notebook photos\ncaptured alongside it. `note_date` defaults to today (resolved in the\ngraph node) when omitted. `flairs` are learner directives that steer the\nsynthesis (e.g. `dont_spoil` \u2014 don't finish/reveal an unfinished exercise)."
       },
       "MathNotesResult": {
         "properties": {
@@ -3709,6 +3771,67 @@
         "title": "MediaRef",
         "description": "Handle for an uploaded blob \u2014 what `POST /media` returns and what\na domain stamps onto a `storage_ref`-backed `BaseArtifact`."
       },
+      "NoteFlair": {
+        "type": "string",
+        "enum": [
+          "dont_spoil"
+        ],
+        "title": "NoteFlair",
+        "description": "A learner directive attached to a note that steers the synthesis.\n\nA flair is a structured, first-class instruction (vs. one buried in the\ntranscript) the synthesis pass MUST honor \u2014 it overrides the default\nsilent-corrector behavior. The directive *text* for each flair lives in the\nprompt registry as `math_notes.flair.<value>` (deployed via\n`aiplatform deploy-prompts` from `instructions/flair/<value>.md`) and is\nfetched at synthesis time, so the wording is tunable without a redeploy;\nthis enum is just the typed, validated set of keys the UI offers."
+      },
+      "NoteMagnitude": {
+        "properties": {
+          "transcript_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transcript Chars",
+            "description": "Character length of the voice-note transcript.",
+            "default": 0
+          },
+          "page_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Page Count",
+            "description": "Number of notebook pages captured (strongest scope proxy).",
+            "default": 0
+          },
+          "page_chars": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Page Chars",
+            "description": "Total chars of faithful per-page transcription.",
+            "default": 0
+          },
+          "density_tier": {
+            "type": "string",
+            "enum": [
+              "brief",
+              "standard",
+              "deep"
+            ],
+            "title": "Density Tier",
+            "description": "Coarse content-volume bucket (page_count-weighted): brief|standard|deep.",
+            "default": "brief"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds",
+            "description": "Audio duration if the transcription surfaced it (minor signal)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NoteMagnitude",
+        "description": "Multi-modal density signal for a note \u2014 \"how much\" it contains.\n\nFuses the three modalities into one struct: `transcript_chars` (what they\nsaid), `page_count` + `page_chars` (what they wrote, the strongest scope\nproxy), and `duration_seconds` (a minor, often-absent signal \u2014 the default\ntranscription model doesn't surface it). `density_tier` is the coarse bucket\ndownstream synthesis reads to scale its depth/effort. Threaded on\n`MathNotesState` and persisted on `DailyNoteArtifact` (additive)."
+      },
       "NotePage": {
         "properties": {
           "page_index": {
@@ -3919,6 +4042,34 @@
         "title": "NotePageArtifact",
         "description": "LEGACY per-photo artifact \u2014 no longer minted, kept for back-compat.\n\nBefore the document redesign, each photo was minted as its own\n`note_page` row linked to the parent via `source_note_id`. New ingests\nembed page data on `DailyNoteArtifact.pages` instead, but this class stays\nregistered so old rows still hydrate on read and the migration\n(`scripts/migrate_notes_to_document.py`) can query them as its source."
       },
+      "NoteSection": {
+        "properties": {
+          "heading": {
+            "type": "string",
+            "title": "Heading",
+            "description": "Short topical heading for the section (e.g. a `##` title).",
+            "default": ""
+          },
+          "markdown": {
+            "type": "string",
+            "title": "Markdown",
+            "description": "Prose + embedded KaTeX-validated LaTeX for this section.",
+            "default": ""
+          },
+          "concepts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concepts",
+            "description": "Mathematical concepts this section touches."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NoteSection",
+        "description": "One topical section of a note's synthesis \u2014 a heading, its prose+math,\nand the concepts it touches.\n\nThe structured counterpart to the flat `markdown` blob: a multi-topic study\nsession can render as one `NoteSection` per topic (each its own\nKaTeX-validated Markdown + concepts) instead of collapsing into a single\nblock. Additive \u2014 short, single-topic notes leave `sections` empty and keep\nusing the flat `markdown` field. Populating these is the adaptive/segmented\nsynthesis pass's job (epic #14, S4); this story (S5) just owns the shape."
+      },
       "NoteSynthesis": {
         "properties": {
           "markdown": {
@@ -3953,6 +4104,42 @@
             "title": "Summary",
             "description": "A short prose summary of the note."
           },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/NoteSection"
+            },
+            "type": "array",
+            "title": "Sections",
+            "description": "Per-topic sections for a multi-topic note (empty for short notes)."
+          },
+          "depth_tier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "brief",
+                  "standard",
+                  "deep"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth Tier",
+            "description": "Depth the synthesis rendered at (brief|standard|deep); None if unset."
+          },
+          "magnitude": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteMagnitude"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Density signal the synthesis depth was scaled to (S1's NoteMagnitude)."
+          },
           "model_used": {
             "anyOf": [
               {
@@ -3976,7 +4163,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "NoteSynthesis",
-        "description": "The note-level synthesis \u2014 one coherent, always-correct view of the math.\n\nProduced by the synthesis pass over the transcript + all page extractions.\n`markdown` is prose with embedded KaTeX-validated LaTeX (document mode);\n`concepts` and `summary` are note-level. Never reproduces an error the\nlearner made \u2014 it reconstructs the intended math silently."
+        "description": "The note-level synthesis \u2014 one coherent, always-correct view of the math.\n\nProduced by the synthesis pass over the transcript + all page extractions.\n`markdown` is prose with embedded KaTeX-validated LaTeX (document mode);\n`concepts` and `summary` are note-level. Never reproduces an error the\nlearner made \u2014 it reconstructs the intended math silently.\n\nEnriched (epic #14, S5) so a substantial session is more than one flat blob:\n`sections` carries per-topic structure, `depth_tier` marks how deep the\nsynthesis rendered, and `magnitude` embeds the fused density signal the\ndepth was scaled to. All three are additive (optional / default-empty) \u2014 the\nflat `markdown` stays the canonical field for short notes and back-compat,\nand rows written before the enrichment hydrate unchanged."
       },
       "ParamSpec": {
         "properties": {
@@ -4263,19 +4450,19 @@
         "type": "object",
         "title": "PromptUpdateRequest"
       },
-      "RootModel_Annotated_Union_MathNotesInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/MathNotesInput"
           },
           {
-            "$ref": "#/components/schemas/MathConversationInput"
+            "$ref": "#/components/schemas/MathQAInput"
           },
           {
-            "$ref": "#/components/schemas/MathQAInput"
+            "$ref": "#/components/schemas/MathConversationInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathNotesInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {
