@@ -27,6 +27,7 @@ from ai_platform.api.app import build_api  # noqa: E402
 from ai_platform.compute.bootstrap import bootstrap_compute  # noqa: E402
 from ai_platform.jobs.bootstrap import register_control_domains  # noqa: E402
 from ai_platform.jobs.code_package_install import install_control_packages_for_api  # noqa: E402
+from ai_platform.jobs.runtimes import DEFAULT_RUNTIME  # noqa: E402
 from ai_platform.workspace.bootstrap import bootstrap_workspace  # noqa: E402
 from ai_platform.composition_root import (  # noqa: E402
     control_registers,
@@ -74,6 +75,23 @@ else:
 
 # Control plane only — every job type, across all runtimes, no engine import.
 _domains = register_control_domains(_registers, _workspace)
-_compute = bootstrap_compute(_workspace.executor, {})
+
+
+def _runtime_for_job_type(job_type: str) -> str:
+    """Resolve a job_type's worker runtime for Celery's per-runtime routing
+    (issue #66). The JobDefinition catalog's `runtime_selector` is the
+    authoritative source and stays current as domains deploy. Unknown or
+    unreachable → default runtime (the default consumer then fails fast on
+    an unservable job_type). No-op when COMPUTE != celery.
+    """
+    try:
+        return _workspace.job_definition_service.get_by_name(job_type).runtime_selector
+    except Exception:
+        return DEFAULT_RUNTIME
+
+
+_compute = bootstrap_compute(
+    _workspace.executor, {}, runtime_for_job_type=_runtime_for_job_type
+)
 
 app = build_api(workspace=_workspace, domains=_domains, compute=_compute)
