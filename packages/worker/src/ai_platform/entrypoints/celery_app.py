@@ -17,11 +17,23 @@ pydantic_ai stack) never receives a job it can't import. Deploy one
 consumer per runtime (`celery-worker` / `celery-worker-crewai`), each
 with the matching `WORKER_RUNTIME`.
 
-Bootstrap runs in `worker_process_init`, NOT at module import. Celery's
-prefork pool would otherwise inherit the master's psycopg connections
-across the fork; those file descriptors aren't safe to share, and the
-first task on each child hangs on `pool.getconn` until it times out
-after 30s. Initialising per-child gives each worker its own pool.
+Two boot hooks, split by what they touch (issue #73):
+
+- `worker_init` (main process, once, BEFORE the fork) installs this
+  runtime's CodePackages. pip mutates the shared `site-packages`, so it
+  must run exactly once: the old wiring ran it per child, so with
+  `CELERY_CONCURRENCY=N` all N children pip-installed the same wheels into
+  the same dir concurrently — corrupting each other (the `google/_upb/`
+  missing-file error) and leaving children serving inconsistent domain
+  sets. The transient DB pool it opens to read the catalog is closed before
+  returning, so no socket is inherited across the fork (see below).
+- `worker_process_init` (per prefork child) opens that child's own psycopg
+  pool and registers this runtime's domains by importing the now-installed
+  wheels off disk. It must stay per-child — celery's prefork pool would
+  otherwise inherit the master's psycopg connections across the fork; those
+  file descriptors aren't safe to share, and the first task on each child
+  hangs on `pool.getconn` until it times out after 30s. It no longer
+  installs anything.
 
 Durability net (issue #67). Under `COMPUTE=poll` the repo *is* the queue,
 so a lost worker self-heals on the next `SELECT`. Celery gives that up —
@@ -43,14 +55,16 @@ import os
 import traceback
 
 from celery import Celery
-from celery.signals import worker_process_init
+from celery.signals import worker_init, worker_process_init
 
 from ai_platform.compute.celery import celery_queue_for_runtime
 from ai_platform.jobs.bootstrap import register_execution_domains
 from ai_platform.jobs.code_package_install import install_packages_for_runtime
+from ai_platform.jobs.code_package_service import CodePackageService
 from ai_platform.jobs.job_runner import run_graph_job
 from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
+from ai_platform.workspace.storage.backends import make_backend
 from ai_platform.composition_root import (
     execution_registers_for_runtime,
     execution_registers_from_catalog,
@@ -79,22 +93,66 @@ _domains = None
 WORKER_ID = "celery-unbootstrapped"
 
 
+@worker_init.connect
+def _install_runtime_packages(**_kwargs) -> None:
+    """Install this runtime's CodePackages ONCE in the worker's main process,
+    before the prefork pool forks children (issue #73).
+
+    pip installs into the interpreter's shared `site-packages`. The old wiring
+    ran this inside `worker_process_init`, so with `CELERY_CONCURRENCY=N` all N
+    children pip-installed the same wheels into the same dir concurrently —
+    corrupting each other (`OSError ... google/_upb/`) and leaving children
+    serving different domain sets. Hoisting it to `worker_init` (main process,
+    pre-fork) makes it happen exactly once; each child then imports the landed
+    wheels off disk when it registers domains in `worker_process_init`.
+
+    Best-effort + idempotent, like the poll worker (entrypoints/worker.py):
+    already-installed wheels short-circuit before any pip call, and a failed
+    install logs + continues — the worker still serves the JobDefinitions baked
+    into its image.
+
+    Fork-safety: this opens a transient backend purely to read the CodePackage
+    catalog, then CLOSES its psycopg pool before returning. An open pool here
+    would be inherited across the fork and hang the children on first checkout —
+    the exact reason the per-child bootstrap in `worker_process_init` exists
+    (see the module docstring). The main process never runs jobs, so it has no
+    further use for the pool.
+    """
+    backend = make_backend()
+    try:
+        service = CodePackageService(backend.code_package_repo, backend.file_repo)
+        installed = install_packages_for_runtime(RUNTIME, service)
+        if installed:
+            logger.info(
+                "Installed %d CodePackage(s) at boot (runtime=%s): %s",
+                len(installed), RUNTIME, installed,
+            )
+    finally:
+        # Release the catalog pool's connection FDs before the fork. Backends
+        # without a DB pool (local / b2) expose no `_pool`, so this is a no-op
+        # there; only the supabase backend opens one.
+        pool = getattr(backend, "_pool", None)
+        if pool is not None:
+            try:
+                pool.close()
+            except Exception:  # noqa: BLE001 — best-effort teardown
+                logger.exception("Failed to close boot-time catalog pool")
+
+
 @worker_process_init.connect
 def _init_worker(**_kwargs) -> None:
     global _workspace, _domains, WORKER_ID
     _workspace = bootstrap_workspace()
 
     # Scope registration to this pool's runtime, exactly like the poll worker
-    # (entrypoints/worker.py): install any CodePackages deployed for the
-    # runtime, then discover its domains from the JobDefinition catalog
-    # (hardcoded `_DOMAINS` fallback for cold boot). The pool registers ONLY
-    # its runtime's domains; the broker only ever hands it that runtime's
-    # queue. The install pass runs per forked child — best-effort + idempotent
-    # (already-installed wheels short-circuit before any pip call).
-    installed = install_packages_for_runtime(RUNTIME, _workspace.code_package_service)
-    if installed:
-        logger.info("Installed %d CodePackage(s) at boot: %s", len(installed), installed)
-
+    # (entrypoints/worker.py): discover its domains from the JobDefinition
+    # catalog (hardcoded `_DOMAINS` fallback for cold boot) and register ONLY
+    # that runtime's domains; the broker only ever hands it that runtime's
+    # queue. The CodePackage wheels these imports resolve were already installed
+    # ONCE in the main process by `_install_runtime_packages` (`worker_init`,
+    # pre-fork) — NOT here, where N children would race pip on the same
+    # site-packages (issue #73). This handler opens this child's own psycopg
+    # pool (`bootstrap_workspace`), which is why it must stay per-child.
     registers = execution_registers_from_catalog(
         _workspace.job_definition_service, RUNTIME
     )
