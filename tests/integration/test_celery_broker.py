@@ -3,7 +3,10 @@
 Proves the *broker path* — submit → `enqueue()` → Redis → `celery-worker`
 → `SUCCEEDED` — actually drives a job to completion, so the wiring goes
 red the moment any link in that chain breaks (a botched task signature,
-a bootstrap regression, a broken `run_job.delay`).
+a bootstrap regression, a producer that can't `send_task("run_job", …)`
+through the broker). `enqueue` publishes by task name from a producer-side
+Celery app, never importing the worker's task module (issue #72), so this
+also covers the split-image producer path end-to-end.
 
 How it stays honest:
 

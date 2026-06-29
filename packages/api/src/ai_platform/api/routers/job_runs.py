@@ -19,7 +19,7 @@ from ai_platform.api.schemas.jobs import (
     build_review_request_model,
     build_run_submit_request_model,
 )
-from ai_platform.compute.base import ComputeBackend
+from ai_platform.compute.base import ComputeBackend, EnqueueUnavailable
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobStatus
@@ -28,23 +28,29 @@ logger = logging.getLogger(__name__)
 
 
 def _enqueue_best_effort(compute: ComputeBackend, job_id: str) -> None:
-    """Hand a job to the compute backend without ever failing the submit on a
-    broker hiccup (issue #67).
+    """Hand a job to the compute backend, tolerating a *transient broker
+    outage* but never a *producer misconfiguration* (issues #67, #72).
 
     The `JobRecord` is already durably persisted as PENDING before this runs,
     so the row is never lost. For a push backend (Celery) the enqueue can still
-    raise — Redis down, restarting — and an unguarded call would 500 the submit
-    *after* the orphan row exists. Instead we log and return: the job stays
-    PENDING and the reconciler (`reconcile_pending_jobs`) re-`enqueue`s it once
-    it ages past the grace window. This mirrors poll's guarantee (the repo is
-    the queue) for push backends; poll's own `enqueue` is a no-op and never
+    raise because Redis is down/restarting — a genuinely transient failure the
+    backend reports as `EnqueueUnavailable`. We swallow *exactly that*: the job
+    stays PENDING and the reconciler (`reconcile_pending_jobs`) re-`enqueue`s it
+    once it ages past the grace window. This mirrors poll's guarantee (the repo
+    is the queue) for push backends; poll's own `enqueue` is a no-op and never
     reaches the except.
+
+    Anything else propagates. A producer misconfiguration — a missing
+    `CELERY_BROKER_URL`, a routing or import error like the split-image
+    `ModuleNotFoundError` that this whole issue chased (#72) — is NOT transient
+    and must surface (500), not masquerade as a silent permanent PENDING. The
+    earlier blanket `except Exception` is exactly how that bug hid.
     """
     try:
         compute.enqueue(job_id)
-    except Exception:
+    except EnqueueUnavailable:
         logger.warning(
-            "enqueue(%s) failed (broker unavailable?); job stays PENDING and "
+            "enqueue(%s) failed (broker unavailable); job stays PENDING and "
             "will be re-driven by the reconciler",
             job_id,
             exc_info=True,

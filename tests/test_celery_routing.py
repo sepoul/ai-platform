@@ -7,8 +7,10 @@ two-poll-worker topology.
 
 These pin the producer side: `CeleryComputeBackend.enqueue` picks the
 queue from the job's runtime. No live broker / no celery worker is
-needed — the lazily-imported `run_job` task is stubbed so enqueue
-records the queue it would publish to.
+needed — the producer's `send_task` is stubbed so enqueue records the
+queue it would publish to. The producer enqueues by task NAME and never
+imports the worker's task module (issue #72); the fixture poisons that
+module to prove it.
 """
 from __future__ import annotations
 
@@ -18,8 +20,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ai_platform.compute.base import EnqueueUnavailable
 from ai_platform.compute.celery import (
     CeleryComputeBackend,
+    RUN_JOB_TASK_NAME,
     celery_queue_for_runtime,
 )
 
@@ -57,14 +61,24 @@ def _backend(jobs: dict[str, str], runtimes: dict[str, str]) -> CeleryComputeBac
 
 @pytest.fixture
 def routed_queues(monkeypatch):
-    """Stub the lazily-imported `run_job` so enqueue records the target queue
-    instead of publishing to a real broker. Returns the list of queues."""
+    """Capture the queue each enqueue would publish to, without a live broker.
+
+    The producer publishes by task NAME through a Celery app it builds itself
+    (`send_task`) and must NEVER import the worker's task module
+    (`ai_platform.entrypoints.celery_app`), which is absent from the api image
+    (issue #72). We (a) poison that module in `sys.modules` so any import of it
+    raises `ImportError` — a regression trip-wire if `enqueue` ever reaches for
+    it again — and (b) stub the producer app's `send_task` to record the queue
+    instead of hitting Redis. Returns the list of queues.
+    """
+    monkeypatch.setitem(sys.modules, "ai_platform.entrypoints.celery_app", None)
+
     queues: list[str] = []
-    task = MagicMock()
-    task.apply_async.side_effect = lambda *a, **k: queues.append(k.get("queue"))
-    module = types.ModuleType("ai_platform.entrypoints.celery_app")
-    module.run_job = task
-    monkeypatch.setitem(sys.modules, "ai_platform.entrypoints.celery_app", module)
+    fake_app = MagicMock()
+    fake_app.send_task.side_effect = lambda *a, **k: queues.append(k.get("queue"))
+    monkeypatch.setattr(
+        CeleryComputeBackend, "_producer_app", lambda self: fake_app
+    )
     return queues
 
 
@@ -120,6 +134,89 @@ def test_resolver_failure_falls_back_to_default_queue(routed_queues):
     )
     backend.enqueue("j")
     assert routed_queues == ["runtime.default"]
+
+
+# ---------------------------------------------------------------------------
+# Acceptance (issue #72): enqueue by NAME, with the worker package absent
+# ---------------------------------------------------------------------------
+
+def test_enqueue_publishes_run_job_by_name_not_an_imported_task(monkeypatch):
+    """The producer must publish with `send_task("run_job", …)` — by NAME — so
+    it works in the split api image where the worker's task module is absent.
+    `routed_queues` already poisons `…celery_app`; here we assert the full
+    call shape (name + args + queue), not just the queue."""
+    monkeypatch.setitem(sys.modules, "ai_platform.entrypoints.celery_app", None)
+
+    calls: list[tuple] = []
+    fake_app = MagicMock()
+    fake_app.send_task.side_effect = lambda *a, **k: calls.append((a, k))
+    monkeypatch.setattr(
+        CeleryComputeBackend, "_producer_app", lambda self: fake_app
+    )
+
+    # No import of the worker task module may happen — if `enqueue` reached for
+    # it the poisoned entry above would raise ImportError here.
+    CeleryComputeBackend(MagicMock(), {}).enqueue("job-1")
+
+    (args, kwargs) = calls[0]
+    assert args[0] == RUN_JOB_TASK_NAME == "run_job"
+    assert kwargs["args"] == ["job-1"]
+    assert kwargs["queue"] == "runtime.default"
+
+
+def test_producer_app_builds_real_celery_app_and_send_task_is_used(monkeypatch):
+    """Exercise the REAL `_producer_app` (not the fixture's stub): it builds a
+    Celery app from `CELERY_BROKER_URL` with no worker import, and `enqueue`
+    routes through that app's `send_task`. Uses the in-memory broker so no
+    Redis is required and only `send_task` is stubbed."""
+    monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
+    monkeypatch.setitem(sys.modules, "ai_platform.entrypoints.celery_app", None)
+
+    backend = CeleryComputeBackend(MagicMock(), {})
+    app = backend._producer_app()  # real Celery app, built from the broker URL
+    assert app.conf.broker_url == "memory://"
+
+    sent: dict = {}
+    monkeypatch.setattr(app, "send_task", lambda name, **k: sent.update(name=name, **k))
+    backend.enqueue("job-9")
+
+    assert sent["name"] == "run_job"
+    assert sent["args"] == ["job-9"]
+    assert sent["queue"] == "runtime.default"
+    # Cached: a second enqueue reuses the same app (one connection pool).
+    assert backend._producer_app() is app
+
+
+def test_broker_unavailable_is_reported_as_enqueue_unavailable(monkeypatch):
+    """A broker-down publish (kombu `OperationalError`) is translated to the
+    platform's `EnqueueUnavailable` so the API's best-effort enqueue leaves the
+    job PENDING for the reconciler instead of 500-ing the submit (issues
+    #72/#67)."""
+    from kombu.exceptions import OperationalError
+
+    fake_app = MagicMock()
+    fake_app.send_task.side_effect = OperationalError("redis down")
+    monkeypatch.setattr(
+        CeleryComputeBackend, "_producer_app", lambda self: fake_app
+    )
+
+    with pytest.raises(EnqueueUnavailable):
+        CeleryComputeBackend(MagicMock(), {}).enqueue("j")
+
+
+def test_producer_misconfig_propagates_and_is_not_swallowed(monkeypatch):
+    """A producer misconfiguration (here an import/routing-style error) is NOT
+    a transient broker outage — it must propagate raw, never be repackaged as
+    `EnqueueUnavailable` (which the API swallows). This is the bug #72 fixes:
+    such an error used to hide as a permanent silent PENDING."""
+    fake_app = MagicMock()
+    fake_app.send_task.side_effect = ModuleNotFoundError("no worker task module")
+    monkeypatch.setattr(
+        CeleryComputeBackend, "_producer_app", lambda self: fake_app
+    )
+
+    with pytest.raises(ModuleNotFoundError):
+        CeleryComputeBackend(MagicMock(), {}).enqueue("j")
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,20 @@ from ai_platform.jobs.execution_policy import JobExecution
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 
 
+class EnqueueUnavailable(Exception):
+    """A push backend's `enqueue` could not reach the broker (down /
+    restarting) — a *transient* failure (issue #72).
+
+    The job is already durably persisted PENDING, so the API's best-effort
+    enqueue swallows exactly this and leaves the reconciler to re-drive it
+    (issue #67). It is deliberately narrow: a *producer misconfiguration*
+    (bad/missing `CELERY_BROKER_URL`, an import or routing error) is NOT this
+    — those must surface, not hide as a silent permanent PENDING. So a backend
+    raises `EnqueueUnavailable` only for genuine broker-unavailability and lets
+    every other error propagate unwrapped.
+    """
+
+
 class ComputeBackend(Protocol):
     name: str
 

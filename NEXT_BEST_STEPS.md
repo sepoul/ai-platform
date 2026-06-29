@@ -11,6 +11,31 @@ for tracking.
 
 ## Recent landings
 
+- **#72 — Celery: API can now enqueue from the split api image** ✅ (epic #64).
+  In real celery mode on compose, every `math_qa` job hung PENDING and
+  `runtime.default` stayed empty: the api container logged
+  `ModuleNotFoundError: No module named 'ai_platform.entrypoints.celery_app'`.
+  The producer (`CeleryComputeBackend.enqueue`) lazily imported the worker's
+  task module — but `celery_app` lives in `packages/worker`, absent from the
+  api image (api = api + core) — and #67's `_enqueue_best_effort` then swallowed
+  the import error, so the job stranded silently. Two-part fix. (1) *Enqueue by
+  name*: the producer builds its own Celery app from `CELERY_BROKER_URL` and
+  publishes with `app.send_task("run_job", args=[job_id], queue=…)` — no
+  consumer import, so it works with `packages/worker` absent. Per-runtime
+  routing (#66) is unchanged (same `celery_queue_for_runtime`); producer +
+  consumer resolve `runtime.default` to the identical queue/exchange/routing-key
+  (verified by a kombu roundtrip). (2) *Stop hiding producer misconfig*:
+  `enqueue` now reports only genuine broker-unavailability (kombu
+  `OperationalError` / `ConnectionError`) as the new `EnqueueUnavailable`, which
+  `_enqueue_best_effort` still swallows for the reconciler; any *other* error
+  (bad `CELERY_BROKER_URL`, routing/import error) propagates and 500s the submit
+  — it can never masquerade as a permanent silent PENDING again. Tests:
+  send-by-name + worker-module-absent + error-classification in
+  `tests/test_celery_routing.py`; producer-misconfig-surfaces +
+  broker-unavailable-swallowed in `tests/test_job_runs_router.py`. The committed
+  e2e broker test (`tests/integration/test_celery_broker.py`) exercises the real
+  `send_task` path. Unblocks #68 (prod flip).
+
 - **#67 — Celery durability: PENDING reconciler + broker-unavailable
   handling** ✅ (epic #64). Under `COMPUTE=poll` the repo *is* the queue, so
   a lost worker self-heals on the next `SELECT`; celery pushes to Redis once,
