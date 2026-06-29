@@ -14,8 +14,10 @@ zero-downtime story; that's a different document.
 > pulls them via
 > [`infra/hetzner/scripts/redeploy.sh`](../infra/hetzner/scripts/redeploy.sh).
 > Step 6's Celery wiring is implemented — including per-runtime queue
-> routing (default vs crewai, issue #66) — and locally smoke-tested via
-> `--profile celery`; not yet exercised on the box. The manual
+> routing (default vs crewai, issue #66) — and runs as a clean local
+> mode (`scripts/compose-celery.sh up -d`, no poll/celery race) with a
+> committed broker round-trip test (`scripts/test-celery.sh`); not yet
+> exercised on the box. The manual
 > provisioning steps below are now the *reference* — the day-to-day
 > path is `terraform apply` then `redeploy.sh`. See
 > [infra/hetzner/README.md](../infra/hetzner/README.md).
@@ -380,8 +382,11 @@ multi-worker.
 
 New containers next to `api`: `redis` plus **one celery consumer per
 runtime** — `celery-worker` (default) and `celery-worker-crewai`
-(crewai). The existing poll `worker` / `worker-crewai` services go away
-(or stay behind their profiles so you can flip back).
+(crewai). The poll `worker` / `worker-crewai` stay behind the
+`poll` / `crewai` profiles, so a celery-mode bring-up
+(`COMPOSE_PROFILES=celery`, which `scripts/compose-celery.sh` pins)
+simply doesn't include them — nothing to manually stop, and you flip
+back by switching profiles.
 
 ### Runtime routing (default vs crewai)
 
@@ -425,16 +430,51 @@ issue #66: `celery[redis]>=5.4` is in `packages/core/pyproject.toml`,
 queue. The compose `celery` profile adds `redis`, `celery-worker`, and
 `celery-worker-crewai`.
 
-Local smoke-tested end-to-end against Supabase: submit → enqueue →
-redis → celery-worker → `mark_running` → graph execution. Domain-
-specific environmental requirements (a domain that calls back into
-its UI for a validate-* tool, etc.) are orthogonal to the celery
-wiring and apply equally to the poll worker.
+As of #65 it's a clean local **mode**, not a manual juggle: the poll
+`worker` lives behind the `poll` profile and `scripts/compose-celery.sh`
+pins `COMPOSE_PROFILES=celery` + `COMPUTE=celery`, so the poll loop and
+the broker consumer can never both run (no race). A committed test —
+`tests/integration/test_celery_broker.py`, run via `scripts/test-celery.sh`
+— submits a job and asserts it reaches `SUCCEEDED` through
+submit → enqueue → redis → celery-worker, with no poll worker running.
+It goes red the moment that chain breaks. Domain-specific environmental
+requirements (a domain that calls back into its UI for a validate-* tool,
+etc.) are orthogonal to the celery wiring and apply equally to the poll
+worker.
+
+### Local: run the celery stack with one command
+
+```bash
+# First run only: build the worker image (both consumers use it).
+docker compose --profile build build aiplatform-worker
+
+# Bring up api + redis + BOTH per-runtime celery consumers
+# (celery-worker + celery-worker-crewai). NO poll worker — the wrapper
+# pins COMPOSE_PROFILES=celery so `worker`/`worker-crewai` stay down.
+scripts/compose-celery.sh up -d
+
+# Confirm: redis + celery-worker + celery-worker-crewai (+ api), and no
+# worker/worker-crewai.
+scripts/compose-celery.sh ps
+scripts/compose-celery.sh logs -f celery-worker celery-worker-crewai
+
+# Tear down.
+scripts/compose-celery.sh down
+```
+
+Back to the default poll stack is just `docker compose up -d` (with
+`COMPOSE_PROFILES=poll` from `.env`). Validate the broker path any time
+with `scripts/test-celery.sh` (spins up a throwaway redis, runs the
+committed round-trip test, tears it down).
 
 ### Compose additions
 
+These services already live in `docker-compose.yml` (under the `celery`
+profile) and `docker-compose.prod.yml` (image pins) — the block below is
+the annotated reference; the committed compose is the source of truth.
+
 ```yaml
-# docker-compose.yml — append.
+# docker-compose.yml — already present (celery profile).
 services:
   redis:
     image: redis:7-alpine
@@ -470,7 +510,10 @@ services:
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       CELERY_BROKER_URL: redis://redis:6379/0
     depends_on:
-      redis: { condition: service_started }
+      # Wait for the broker to pass its healthcheck (redis-cli ping)
+      # before the consumer boots — see `redis.healthcheck` in the
+      # actual docker-compose.yml, which is the source of truth.
+      redis: { condition: service_healthy }
     restart: unless-stopped
     profiles: [celery]
 
@@ -506,31 +549,37 @@ volumes:
   redis-data:
 ```
 
-The `profiles: [celery]` markers mean `docker compose up -d` alone
-keeps using the poll workers (current behavior). When you're ready:
+The poll `worker`/`worker-crewai` sit behind the `poll`/`crewai`
+profiles and the broker pair + both per-runtime consumers behind
+`celery`, so the modes are selected by profile — a fresh bring-up of
+one never includes the other. Flipping a box that's *already* running
+the poll workers is the subject of the rehearsed flip + rollback in
+#68; the shape is:
 
 ```bash
 # .env on the box gets two new lines:
 COMPUTE=celery
 CELERY_CONCURRENCY=2   # bump to taste
 
-# Bring up everything, including the new services. The override file
-# points both celery consumers at GHCR; no build on the box. The celery
-# profile starts BOTH consumers (celery-worker + celery-worker-crewai),
-# one per runtime.
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  --profile celery pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  --profile celery up -d
+# Roll the stack onto the celery profile: redis + BOTH per-runtime
+# consumers (celery-worker + celery-worker-crewai), and NOT the poll
+# workers. redeploy.sh maps PROFILES → --profile flags and pulls the
+# GHCR images (no build on the box).
+PROFILES="ui celery" ./infra/hetzner/scripts/redeploy.sh
 
-# Stop the old poll workers — their job is now redis + the two celery
-# consumers. Stop BOTH runtimes' poll workers so neither races a consumer.
-docker compose -f docker-compose.yml -f docker-compose.prod.yml stop worker worker-crewai
-docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f worker worker-crewai
+# The previous deploy started the poll workers (default PROFILES is
+# "ui crewai poll"); `up` with the reduced set leaves them running, so
+# stop BOTH runtimes' poll workers explicitly — neither's poll loop
+# should race a consumer.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  stop worker worker-crewai
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  rm -f worker worker-crewai
 ```
 
-To roll back: unset `COMPUTE`, `docker compose --profile crewai up -d
-worker worker-crewai`, take down the celery services. The repo is the
+To roll back: drop `COMPUTE=celery` and redeploy with the default
+profiles (`./redeploy.sh`, which is `ui crewai poll`) to bring the poll
+workers back, then take down the celery services. The repo is the
 durable store either way; both backends see the same Supabase rows.
 
 ### Operational notes
