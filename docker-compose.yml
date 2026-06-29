@@ -198,10 +198,16 @@ services:
     restart: unless-stopped
     profiles: [crewai]
 
-  # Celery profile: redis broker + celery-worker container. Only started
-  # under COMPOSE_PROFILES=celery — which `scripts/compose-celery.sh`
-  # pins, so the poll `worker` (now behind the `poll` profile) is NOT up
-  # and can't race the celery consumer. See
+  # Celery profile: redis broker + one celery consumer PER RUNTIME
+  # (issue #66). The split mirrors the poll `worker` / `worker-crewai`
+  # topology: `celery-worker` (WORKER_RUNTIME=default) and
+  # `celery-worker-crewai` (WORKER_RUNTIME=crewai) each register only
+  # their runtime's domains and consume only their runtime's queue
+  # (`runtime.<WORKER_RUNTIME>`); the API routes each job to the matching
+  # queue. All three sit behind the `celery` profile, started under
+  # COMPOSE_PROFILES=celery — which `scripts/compose-celery.sh` pins, so
+  # the poll `worker`/`worker-crewai` (behind `poll`/`crewai`) stay down
+  # and can't race the consumers — no manual `stop worker` needed. See
   # docs/operations/hetzner-deploy.md §6 for the full recipe.
   redis:
     image: redis:7-alpine
@@ -224,16 +230,19 @@ services:
     restart: unless-stopped
     profiles: [celery]
 
+  # Default-runtime celery consumer (pydantic_ai: math_qa, math_notes).
+  # Uses the virgin aiplatform-worker image (with the `_demo` baseline
+  # domain installed); real domains arrive via the catalog install pass on
+  # boot. WORKER_RUNTIME scopes which domains it registers AND which queue
+  # it consumes — see celery_app.py.
   celery-worker:
-    # Celery worker uses the virgin aiplatform-worker image (with the
-    # `_demo` baseline domain installed). Real domains arrive via the
-    # catalog install pass on boot.
     image: aiplatform-worker:local
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
     environment:
+      WORKER_RUNTIME: default
       BACKEND: ${BACKEND:-local}
       LOCAL_DATA_DIR: /data
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -242,6 +251,45 @@ services:
       # domain actually invokes an OpenAI helper.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APP_KEY: ${B2_APP_KEY:-}
+      B2_BUCKET: ${B2_BUCKET:-app-data}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      # Postgres schema scope. Empty → `public` (PROD/Hetzner). Local dev
+      # sets `test` (+ SUPABASE_BUCKET=app-data-test) for an isolated clone.
+      SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
+      UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
+    volumes:
+      - mathapp-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: [celery]
+
+  # crewai-runtime celery consumer (CrewAI: math_conversation). Same image,
+  # WORKER_RUNTIME=crewai → registers only crewai domains and consumes only
+  # the `runtime.crewai` queue. No LOGFIRE_TOKEN: this runtime can't load the
+  # Logfire SDK (otel-sdk pin), mirroring `worker-crewai`. Comes up with the
+  # default and crewai consumers together under `--profile celery`, matching
+  # prod (both runtimes served).
+  celery-worker-crewai:
+    image: aiplatform-worker:local
+    command: >
+      celery -A ai_platform.entrypoints.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-2}
+    environment:
+      WORKER_RUNTIME: crewai
+      BACKEND: ${BACKEND:-local}
+      LOCAL_DATA_DIR: /data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APP_KEY: ${B2_APP_KEY:-}
       B2_BUCKET: ${B2_BUCKET:-app-data}

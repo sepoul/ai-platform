@@ -13,8 +13,9 @@ zero-downtime story; that's a different document.
 > (`ghcr.io/sepoul/aiplatform-{api,worker,worker-crewai}:latest`); the box
 > pulls them via
 > [`infra/hetzner/scripts/redeploy.sh`](../infra/hetzner/scripts/redeploy.sh).
-> Step 6's Celery wiring is implemented and runs as a clean local mode
-> (`scripts/compose-celery.sh up -d`, no poll/celery race) with a
+> Step 6's Celery wiring is implemented — including per-runtime queue
+> routing (default vs crewai, issue #66) — and runs as a clean local
+> mode (`scripts/compose-celery.sh up -d`, no poll/celery race) with a
 > committed broker round-trip test (`scripts/test-celery.sh`); not yet
 > exercised on the box. The manual
 > provisioning steps below are now the *reference* — the day-to-day
@@ -362,32 +363,72 @@ multi-worker.
 ### Topology with Celery
 
 ```
-┌──────────────┐                                ┌──────────────────────────┐
-│   laptop     │ ── tailnet ─▶                  │   Hetzner CX22           │
-│              │                                │                          │
-│              │   :8000 ▶  api ─enqueue──────▶ │   redis (broker)         │
-│              │                                │     │                    │
-│              │                                │     ▼                    │
-│              │                                │   celery-worker          │
-└──────────────┘                                │     │                    │
-                                                │     │ psycopg + httpx    │
-                                                │     ▼                    │
-                                                │   Supabase eu-west-1     │
-                                                └──────────────────────────┘
+┌──────────────┐                  ┌──────────────────────────────────────┐
+│   laptop     │ ── tailnet ─▶    │   Hetzner CX22                       │
+│              │                  │                                      │
+│              │ :8000 ▶ api ─────┼─enqueue(runtime.default)─▶ redis     │
+│              │         │        │                             │  │     │
+│              │         └────────┼─enqueue(runtime.crewai)──▶  │  │     │
+│              │                  │                       ┌─────┘  └────┐│
+│              │                  │                       ▼             ▼│
+│              │                  │              celery-worker   celery-worker-crewai
+└──────────────┘                  │                  │ (default)    │ (crewai)
+                                  │                  └──────┬───────┘
+                                  │                  psycopg + httpx
+                                  │                         ▼
+                                  │                  Supabase eu-west-1
+                                  └──────────────────────────────────────┘
 ```
 
-Two new containers next to `api`: `redis` and `celery-worker`. The
-poll `worker`/`worker-crewai` stay behind the `poll`/`crewai`
-profiles, so a celery-mode bring-up simply doesn't include them —
-nothing to manually stop, and you can flip back by switching profiles.
+New containers next to `api`: `redis` plus **one celery consumer per
+runtime** — `celery-worker` (default) and `celery-worker-crewai`
+(crewai). The poll `worker` / `worker-crewai` stay behind the
+`poll` / `crewai` profiles, so a celery-mode bring-up
+(`COMPOSE_PROFILES=celery`, which `scripts/compose-celery.sh` pins)
+simply doesn't include them — nothing to manually stop, and you flip
+back by switching profiles.
+
+### Runtime routing (default vs crewai)
+
+Prod splits runtimes across worker pools with disjoint dependency
+stacks — `default` (pydantic_ai: math_qa, math_notes) vs `crewai`
+(CrewAI: math_conversation) — because the two can't share one
+interpreter (otel-sdk pin conflict; see
+[`runtimes.py`](../../packages/core/src/ai_platform/jobs/runtimes.py)).
+A single Celery pool therefore can't serve every runtime. The flip-on
+implements **Option A — per-runtime Celery queues** (issue #66), which
+mirrors the two-poll-worker topology:
+
+- **One queue per runtime.** `celery_queue_for_runtime(runtime)` →
+  `runtime.<runtime>` (`runtime.default`, `runtime.crewai`). Centralised
+  in [`compute/celery.py`](../../packages/core/src/ai_platform/compute/celery.py)
+  so producer and consumer can't drift on the name.
+- **Producer (API) routes by runtime.** `CeleryComputeBackend.enqueue`
+  resolves the job's `runtime_selector` from the JobDefinition catalog
+  and `apply_async(..., queue=runtime.<runtime>)`. Unknown/unreachable
+  runtime → default queue, where the default consumer fails fast on an
+  unservable `job_type` rather than silently dropping it.
+- **Consumer (worker) scoped by `WORKER_RUNTIME`.** Each celery worker
+  serves exactly one runtime: it registers only that runtime's domains
+  (catalog discovery + cold-boot fallback, same as the poll worker) and
+  consumes only `runtime.<WORKER_RUNTIME>` (derived `task_default_queue`,
+  see [`celery_app.py`](../../packages/worker/src/ai_platform/entrypoints/celery_app.py)).
+  So the `crewai` pool — which lacks the pydantic_ai stack — never
+  receives a `default` job it couldn't import, and vice versa.
+
+Net effect: a `math_conversation` submit lands on `celery-worker-crewai`;
+a `math_qa` / `math_notes` submit lands on `celery-worker`. Adding a new
+runtime later is one more queue + one more consumer, no producer change.
 
 ### Status
 
-Wiring is in place as of 2026-05-12: `celery[redis]>=5.4` is in
-`packages/core/pyproject.toml`, `packages/worker/src/ai_platform/entrypoints/celery_app.py`
-defines the `run_job` task, and `CeleryComputeBackend.enqueue` calls
-`run_job.delay(job_id)`. The compose `celery` profile adds `redis`
-and `celery-worker`.
+Wiring is in place as of 2026-05-12 and per-runtime routing landed with
+issue #66: `celery[redis]>=5.4` is in `packages/core/pyproject.toml`,
+`packages/worker/src/ai_platform/entrypoints/celery_app.py` defines the
+`run_job` task and scopes the pool to `WORKER_RUNTIME`, and
+`CeleryComputeBackend.enqueue` routes `run_job` to the job's runtime
+queue. The compose `celery` profile adds `redis`, `celery-worker`, and
+`celery-worker-crewai`.
 
 As of #65 it's a clean local **mode**, not a manual juggle: the poll
 `worker` lives behind the `poll` profile and `scripts/compose-celery.sh`
@@ -404,16 +445,18 @@ worker.
 ### Local: run the celery stack with one command
 
 ```bash
-# First run only: build the worker image (same image celery-worker uses).
+# First run only: build the worker image (both consumers use it).
 docker compose --profile build build aiplatform-worker
 
-# Bring up api + redis + celery-worker. NO poll worker — the wrapper pins
-# COMPOSE_PROFILES=celery so `worker`/`worker-crewai` stay down.
+# Bring up api + redis + BOTH per-runtime celery consumers
+# (celery-worker + celery-worker-crewai). NO poll worker — the wrapper
+# pins COMPOSE_PROFILES=celery so `worker`/`worker-crewai` stay down.
 scripts/compose-celery.sh up -d
 
-# Confirm: redis + celery-worker (+ api), and no worker/worker-crewai.
+# Confirm: redis + celery-worker + celery-worker-crewai (+ api), and no
+# worker/worker-crewai.
 scripts/compose-celery.sh ps
-scripts/compose-celery.sh logs -f celery-worker
+scripts/compose-celery.sh logs -f celery-worker celery-worker-crewai
 
 # Tear down.
 scripts/compose-celery.sh down
@@ -446,14 +489,18 @@ services:
     restart: unless-stopped
     profiles: [celery]
 
-  celery-worker:
-    build: { context: ., dockerfile: Dockerfile.worker, args: { EXTRA: default } }
-    image: aiplatform-worker-mathqa:local
+  # One celery consumer PER RUNTIME (the canonical, full definitions live
+  # in the repo's docker-compose.yml — this is the shape). Each is the
+  # virgin aiplatform-worker image; WORKER_RUNTIME scopes both the domains
+  # it registers and the queue it consumes (`runtime.<WORKER_RUNTIME>`).
+  celery-worker:                 # WORKER_RUNTIME=default → runtime.default
+    image: aiplatform-worker:local
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
     environment:
+      WORKER_RUNTIME: default
       # Same backend + secrets as `api` / `worker`. Source from .env.
       BACKEND: ${BACKEND:-supabase}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -470,6 +517,26 @@ services:
     restart: unless-stopped
     profiles: [celery]
 
+  celery-worker-crewai:          # WORKER_RUNTIME=crewai → runtime.crewai
+    image: aiplatform-worker:local
+    command: >
+      celery -A ai_platform.entrypoints.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-2}
+    environment:
+      WORKER_RUNTIME: crewai     # no LOGFIRE_TOKEN: crewai can't load Logfire
+      BACKEND: ${BACKEND:-supabase}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-app-data}
+      SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
+      CELERY_BROKER_URL: redis://redis:6379/0
+    depends_on:
+      redis: { condition: service_started }
+    restart: unless-stopped
+    profiles: [celery]
+
   # Existing `api` gets two extra env vars when running under the
   # celery profile. Easiest: add them unconditionally — they're no-ops
   # when COMPUTE != celery.
@@ -483,25 +550,36 @@ volumes:
 ```
 
 The poll `worker`/`worker-crewai` sit behind the `poll`/`crewai`
-profiles and the broker pair behind `celery`, so the two modes are
-selected by profile — never both up, no manual `stop worker`. When
-you're ready to flip the box (the full rehearsed flip + rollback is
-tracked in #68):
+profiles and the broker pair + both per-runtime consumers behind
+`celery`, so the modes are selected by profile — a fresh bring-up of
+one never includes the other. Flipping a box that's *already* running
+the poll workers is the subject of the rehearsed flip + rollback in
+#68; the shape is:
 
 ```bash
 # .env on the box gets two new lines:
 COMPUTE=celery
 CELERY_CONCURRENCY=2   # bump to taste
 
-# Select the celery profile set (NOT poll) so the broker pair comes up
-# and the poll workers stay down. Per-runtime routing (crewai vs default
-# on celery) is its own child (#66); until then run a single celery pool
-# on an env that satisfies every runtime.
+# Roll the stack onto the celery profile: redis + BOTH per-runtime
+# consumers (celery-worker + celery-worker-crewai), and NOT the poll
+# workers. redeploy.sh maps PROFILES → --profile flags and pulls the
+# GHCR images (no build on the box).
 PROFILES="ui celery" ./infra/hetzner/scripts/redeploy.sh
+
+# The previous deploy started the poll workers (default PROFILES is
+# "ui crewai poll"); `up` with the reduced set leaves them running, so
+# stop BOTH runtimes' poll workers explicitly — neither's poll loop
+# should race a consumer.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  stop worker worker-crewai
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  rm -f worker worker-crewai
 ```
 
 To roll back: drop `COMPUTE=celery` and redeploy with the default
-profiles (`./redeploy.sh`, which is `ui crewai poll`). The repo is the
+profiles (`./redeploy.sh`, which is `ui crewai poll`) to bring the poll
+workers back, then take down the celery services. The repo is the
 durable store either way; both backends see the same Supabase rows.
 
 ### Operational notes

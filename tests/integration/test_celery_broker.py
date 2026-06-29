@@ -14,6 +14,13 @@ How it stays honest:
   `SUCCEEDED` status is proof the broker drove it, not a `SELECT` loop.
 * The job is the synthetic `_demo` echo (no LLM, no network), so the
   test is deterministic and offline.
+* Per-runtime queues (issue #66): `_demo` is a `default`-runtime job, so
+  `enqueue` routes it to the `runtime.default` queue, and the worker is
+  spawned with `WORKER_RUNTIME=default` — i.e. the `celery-worker`
+  consumer from compose, which consumes exactly that queue. (The crewai
+  pool consumes `runtime.crewai`; its routing is unit-covered in
+  `test_celery_routing.py`. This e2e exercises the default lane through a
+  real broker.)
 
 Gating: skipped unless a Redis broker is reachable at `CELERY_BROKER_URL`
 (default `redis://localhost:6379/0`). On a host with no Redis the connect
@@ -73,6 +80,10 @@ def _spawn_celery_worker(data_dir: str) -> subprocess.Popen:
     env["BACKEND"] = "local"
     env["LOCAL_DATA_DIR"] = data_dir
     env["CELERY_BROKER_URL"] = BROKER_URL
+    # The default-runtime consumer: registers default-runtime domains
+    # (`_demo`) and consumes `runtime.default` (its WORKER_RUNTIME-derived
+    # task_default_queue) — exactly the `celery-worker` compose service.
+    env["WORKER_RUNTIME"] = "default"
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     # macOS prefork fork-safety guard — harmless on Linux/CI.
     env.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
@@ -118,15 +129,18 @@ def test_demo_job_reaches_succeeded_via_broker(tmp_path: Path):
     os.environ["LOCAL_DATA_DIR"] = str(tmp_path)
 
     from ai_platform.compute.celery import CeleryComputeBackend
-    from ai_platform.composition_root import execution_registers_all
+    from ai_platform.composition_root import execution_registers_for_runtime
     from ai_platform.jobs.bootstrap import register_execution_domains
+    from ai_platform.jobs.runtimes import DEFAULT_RUNTIME
     from ai_platform.workspace.bootstrap import bootstrap_workspace
     from ai_platform.workspace.storage.structured.job_repository import JobStatus
 
-    # Same bootstrap the API + celery worker do, so the job we submit is
-    # shaped exactly like a real `/jobs/runs/submit`.
+    # Bootstrap the default runtime exactly like the `celery-worker` pool
+    # does, so the job we submit is shaped like a real `/jobs/runs/submit`.
     ws = bootstrap_workspace()
-    domains = register_execution_domains(execution_registers_all(), ws)
+    domains = register_execution_domains(
+        execution_registers_for_runtime(DEFAULT_RUNTIME), ws
+    )
     assert "demo" in domains.job_executions, "demo execution must be registered"
 
     worker = _spawn_celery_worker(str(tmp_path))
@@ -144,6 +158,8 @@ def test_demo_job_reaches_succeeded_via_broker(tmp_path: Path):
         assert record.state.status == JobStatus.PENDING
 
         # The one and only delivery mechanism: enqueue → Redis → worker.
+        # No runtime resolver wired → routes to the `runtime.default` queue,
+        # which the WORKER_RUNTIME=default consumer above is draining.
         CeleryComputeBackend(ws.executor, domains.job_executions).enqueue(job_id)
 
         status = _wait_for_terminal(ws.executor, job_id)

@@ -8,6 +8,8 @@ on `job_type` for both the request and the response.
 # needs to resolve the dynamically-built `RunSubmitRequest` body annotation
 # at runtime, which requires real (non-stringified) annotations.
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import RootModel
 
@@ -21,6 +23,32 @@ from ai_platform.compute.base import ComputeBackend
 from ai_platform.jobs.execution_policy import JobControl
 from ai_platform.jobs.graph_execution import GraphJobExecutor
 from ai_platform.workspace.storage.structured.job_repository import JobStatus
+
+logger = logging.getLogger(__name__)
+
+
+def _enqueue_best_effort(compute: ComputeBackend, job_id: str) -> None:
+    """Hand a job to the compute backend without ever failing the submit on a
+    broker hiccup (issue #67).
+
+    The `JobRecord` is already durably persisted as PENDING before this runs,
+    so the row is never lost. For a push backend (Celery) the enqueue can still
+    raise — Redis down, restarting — and an unguarded call would 500 the submit
+    *after* the orphan row exists. Instead we log and return: the job stays
+    PENDING and the reconciler (`reconcile_pending_jobs`) re-`enqueue`s it once
+    it ages past the grace window. This mirrors poll's guarantee (the repo is
+    the queue) for push backends; poll's own `enqueue` is a no-op and never
+    reaches the except.
+    """
+    try:
+        compute.enqueue(job_id)
+    except Exception:
+        logger.warning(
+            "enqueue(%s) failed (broker unavailable?); job stays PENDING and "
+            "will be re-driven by the reconciler",
+            job_id,
+            exc_info=True,
+        )
 
 
 def make_job_runs_router(jobs: dict[str, JobControl]) -> APIRouter:
@@ -51,7 +79,7 @@ def make_job_runs_router(jobs: dict[str, JobControl]) -> APIRouter:
             deps_payload=params,
             created_by=params.get("created_by"),
         )
-        compute.enqueue(str(record.spec.job_id))
+        _enqueue_best_effort(compute, str(record.spec.job_id))
         return RunSubmitResponse(job_id=str(record.spec.job_id), status=record.state.status.value)
 
     @router.post("/jobs/{job_id}/review", response_model=RunSubmitResponse)
@@ -110,8 +138,10 @@ def make_job_runs_router(jobs: dict[str, JobControl]) -> APIRouter:
         executor.repo.put(record)
 
         # Resuming is a "submit moment" too — queue-based backends
-        # need to re-deliver this job_id to a worker.
-        compute.enqueue(str(record.spec.job_id))
+        # need to re-deliver this job_id to a worker. Best-effort like submit:
+        # a broker hiccup here leaves the row PENDING for the reconciler, not a
+        # 500 with the job stranded mid-resume (issue #67).
+        _enqueue_best_effort(compute, str(record.spec.job_id))
 
         return RunSubmitResponse(job_id=str(record.spec.job_id), status=record.state.status.value)
 

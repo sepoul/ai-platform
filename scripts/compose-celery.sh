@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# One-command local Celery stack: api + redis + celery-worker, with NO
-# poll worker running (so the poll loop can't race the broker consumer).
+# One-command local Celery stack: api + redis + both per-runtime celery
+# consumers (celery-worker for `default`, celery-worker-crewai for
+# `crewai`; issue #66), with NO poll worker running (so the poll loops
+# can't race the broker consumers).
 #
 # It pins two things the celery mode needs and that a stale `.env` could
 # otherwise get wrong:
@@ -14,10 +16,10 @@
 #       jobs for a poll loop that isn't running.
 #
 # Everything after the script name is forwarded to `docker compose`:
-#   scripts/compose-celery.sh up -d                 # bring the stack up
-#   scripts/compose-celery.sh ps                    # redis + celery-worker (+ api)
-#   scripts/compose-celery.sh logs -f celery-worker # tail the consumer
-#   scripts/compose-celery.sh down                  # tear it down
+#   scripts/compose-celery.sh up -d        # bring the stack up
+#   scripts/compose-celery.sh ps           # redis + both consumers (+ api)
+#   scripts/compose-celery.sh logs -f celery-worker celery-worker-crewai
+#   scripts/compose-celery.sh down         # tear it down
 #
 # First run needs the worker image built (same as poll mode):
 #   docker compose --profile build build aiplatform-worker

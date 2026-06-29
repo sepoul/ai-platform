@@ -7,7 +7,7 @@ How a submitted job reaches the code that runs it. Selected with the
 |---|---|---|---|---|
 | `poll` (default) | yes (`scripts/worker.sh`) | no-op | poll loop | what we've always had; safe default |
 | `thread` | no — runs in API process | submits to a `ThreadPoolExecutor` | `NotImplementedError` | single-machine dev; sub-second latency, no second process |
-| `celery` | yes (`celery -A … worker`) | `task.delay(job_id)` *(stub)* | `NotImplementedError` | future: multi-instance prod with a broker |
+| `celery` | yes (`celery -A … worker`) | `run_job.delay(job_id)` | `NotImplementedError` (own CLI) | multi-instance prod with a broker (epic #64, flip-ready not yet default) |
 
 The three are interchangeable from the API's point of view — the
 router calls `compute.enqueue(job_id)` after persisting a `JobRecord`
@@ -79,28 +79,76 @@ Tradeoffs:
 - ❌ Doesn't scale across API instances (each pool sees only what its
   own process enqueued).
 
-## `COMPUTE=celery` — placeholder
+## `COMPUTE=celery` — broker-backed (being made flip-ready, epic #64)
 
-Wired but not implemented. Both methods raise `NotImplementedError`
-on purpose — setting `COMPUTE=celery` today gets you a clear pointer
-to the migration plan in
-[`src/ai_platform/compute/celery.py`](../src/ai_platform/compute/celery.py)
-rather than a silent fallback.
+Wired, not yet the prod default. `enqueue` routes `run_job` to a
+**per-runtime queue** — `apply_async(queue=runtime.<runtime>)`, keyed off
+the job's `runtime_selector`
+([`compute/celery.py`](../../packages/core/src/ai_platform/compute/celery.py));
+the consumer is its own CLI, so `start_worker` stays
+`NotImplementedError` and redirects operators to it:
 
-To finish it:
+```bash
+celery -A ai_platform.entrypoints.celery_app worker --loglevel=info
+```
 
-1. Add `celery` + a broker driver (e.g. `redis`) to `packages/core/pyproject.toml`.
-2. Create `execution/celery_app.py` with a `Celery("mathapp", broker=…)`
-   instance and a `run_job(job_id)` task that:
-   - bootstraps the workspace + domains (same three calls above),
-   - fetches the record by id (skip `claim_next_pending` — the broker
-     already routed the work),
-   - runs the body of `_run_one_job` against that record.
-3. In `CeleryComputeBackend.enqueue`, replace the `NotImplementedError`
-   with `run_job.delay(job_id)`.
-4. Operators run `celery -A execution.celery_app worker` instead of
-   `python -m ai_platform.entrypoints.worker`. `start_worker` stays
-   `NotImplementedError` — the message redirects them.
+The task body
+([`celery_app.py`](../../packages/worker/src/ai_platform/entrypoints/celery_app.py))
+bootstraps per worker-child (`worker_process_init`, not at import — a
+forked prefork pool can't share the master's psycopg FDs), then claims
+the broker-routed `job_id` and drives its graph. No Celery result
+backend — job state lives in Postgres on `JobRecord.state`.
+
+### Per-runtime routing (issue #66)
+
+Prod splits runtimes across worker pools with disjoint dependency stacks
+(`default` = pydantic_ai; `crewai` = CrewAI — they can't share one
+interpreter). So a single celery pool can't serve every runtime. Instead
+there is **one queue + one consumer per runtime**
+(`celery_queue_for_runtime(runtime)` → `runtime.<runtime>`): the API
+producer routes each job to its runtime's queue, and each consumer
+(`WORKER_RUNTIME`) registers only its runtime's domains and consumes only
+its own queue — mirroring the poll `worker` / `worker-crewai` split. Run
+`celery-worker` (default) and `celery-worker-crewai` (crewai). See
+[`hetzner-deploy.md` §6](../operations/hetzner-deploy.md).
+
+### Durability net (issue #67)
+
+Poll has a built-in safety net: the repo *is* the queue, so a PENDING
+row is simply rediscovered on the next `claim_next_pending` and a lost
+worker self-heals. Celery gives that up — `enqueue()` pushes to Redis
+exactly once. A job can then be stranded if the broker is down at
+submit, a redis restart drops the message before an AOF flush, or #62's
+lease reaper releases a `RUNNING` job back to `PENDING` (nothing
+re-pushes it under celery). Two pieces restore the net:
+
+1. **Best-effort submit.** The router persists the `JobRecord` (PENDING)
+   *before* `enqueue`, then swallows an enqueue failure
+   (`_enqueue_best_effort` in
+   [`job_runs.py`](../../packages/api/src/ai_platform/api/routers/job_runs.py)):
+   a broker hiccup never 500s the submit and strands the row — the job
+   stays PENDING for the reconciler. Same on `/review` resume.
+
+2. **Beat sweep.** `reconcile_jobs`, a celery-beat task, runs two passes
+   each tick: reclaim expired leases (RUNNING→PENDING, the reaper poll
+   has no loop to host under celery) and re-enqueue any job stuck PENDING
+   past a grace window. The re-enqueue goes through the **same per-runtime
+   routing** as submit (issue #66): each pool's reconciler is scoped to its
+   own runtime's job_types and re-pushes onto its own runtime queue, so a
+   re-driven crewai job lands back on the crewai consumer, never the
+   default one. Idempotent with live deliveries: only PENDING rows older
+   than `CELERY_PENDING_RECONCILE_AGE_S` are re-pushed, and `run_job`
+   claims via `claim_job_for_run` (PENDING-gated), so a re-push that races
+   the original message no-ops on the second.
+
+The sweep only fires when a beat scheduler runs — embed it with
+`celery … worker -B`, or run a dedicated `celery … beat`. Knobs:
+
+- `CELERY_RECONCILE_INTERVAL_S` — sweep cadence (default `60`).
+- `CELERY_PENDING_RECONCILE_AGE_S` — min PENDING age before re-enqueue
+  (default `120`; keep well above normal sub-second pickup).
+- `WORKER_JOB_LEASE_TTL_S` — shared with the poll reaper; unset = no
+  lease reap in the sweep.
 
 ## Adding another backend
 
@@ -121,3 +169,12 @@ configured. The real backends are smoke-imported under each
 `COMPUTE=` value but not unit-tested individually — they're each ~50
 lines of glue around the same `_run_one_job` body that the existing
 artifact-persistence tests already cover end-to-end.
+
+The celery durability net (issue #67) is unit-tested at the executor
+seam in `tests/test_pending_reconciler.py` (reconcile re-enqueues a
+stuck-PENDING job, leaves a fresh/in-flight one alone, the
+`claim_job_for_run` idempotency guard drops duplicate deliveries, and a
+reaper-reclaimed job is re-enqueued under celery), plus
+`test_submit_survives_broker_unavailable_enqueue` /
+`test_review_survives_broker_unavailable_enqueue` in
+`tests/test_job_runs_router.py` for best-effort submit.
