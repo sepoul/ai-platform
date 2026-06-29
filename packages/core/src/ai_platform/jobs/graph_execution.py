@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from ai_platform.utilities.time import utc_now
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Protocol, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
 
@@ -81,6 +81,34 @@ class GraphJobExecutor:
     def mark_running(self, job_id: str | UUID, worker_id: str | None = None) -> JobRecord:
         """Claim job and mark it running."""
         record = self.repo.get(job_id)
+        record.mark_running(worker_id=worker_id)
+        self.repo.put(record)
+        return record
+
+    def claim_job_for_run(
+        self, job_id: str | UUID, worker_id: str | None = None
+    ) -> JobRecord | None:
+        """Claim a *specific* job a push backend (Celery) delivered, but only
+        if it's still PENDING. Returns the now-RUNNING record, or None if the
+        job is no longer claimable (already RUNNING/terminal).
+
+        This is the idempotency guard for the durability net (issue #67): the
+        PENDING reconciler re-`enqueue`s jobs whose original push was lost, so
+        the same `job_id` can be delivered to `run_job` more than once (a
+        re-enqueue that races the original message, or a redis redelivery). An
+        unconditional `mark_running` would let both deliveries run the job
+        twice; gating on PENDING means the second delivery is a clean no-op.
+
+        Unlike `claim_next_pending`, the broker already chose the job, so this
+        does not scan for the next pending row — it claims this exact one or
+        declines. The single-blob local repo can't make the check-and-set
+        atomic (noted on `put`); under the at-least-once celery model this
+        still closes all but a sub-millisecond window, and a double-run is
+        bounded by `spec.max_attempts` regardless.
+        """
+        record = self.repo.get(job_id)
+        if record.state.status != JobStatus.PENDING:
+            return None
         record.mark_running(worker_id=worker_id)
         self.repo.put(record)
         return record
@@ -265,6 +293,74 @@ class GraphJobExecutor:
             self.repo.put(record)
             reclaimed += 1
         return reclaimed
+
+    def reconcile_pending_jobs(
+        self,
+        enqueue: Callable[[str], None],
+        min_age_s: float,
+        *,
+        job_types: list[str] | None = None,
+    ) -> int:
+        """Re-`enqueue` jobs stuck PENDING past `min_age_s`. Returns the count
+        re-driven.
+
+        The durability net for push backends (issue #67). With `COMPUTE=poll`
+        the repo *is* the queue — a PENDING row is rediscovered by the next
+        `claim_next_pending`, so a lost worker self-heals. `COMPUTE=celery`
+        gives that up: `enqueue()` pushes to Redis exactly once, and nothing
+        re-drives a job whose push was lost — the broker was down at submit
+        (see the best-effort enqueue in `job_runs`), a redis restart dropped
+        the message before an AOF flush, or #62's lease reaper released a
+        RUNNING job back to PENDING with no one to re-enqueue it. Any of those
+        leaves a permanently-PENDING job. This pass re-pushes them.
+
+        Idempotent with the celery path (don't double-run an in-flight job):
+        - only rows still PENDING are considered — a job already claimed is
+          RUNNING (or terminal) and is skipped;
+        - `min_age_s` is a grace window well above normal broker pickup
+          (sub-second), so a healthy just-submitted job is never re-pushed
+          while its original message is still in flight; and
+        - `run_job` claims via `claim_job_for_run` (PENDING-gated), so even a
+          re-push that races a live delivery no-ops on the second.
+
+        Age is measured from `state.updated_at` — the last state transition —
+        so it tracks "how long stuck PENDING" for both a fresh submit and a
+        reaper-released reclaim (whose `mark_pending_for_reclaim` bumps it).
+        `job_types` scopes the sweep to what this deployment can actually run
+        (a single all-runtimes celery pool passes its full served set); jobs
+        for other runtimes are left for the pool that serves them.
+
+        A re-enqueue that itself fails (broker still down) is logged and
+        skipped — the next pass retries, so the sweep is safe to run on a
+        timer regardless of broker health.
+        """
+        pending = self.repo.list(status=JobStatus.PENDING)
+        now = utc_now()
+        served = set(job_types) if job_types is not None else None
+        reconciled = 0
+        for record in pending:
+            if served is not None and record.spec.job_type not in served:
+                continue
+            age_s = (now - record.state.updated_at).total_seconds()
+            if age_s < min_age_s:
+                continue
+            job_id = str(record.spec.job_id)
+            try:
+                enqueue(job_id)
+            except Exception:
+                logger.exception(
+                    "Reconciler: re-enqueue of PENDING job %s failed "
+                    "(broker unavailable?); leaving PENDING for the next pass",
+                    job_id,
+                )
+                continue
+            reconciled += 1
+            logger.warning(
+                "Reconciler: re-enqueued PENDING job %s (age=%.0fs > %.0fs) — "
+                "original push presumed lost",
+                job_id, age_s, min_age_s,
+            )
+        return reconciled
 
     def list_waiting_jobs(self, job_type: str | None = None) -> list[JobRecord]:
         """List all jobs waiting for input/review."""
