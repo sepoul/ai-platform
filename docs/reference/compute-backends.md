@@ -95,9 +95,14 @@ celery -A ai_platform.entrypoints.celery_app worker --loglevel=info
 The task body
 ([`celery_app.py`](../../packages/worker/src/ai_platform/entrypoints/celery_app.py))
 bootstraps per worker-child (`worker_process_init`, not at import — a
-forked prefork pool can't share the master's psycopg FDs), then claims
-the broker-routed `job_id` and drives its graph. No Celery result
-backend — job state lives in Postgres on `JobRecord.state`.
+forked prefork pool can't share the master's psycopg FDs): each child opens
+its own pool and registers this runtime's domains. The runtime's
+CodePackage wheels are pip-installed **once in the main process before the
+fork** (`worker_init`), not per child — installing per child raced N pip
+processes on the same `site-packages` and corrupted wheels at
+`CELERY_CONCURRENCY>=2` (issue #73). Each child then claims the
+broker-routed `job_id` and drives its graph. No Celery result backend —
+job state lives in Postgres on `JobRecord.state`.
 
 ### Per-runtime routing (issue #66)
 
