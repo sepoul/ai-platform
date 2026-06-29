@@ -151,10 +151,30 @@ class JobRecord(BaseModel):
         self.state.status = JobStatus.CANCELLED
         self._bump()
 
+    def mark_pending_for_reclaim(self) -> None:
+        """Release an orphaned RUNNING job back to PENDING for re-claim.
+
+        Used by the lease reaper (`GraphJobExecutor.reclaim_expired_leases`)
+        when a worker dies mid-job: the lease (`heartbeat_at`) goes stale
+        because nothing is refreshing it, and the row would otherwise sit
+        RUNNING forever (issue #62). Clears `claimed_by`/`heartbeat_at` so a
+        fresh claim starts clean; `attempt` is preserved so the bounded-retry
+        budget (`spec.max_attempts`) still applies on the next `mark_running`.
+        """
+        self.state.status = JobStatus.PENDING
+        self.state.claimed_by = None
+        self.state.heartbeat_at = None
+        self._bump()
+
     def update_progress(self, stage: str | None = None, percent: float | None = None, message: str | None = None) -> None:
         self.state.stage = stage
         self.state.percent = percent
         self.state.message = message
+        # Progress is also a liveness signal: refreshing the lease here means
+        # a job that keeps advancing through graph nodes never looks abandoned
+        # to the reaper. A worker that dies stops calling this, so its lease
+        # ages out and the job is reclaimed (issue #62).
+        self.state.heartbeat_at = utc_now()
         self._bump()
 
     def _bump(self) -> None:

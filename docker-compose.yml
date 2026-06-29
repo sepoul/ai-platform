@@ -102,6 +102,9 @@ services:
       SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
+      # Reclaim a RUNNING job whose worker died mid-job (no heartbeat for
+      # this many seconds) → PENDING for re-claim. Empty → reaper off.
+      WORKER_JOB_LEASE_TTL_S: ${WORKER_JOB_LEASE_TTL_S:-}
       # Worker → API live-log POST target. Compose-internal DNS;
       # falls back to the in-process default for non-compose dev.
       PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
@@ -151,6 +154,9 @@ services:
       SUPABASE_SCHEMA: ${SUPABASE_SCHEMA:-}
       SUPABASE_CONNECTION_STRING: ${SUPABASE_CONNECTION_STRING:-}
       WORKER_MAX_JOB_AGE_S: ${WORKER_MAX_JOB_AGE_S:-}
+      # Reclaim a RUNNING job whose worker died mid-job (no heartbeat for
+      # this many seconds) → PENDING for re-claim. Empty → reaper off.
+      WORKER_JOB_LEASE_TTL_S: ${WORKER_JOB_LEASE_TTL_S:-}
       PLATFORM_API_URL: ${PLATFORM_API_URL:-http://api:8000}
       UI_TOOL_API_URL: ${UI_TOOL_API_URL:-http://math-ui:7860}
     volumes:

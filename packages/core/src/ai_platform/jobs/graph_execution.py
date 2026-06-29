@@ -207,6 +207,65 @@ class GraphJobExecutor:
         self.repo.put(record)
         return record
 
+    def reclaim_expired_leases(self, lease_ttl_s: float) -> int:
+        """Reclaim RUNNING jobs whose lease has expired — a worker that died
+        mid-job (crash/OOM/SIGKILL, or wedged-then-restarted) leaves its row
+        stuck in RUNNING with nothing to advance or fail it. Returns the
+        number of jobs reclaimed.
+
+        A live worker refreshes `heartbeat_at` at each graph step (see
+        `update_progress`); a dead one stops, so its lease ages past
+        `lease_ttl_s`. Such orphans are released back to PENDING for re-claim,
+        or marked FAILED once `spec.max_attempts` is exhausted so a job that
+        wedges every worker can't loop forever. This is the defense-in-depth
+        half of issue #62 — the DB-socket fail-fast (`make_pool`) stops a
+        *live* worker from wedging; this reclaims work a *dead* worker left
+        behind.
+
+        Safety: in the single-threaded poll model the loop only runs this
+        between jobs (a busy worker isn't polling), so it never reaps the job
+        it is itself running. Across workers, `lease_ttl_s` must exceed the
+        longest gap between a healthy job's progress updates, or a slow job
+        could be reclaimed while still live — keep it comfortably large.
+        """
+        running = self.repo.list(status=JobStatus.RUNNING)
+        now = utc_now()
+        reclaimed = 0
+        for record in running:
+            # `heartbeat_at` is set at claim (`mark_running`) and refreshed on
+            # every progress update; fall back to `updated_at` for any legacy
+            # row written before heartbeats existed.
+            last_seen = record.state.heartbeat_at or record.state.updated_at
+            age_s = (now - last_seen).total_seconds()
+            if age_s <= lease_ttl_s:
+                continue
+
+            job_id = record.spec.job_id
+            if record.state.attempt >= record.spec.max_attempts:
+                record.mark_failed(
+                    error=(
+                        f"Lease expired: no heartbeat for {age_s:.0f}s "
+                        f"(> {lease_ttl_s:.0f}s) and {record.state.attempt} of "
+                        f"{record.spec.max_attempts} attempt(s) used — worker "
+                        f"presumed dead, retry budget exhausted."
+                    ),
+                    retryable=False,
+                )
+                logger.warning(
+                    "Lease expired for job %s (age=%.0fs); max attempts "
+                    "exhausted — marking FAILED", job_id, age_s,
+                )
+            else:
+                record.mark_pending_for_reclaim()
+                logger.warning(
+                    "Lease expired for job %s (age=%.0fs > %.0fs); worker "
+                    "presumed dead — releasing to PENDING for re-claim",
+                    job_id, age_s, lease_ttl_s,
+                )
+            self.repo.put(record)
+            reclaimed += 1
+        return reclaimed
+
     def list_waiting_jobs(self, job_type: str | None = None) -> list[JobRecord]:
         """List all jobs waiting for input/review."""
         return self.repo.list(status=JobStatus.WAITING_INPUT, job_type=job_type)

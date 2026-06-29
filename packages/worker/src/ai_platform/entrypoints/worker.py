@@ -58,6 +58,18 @@ def main():
             "Celery/Thread deliver via broker so stale rows never reach the worker."
         ),
     )
+    parser.add_argument(
+        "--job-lease-ttl",
+        type=float,
+        default=_env_float("WORKER_JOB_LEASE_TTL_S"),
+        help=(
+            "Reclaim a RUNNING job whose worker stopped heartbeating for this "
+            "many seconds (worker died mid-job) — released to PENDING for "
+            "re-claim, or FAILED once max_attempts is used. Default: env "
+            "WORKER_JOB_LEASE_TTL_S, else off. Must exceed the longest gap "
+            "between a healthy job's progress updates. Poll backend only."
+        ),
+    )
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, _handle_signal)
@@ -117,6 +129,7 @@ def main():
         once=args.once,
         should_stop=lambda: _shutdown,
         max_job_age_s=args.max_job_age,
+        job_lease_ttl_s=args.job_lease_ttl,
     )
 
 

@@ -78,20 +78,29 @@ def make_pool(
     schema: str | None = None,
     statement_timeout_ms: int = 30_000,
     connect_timeout: int = 10,
+    tcp_user_timeout_ms: int = 30_000,
 ) -> ConnectionPool:
     """Open a connection pool. Caller owns the lifetime.
 
     Hardened against the Supabase-pooler flakiness that otherwise wedges a
-    worker forever (issue #57). A dead/stale pooled connection used to block
-    in `psycopg`'s `wait` with no timeout — one such connection took down a
-    whole single-job poll worker indefinitely. We now:
+    worker forever (issues #57, #62). A dead/stale pooled connection used to
+    block in `psycopg`'s `wait` with no timeout — one such connection took
+    down a whole single-job poll worker indefinitely. We now:
 
     - set `statement_timeout` so no single query can hang forever,
     - set `connect_timeout` + TCP keepalives so a silently-dropped pooler
       connection is detected instead of blocking on a dead socket,
+    - set `tcp_user_timeout` so an *in-flight* query on a half-open socket
+      (the exact #62 failure: Supabase rotated its pooler IP during an idle
+      window and the next read blocked forever) errors in ~30s instead of
+      waiting out the kernel's default multi-minute retransmit budget,
     - give the pool a `check` that runs `SELECT 1` on checkout and recycles
       dead connections before handing one to a caller (also kills the
       `SSL error: unexpected eof while reading` surprises).
+
+    Keepalives detect a connection that goes dead while *idle*;
+    `tcp_user_timeout` bounds one that dies mid-query. Both are needed —
+    the #62 hang was an idle connection whose next read never returned.
 
     When `schema` is given, every connection runs `SET search_path = <schema>`
     so all queries are scoped to that schema (test isolation).
@@ -109,12 +118,17 @@ def make_pool(
     connect_kwargs: dict[str, Any] = {
         **params,
         "connect_timeout": connect_timeout,
-        # TCP keepalives — surface a dropped connection as an error rather
-        # than an indefinite block on a half-open socket.
+        # TCP keepalives — surface a connection dropped while idle as an
+        # error rather than an indefinite block on a half-open socket.
         "keepalives": 1,
         "keepalives_idle": 30,
         "keepalives_interval": 10,
-        "keepalives_count": 3,
+        "keepalives_count": 5,
+        # Bound the time a query already in flight will wait for ACKs on a
+        # dead socket before the kernel gives up (Linux TCP_USER_TIMEOUT).
+        # Without it, the OS default retransmit budget is minutes — long
+        # enough to look like a permanent hang.
+        "tcp_user_timeout": tcp_user_timeout_ms,
         "options": " ".join(options),
     }
     return ConnectionPool(

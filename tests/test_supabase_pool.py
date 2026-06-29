@@ -1,10 +1,11 @@
-"""Unit tests for `make_pool` hardening (issue #57).
+"""Unit tests for `make_pool` hardening (issues #57, #62).
 
 A stale Supabase-pooler connection used to block `psycopg.wait` with no
 timeout, wedging a single-job poll worker forever. `make_pool` now sets a
-statement timeout, a connect timeout, TCP keepalives, and a checkout
-health-check. These tests capture the pool constructor args (no live DB)
-to pin that the hardening is actually applied.
+statement timeout, a connect timeout, TCP keepalives, a `tcp_user_timeout`
+(bounds an in-flight query on a half-open socket — the #62 failure), and a
+checkout health-check. These tests capture the pool constructor args (no
+live DB) to pin that the hardening is actually applied.
 """
 from __future__ import annotations
 
@@ -60,7 +61,20 @@ def test_pool_enables_tcp_keepalives(captured):
     assert kw["keepalives"] == 1
     assert kw["keepalives_idle"] == 30
     assert kw["keepalives_interval"] == 10
-    assert kw["keepalives_count"] == 3
+    assert kw["keepalives_count"] == 5
+
+
+def test_pool_sets_tcp_user_timeout(captured):
+    # Bounds an in-flight query on a half-open socket — the #62 hang, where
+    # Supabase rotated its pooler IP during an idle window and the next read
+    # never returned. Default 30s so a dead connection errors fast.
+    sb.make_pool(_CONN)
+    assert captured.last["kwargs"]["tcp_user_timeout"] == 30000
+
+
+def test_tcp_user_timeout_is_configurable(captured):
+    sb.make_pool(_CONN, tcp_user_timeout_ms=15000)
+    assert captured.last["kwargs"]["tcp_user_timeout"] == 15000
 
 
 def test_pool_registers_checkout_health_check(captured):
