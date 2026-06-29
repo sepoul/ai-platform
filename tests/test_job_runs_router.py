@@ -10,10 +10,12 @@ from __future__ import annotations
 from typing import Literal, Optional
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from ai_platform.compute.base import EnqueueUnavailable
 from ai_platform.runtime import registry as deps_mod
 from ai_platform.api.routers.job_runs import make_job_runs_router
 from ai_platform.jobs.execution_policy import JobControl, NodeGate
@@ -313,12 +315,13 @@ def test_review_calls_compute_enqueue_to_resume_run():
 
 
 def test_submit_survives_broker_unavailable_enqueue():
-    """Durability (#67): if `enqueue` raises (broker down), the submit must
-    NOT 500 and strand the already-persisted PENDING row — it returns 200 and
-    leaves the job PENDING for the reconciler to re-drive."""
+    """Durability (#67): if `enqueue` reports the broker is down
+    (`EnqueueUnavailable`), the submit must NOT 500 and strand the
+    already-persisted PENDING row — it returns 200 and leaves the job PENDING
+    for the reconciler to re-drive."""
     job_def = _base_job_def()
     client, executor, compute = _make_app([job_def])
-    compute.enqueue.side_effect = RuntimeError("redis unreachable")
+    compute.enqueue.side_effect = EnqueueUnavailable("redis unreachable")
 
     resp = client.post(
         "/jobs/runs/submit",
@@ -331,13 +334,33 @@ def test_submit_survives_broker_unavailable_enqueue():
     assert body["status"] == JobStatus.PENDING.value
 
 
+def test_submit_surfaces_producer_misconfig_enqueue():
+    """Producer misconfig (#72): an enqueue failure that is NOT a transient
+    broker outage — e.g. the split-image `ModuleNotFoundError`, a bad
+    `CELERY_BROKER_URL`, a routing error — must NOT be swallowed. It surfaces
+    instead of silently stranding the job PENDING forever (the bug #72 fixes)."""
+    job_def = _base_job_def()
+    client, executor, compute = _make_app([job_def])
+    compute.enqueue.side_effect = ModuleNotFoundError(
+        "No module named 'ai_platform.entrypoints.celery_app'"
+    )
+
+    # TestClient re-raises unhandled server exceptions by default, so the
+    # producer misconfig propagates instead of hiding as a 200/PENDING.
+    with pytest.raises(ModuleNotFoundError):
+        client.post(
+            "/jobs/runs/submit",
+            json={"job_type": "dummy", "question_text": "x"},
+        )
+
+
 def test_review_survives_broker_unavailable_enqueue():
     """Same guarantee on the resume path: a broker hiccup mid-review leaves the
     job PENDING for the reconciler, not a 500 with the job stranded."""
     job_def = _base_job_def(gates=[_gate()])
     client, executor, compute = _make_app([job_def])
     record = _wire_pending_review(executor, job_def, "GateNode")
-    compute.enqueue.side_effect = RuntimeError("redis unreachable")
+    compute.enqueue.side_effect = EnqueueUnavailable("redis unreachable")
 
     resp = client.post(
         f"/jobs/{record.spec.job_id}/review",
