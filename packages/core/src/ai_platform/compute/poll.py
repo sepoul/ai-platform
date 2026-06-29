@@ -42,6 +42,7 @@ class PollingComputeBackend:
         once: bool = False,
         should_stop: Callable[[], bool] = lambda: False,
         max_job_age_s: float | None = None,
+        job_lease_ttl_s: float | None = None,
     ) -> None:
         # Lazy: the worker loop pulls the graph engine. Keep it out of the
         # module top so `enqueue` (used by the engine-free API) doesn't import
@@ -50,10 +51,17 @@ class PollingComputeBackend:
 
         interval = interval_s if interval_s is not None else self._default_interval_s
         logger.info(
-            "Worker %s starting (poll interval=%ds, once=%s, max_job_age=%s)",
+            "Worker %s starting (poll interval=%ds, once=%s, max_job_age=%s, "
+            "job_lease_ttl=%s)",
             worker_id, interval, once,
             f"{max_job_age_s:.0f}s" if max_job_age_s is not None else "unlimited",
+            f"{job_lease_ttl_s:.0f}s" if job_lease_ttl_s is not None else "off",
         )
+
+        # Boot-time reap: a worker restarting after a crash/wedge reclaims the
+        # RUNNING job its previous incarnation abandoned, instead of leaving it
+        # orphaned until its lease ages out on a later idle tick (issue #62).
+        self._reap_expired_leases(job_lease_ttl_s)
 
         while not should_stop():
             did_work = _run_one_job(
@@ -67,7 +75,22 @@ class PollingComputeBackend:
                 break
 
             if not did_work:
+                # Only reap when idle: a busy single-threaded worker isn't in
+                # this loop, so the reaper never touches the job it's running.
+                self._reap_expired_leases(job_lease_ttl_s)
                 logger.debug("No pending jobs, sleeping %ds…", interval)
                 time.sleep(interval)
 
         logger.info("Worker %s stopped", worker_id)
+
+    def _reap_expired_leases(self, job_lease_ttl_s: float | None) -> None:
+        """Best-effort lease reclaim; a reaper failure must not crash the
+        worker (a flaky DB read here shouldn't take the poll loop down)."""
+        if job_lease_ttl_s is None:
+            return
+        try:
+            n = self._executor.reclaim_expired_leases(job_lease_ttl_s)
+            if n:
+                logger.info("Reclaimed %d job(s) with expired lease", n)
+        except Exception:
+            logger.exception("Lease reaper failed; continuing")

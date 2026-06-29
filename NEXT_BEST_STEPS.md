@@ -11,6 +11,23 @@ for tracking.
 
 ## Recent landings
 
+- **#62 — Worker no longer hangs forever on a stale Supabase pooler
+  connection** ✅. Two-layer fix. (1) *Fail-fast DB sockets*: `make_pool`
+  now also sets `tcp_user_timeout=30s` (bounds an in-flight query on a
+  half-open socket — the exact #62 hang, where Supabase rotated its pooler
+  IP during an idle window and the next read never returned) and bumps
+  `keepalives_count` to 5, completing the #57 hardening. All consumers (api,
+  both workers, celery) inherit it through the one central pool factory.
+  (2) *Lease reaper*: `JobState.heartbeat_at` is now refreshed at every
+  graph step (`update_progress`) and `GraphJobExecutor.reclaim_expired_leases`
+  releases a RUNNING job whose worker stopped heartbeating past
+  `WORKER_JOB_LEASE_TTL_S` back to PENDING (or FAILED once `max_attempts` is
+  used). The poll loop reaps on boot + each idle tick, so a job orphaned by a
+  crashed/restarted worker no longer sits RUNNING forever. New env threaded
+  through compose + `.env.example`/`.prodenv.example`; diagnose+recover steps
+  added to the hetzner-deploy runbook. Optional liveness/healthcheck signal
+  (#62 proposed-fix part 3) intentionally deferred. Builds on #57, #48.
+
 - **#56 — Workflow descriptors in the deploy flow** ✅. `/workflows` no
   longer comes up empty after a deploy. New seam mirrors the
   export-manifest split: a pure `build_descriptors_map(controls,

@@ -28,6 +28,9 @@ LOGFIRE_TOKEN=pylf_…
 OPENAI_API_KEY=sk-…
 
 WORKER_INTERVAL=5
+# Reclaim a RUNNING job whose worker died mid-job (no heartbeat for this many
+# seconds) → PENDING for re-claim. Empty = off. See hetzner-deploy runbook.
+WORKER_JOB_LEASE_TTL_S=900
 
 # NOTE: do NOT set UI_TOOL_API_URL here. On the box, math-ui runs as a
 # container and the compose default (http://math-ui:7860) is correct. The

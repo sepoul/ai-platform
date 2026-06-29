@@ -583,6 +583,72 @@ docker compose exec api python -m scripts.supabase_migrate
 
 The runner is idempotent.
 
+### Recovering a wedged worker / orphaned RUNNING job
+
+**Symptom.** The `default` poll worker goes silent — last log line is a
+job claim (`Claimed job …` / `fresh start at …`), then nothing for a long
+time. The container still shows `Up`/healthy. Because the poll worker is
+single-threaded (`COMPUTE=poll`, concurrency 1), the one wedged job freezes
+the whole queue: jobs submitted afterwards sit `PENDING`, never claimed.
+
+The classic cause (issue #62) is a **stale Supabase pooler connection**:
+Supabase rotates its session-pooler endpoint
+(`aws-0-eu-west-1.pooler.supabase.com:5432`) during an idle window, the
+peer never sends RST/FIN, and the worker's next DB read blocks forever on a
+half-open socket.
+
+**Diagnose** (over the tailnet, `ssh root@mathapp-prod`, in `/srv/mathapp`):
+
+```bash
+# Last worker log line is the job claim, nothing after:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50 worker
+
+# Main thread parked in a no-timeout socket read (do_poll):
+docker compose exec worker sh -c 'cat /proc/1/task/1/wchan; echo'
+
+# The tell: the worker clings to ONE ESTABLISHED conn to a pooler IP that
+# DNS no longer returns (the rotated-away endpoint).
+docker compose exec worker sh -c \
+  'ss -tnp 2>/dev/null | grep :5432; echo "--- DNS now:"; getent hosts aws-0-eu-west-1.pooler.supabase.com'
+```
+
+If the connected `:5432` IP differs from what `getent hosts` resolves, the
+worker is on a dead socket.
+
+**Recover** (manual):
+
+```bash
+# 1. Mark the stuck job(s) terminal. The API only updates the DB row — it
+#    does NOT unstick the wedged worker process.
+curl -fsS -X POST http://mathapp-prod:8000/jobs/<id>/cancel   # or: aip cancel <id>
+
+# 2. Restart the worker with a SHORT stop grace. Its SIGTERM handler
+#    ("finish current job then exit") would itself hang on the dead job, so
+#    don't wait out the default 10s twice.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml restart -t 5 worker
+```
+
+Verify: the worker reboots, reconnects to the live pooler IP, and returns
+to clean polling (`No pending jobs, sleeping …`) with 0 active jobs.
+
+**Durable mitigations now in place** (so this should self-heal — issue #62):
+
+- **DB-socket fail-fast.** `make_pool`
+  (`packages/core/src/ai_platform/workspace/storage/structured/supabase.py`)
+  sets TCP keepalives **plus** `tcp_user_timeout=30s` and a `statement_timeout`,
+  so a dead pooler connection now errors in ~30s instead of hanging — the
+  worker loop catches it, marks the job FAILED-retryable, and keeps polling.
+  All consumers (api, both workers, celery) inherit this through the one
+  central pool factory.
+- **Lease reaper.** Set `WORKER_JOB_LEASE_TTL_S` (seconds) in `.env`. A
+  RUNNING job whose worker stopped heartbeating for longer than the TTL is
+  reclaimed: released back to `PENDING` for re-claim, or marked `FAILED`
+  once `max_attempts` is used. The poll worker reaps on boot and on every
+  idle tick, so a job orphaned by a crashed/restarted worker no longer sits
+  `RUNNING` forever. Pick a TTL comfortably larger than the longest gap
+  between a healthy job's progress updates (e.g. `900`) to avoid reclaiming
+  a slow-but-live job.
+
 ---
 
 ## What's NOT addressed yet
@@ -616,6 +682,7 @@ BACKEND=supabase
 ANTHROPIC_API_KEY=…
 LOGFIRE_TOKEN=…
 WORKER_INTERVAL=5
+WORKER_JOB_LEASE_TTL_S=900     # reclaim a RUNNING job orphaned by a dead worker
 
 SUPABASE_SCHEMA=public        # explicit; PROD owns the live `public` tables
 SUPABASE_URL=https://<project-ref>.supabase.co
