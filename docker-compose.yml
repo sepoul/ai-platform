@@ -2,10 +2,31 @@
 # shared volume for the local job repo / artifacts. This is the canonical
 # way to run the stack for now — there is no production deployment story yet.
 #
+# COMPUTE MODE = which profile is active (mutually exclusive — the two
+# never run together, so the poll loop and the celery consumer can't race
+# for the same jobs):
+#
+#   poll  (default)  → `worker` (+ optional `worker-crewai`) SELECT-poll the
+#                      repo. Active when COMPOSE_PROFILES=poll — `.env.example`
+#                      ships that, so a plain `docker compose up` stays on poll.
+#   celery           → `redis` + `celery-worker`; the API enqueues to the
+#                      broker and the worker picks up immediately. No poll
+#                      worker runs. One command (it pins the profile + COMPUTE
+#                      so `.env` can't leak the poll worker back in):
+#                          scripts/compose-celery.sh up -d
+#                      See docs/operations/hetzner-deploy.md §6.
+#
 # Usage:
-#   docker compose up --build           # first run / after deps change
-#   docker compose up                   # subsequent runs
+#   docker compose up --build           # first run / after deps change (poll)
+#   docker compose up -d                # subsequent runs (poll; needs COMPOSE_PROFILES=poll)
 #   docker compose logs -f worker       # tail one service
+#   COMPOSE_PROFILES=poll,crewai docker compose up -d   # poll + the crewai pool
+#   scripts/compose-celery.sh up -d     # celery mode (redis + celery-worker, NO poll)
+#   scripts/compose-celery.sh down      # tear the celery stack down
+#
+# Note: `worker` now lives behind the `poll` profile, so if your `.env`
+# predates this and lacks `COMPOSE_PROFILES`, add `COMPOSE_PROFILES=poll`
+# (or pass `--profile poll`) or the worker won't start.
 #
 # The API is published at http://localhost:8000 so a Next.js dev server
 # running on the host can call it directly. The worker has no port — it
@@ -71,10 +92,17 @@ services:
     command: ["true"]   # not meant to run; the image is the artifact
 
   worker:
-    # Default-runtime worker. Ships `_demo` as the baseline domain so
+    # Default-runtime poll worker. Ships `_demo` as the baseline domain so
     # local-dev `docker compose up` has at least one registerable job
     # without a deploy. Real domains (math-app etc.) arrive at runtime
     # via the CodePackage catalog.
+    #
+    # Behind the `poll` profile so celery mode (COMPOSE_PROFILES=celery)
+    # can exclude it — a non-profiled service can't be excluded, and an
+    # always-on poll worker would race the celery consumer. `.env.example`
+    # ships COMPOSE_PROFILES=poll so the default `docker compose up` still
+    # brings it up.
+    profiles: [poll]
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
@@ -124,6 +152,10 @@ services:
   # `WORKER_RUNTIME=crewai` env scopes the worker to that runtime's
   # CodePackage catalog rows (a friend's crewai domain installs at
   # boot via the catalog).
+  #
+  # Also a poll worker, kept on its own `crewai` profile so it stays
+  # opt-in. To run it next to the default poll worker locally, enable
+  # both: `COMPOSE_PROFILES=poll,crewai docker compose up -d`.
   worker-crewai:
     image: aiplatform-worker:local
     command: >
@@ -167,10 +199,10 @@ services:
     profiles: [crewai]
 
   # Celery profile: redis broker + celery-worker container. Only started
-  # with `--profile celery`. See docs/deployment_hetzner.md §6 for the
-  # full migration recipe. When running this profile, also
-  # `docker compose stop worker` so the poll loop doesn't race the
-  # celery consumer.
+  # under COMPOSE_PROFILES=celery — which `scripts/compose-celery.sh`
+  # pins, so the poll `worker` (now behind the `poll` profile) is NOT up
+  # and can't race the celery consumer. See
+  # docs/operations/hetzner-deploy.md §6 for the full recipe.
   redis:
     image: redis:7-alpine
     # AOF on so queued jobs survive a redis restart. fsync-every-sec is
@@ -181,6 +213,14 @@ services:
       --appendfsync everysec
     volumes:
       - redis-data:/data
+    # Gate `celery-worker` on this so it doesn't boot and start retrying
+    # before the broker is actually accepting connections.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
     restart: unless-stopped
     profiles: [celery]
 
@@ -219,7 +259,7 @@ services:
       - mathapp-data:/data
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     profiles: [celery]
 

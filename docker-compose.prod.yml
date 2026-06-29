@@ -10,9 +10,9 @@
 #
 # Production runs BOTH workers simultaneously (different domains use
 # different agentic libraries — pydantic_ai for math_qa, CrewAI for
-# math_conversation). `worker-crewai` inherits the `crewai` profile from
-# the base file; `redeploy.sh` opts it in by default. The `ui` profile
-# brings up math-ui.
+# math_conversation). `worker` is behind the `poll` profile and
+# `worker-crewai` behind `crewai`; `redeploy.sh` opts both in by default
+# (PROFILES="ui crewai poll"). The `ui` profile brings up math-ui.
 
 services:
   api:
