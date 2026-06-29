@@ -12,6 +12,17 @@ prefork pool would otherwise inherit the master's psycopg connections
 across the fork; those file descriptors aren't safe to share, and the
 first task on each child hangs on `pool.getconn` until it times out
 after 30s. Initialising per-child gives each worker its own pool.
+
+Durability net (issue #67). Under `COMPUTE=poll` the repo *is* the queue,
+so a lost worker self-heals on the next `SELECT`. Celery gives that up —
+`enqueue()` pushes to Redis once and nothing re-drives a job whose push was
+lost (broker down at submit, redis restart before an AOF flush, or #62's
+lease reaper releasing a RUNNING job back to PENDING). The `reconcile_jobs`
+beat task below restores the safety net: each tick it reaps expired leases
+(RUNNING→PENDING) and re-`delay`s jobs stuck PENDING past a grace window.
+It only fires when a beat scheduler runs — embed it with `celery … worker
+-B` or run a dedicated `celery … beat`; the reaper half additionally needs
+`WORKER_JOB_LEASE_TTL_S`. See docs/reference/compute-backends.md.
 """
 from __future__ import annotations
 
@@ -65,9 +76,22 @@ def run_job(job_id: str) -> None:
     job_def_map = _domains.job_executions
 
     try:
-        record = executor.mark_running(job_id, worker_id=WORKER_ID)
+        record = executor.claim_job_for_run(job_id, worker_id=WORKER_ID)
     except Exception:
         logger.exception("Could not mark job %s as running", job_id)
+        return
+
+    # Idempotency guard for the durability net (issue #67): the PENDING
+    # reconciler re-`delay`s jobs whose original push was lost, so this
+    # task can be delivered the same job_id more than once. `claim_job_for_run`
+    # only transitions a still-PENDING row to RUNNING; a duplicate delivery
+    # for an already-claimed/finished job returns None and is dropped here
+    # instead of running the job a second time.
+    if record is None:
+        logger.info(
+            "Celery: job %s is no longer PENDING (already claimed or finished) "
+            "— skipping duplicate delivery", job_id,
+        )
         return
 
     job_type = record.spec.job_type
@@ -91,3 +115,87 @@ def run_job(job_id: str) -> None:
             executor.fail_job(job_id, error=tb[:2000], retryable=True)
         except Exception:
             logger.exception("Could not mark job %s as failed", job_id)
+
+
+# ---------------------------------------------------------------------------
+# Durability net: PENDING reconciler + lease reaper (issue #67)
+# ---------------------------------------------------------------------------
+
+def _env_float(name: str, default: float | None = None) -> float | None:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return float(raw)
+
+
+# How often beat fires the reconcile/reap pass.
+RECONCILE_INTERVAL_S = _env_float("CELERY_RECONCILE_INTERVAL_S", 60.0)
+# A job must sit PENDING at least this long before it's presumed a lost push
+# and re-`delay`d — comfortably above normal broker pickup (sub-second), so a
+# healthy just-submitted job is never re-driven while its message is in flight.
+PENDING_RECONCILE_AGE_S = _env_float("CELERY_PENDING_RECONCILE_AGE_S", 120.0)
+# Reuse #62's lease TTL: under poll the poll loop reaps; under celery there is
+# no poll loop, so the beat task carries the reaper too. Unset = reaper off.
+JOB_LEASE_TTL_S = _env_float("WORKER_JOB_LEASE_TTL_S")
+
+
+@app.task(name="reconcile_jobs")
+def reconcile_jobs() -> None:
+    """Beat-scheduled durability sweep — the celery analogue of the poll
+    loop's idle-tick reap (issue #67).
+
+    Two passes, in order:
+    1. Reap expired leases (RUNNING→PENDING for re-claim, or FAILED once
+       `max_attempts` is used) — the same `reclaim_expired_leases` the poll
+       worker runs, but celery has no poll loop to host it.
+    2. Reconcile PENDING jobs — re-`delay` any stuck PENDING past the grace
+       window (lost push at submit, redis restart, or a job the reaper just
+       released). `run_job`'s PENDING-gated claim makes the re-delivery
+       idempotent.
+
+    Reap first so a freshly-reclaimed job is PENDING for a *later* tick to
+    re-enqueue (it won't be re-pushed this tick — its `updated_at` was just
+    bumped, so it's inside the grace window). Best-effort: this runs in a
+    bootstrapped worker child, and any error is logged, never raised, so a
+    flaky pass doesn't poison the beat schedule.
+    """
+    if _workspace is None or _domains is None:
+        # Defensive: the task body runs in a worker child, which is
+        # bootstrapped by `worker_process_init`. If somehow not, skip quietly.
+        logger.warning("reconcile_jobs fired before bootstrap — skipping")
+        return
+
+    executor = _workspace.executor
+
+    if JOB_LEASE_TTL_S is not None:
+        try:
+            reaped = executor.reclaim_expired_leases(JOB_LEASE_TTL_S)
+            if reaped:
+                logger.info("Reconciler: reclaimed %d expired-lease job(s)", reaped)
+        except Exception:
+            logger.exception("Reconciler: lease reap pass failed; continuing")
+
+    try:
+        served = list(_domains.job_executions.keys())
+        n = executor.reconcile_pending_jobs(
+            run_job.delay, PENDING_RECONCILE_AGE_S, job_types=served,
+        )
+        if n:
+            logger.info("Reconciler: re-enqueued %d stuck-PENDING job(s)", n)
+    except Exception:
+        logger.exception("Reconciler: pending reconcile pass failed; continuing")
+
+
+@app.on_after_configure.connect
+def _register_periodic(sender, **_kwargs) -> None:
+    """Register the durability sweep on beat. The whole sweep is inert unless a
+    beat scheduler is actually running (`celery … worker -B` or a dedicated
+    `celery … beat`) — a default deploy that only runs `celery … worker` never
+    fires it. When beat *is* on, the reconcile pass runs with its defaults; the
+    reaper pass within it stays off until `WORKER_JOB_LEASE_TTL_S` is set.
+    Registration itself is unconditional + cheap."""
+    sender.add_periodic_task(
+        RECONCILE_INTERVAL_S,
+        reconcile_jobs.s(),
+        name="reconcile-pending-and-reap",
+    )

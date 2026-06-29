@@ -11,6 +11,30 @@ for tracking.
 
 ## Recent landings
 
+- **#67 — Celery durability: PENDING reconciler + broker-unavailable
+  handling** ✅ (epic #64). Under `COMPUTE=poll` the repo *is* the queue, so
+  a lost worker self-heals on the next `SELECT`; celery pushes to Redis once,
+  so a lost push (broker down at submit, redis restart before an AOF flush,
+  or #62's reaper releasing a RUNNING job to PENDING) would sit PENDING
+  forever. Restored the net in three parts. (1) *Best-effort submit*: the
+  router persists the PENDING `JobRecord` before `enqueue`, then swallows an
+  enqueue failure (`_enqueue_best_effort`) — a broker hiccup no longer 500s
+  the submit/`/review` and strands the row; the job stays PENDING for the
+  reconciler. (2) *Reconciler*: `GraphJobExecutor.reconcile_pending_jobs`
+  re-`enqueue`s jobs stuck PENDING past `CELERY_PENDING_RECONCILE_AGE_S`
+  (grace window above normal sub-second pickup), scoped to the served job
+  types; wired as the `reconcile_jobs` celery-beat task, which also carries
+  #62's lease reaper (celery has no poll loop to host it). (3) *Idempotency*:
+  `claim_job_for_run` is a PENDING-gated claim — `run_job` uses it instead of
+  unconditional `mark_running`, so a re-enqueue that races a live delivery
+  no-ops on the second (no double-run). New env
+  `CELERY_RECONCILE_INTERVAL_S` / `CELERY_PENDING_RECONCILE_AGE_S` in
+  `.env.example`/`.prodenv.example`; `compute-backends.md` celery section
+  rewritten (was stale "placeholder"). Tests: `tests/test_pending_reconciler.py`
+  + best-effort-submit cases in `tests/test_job_runs_router.py`. The beat
+  scheduler itself (`worker -B`) and compose/runtime wiring are sibling
+  children (#65/#66/#68); this lands the durability primitives they switch on.
+
 - **#62 — Worker no longer hangs forever on a stale Supabase pooler
   connection** ✅. Two-layer fix. (1) *Fail-fast DB sockets*: `make_pool`
   now also sets `tcp_user_timeout=30s` (bounds an in-flight query on a
