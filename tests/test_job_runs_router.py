@@ -312,6 +312,43 @@ def test_review_calls_compute_enqueue_to_resume_run():
     compute.enqueue.assert_called_once_with(str(record.spec.job_id))
 
 
+def test_submit_survives_broker_unavailable_enqueue():
+    """Durability (#67): if `enqueue` raises (broker down), the submit must
+    NOT 500 and strand the already-persisted PENDING row — it returns 200 and
+    leaves the job PENDING for the reconciler to re-drive."""
+    job_def = _base_job_def()
+    client, executor, compute = _make_app([job_def])
+    compute.enqueue.side_effect = RuntimeError("redis unreachable")
+
+    resp = client.post(
+        "/jobs/runs/submit",
+        json={"job_type": "dummy", "question_text": "x"},
+    )
+    assert resp.status_code == 200, resp.text
+    # The row was still persisted (submit_graph_job ran before the failed push).
+    executor.submit_graph_job.assert_called_once()
+    body = resp.json()
+    assert body["status"] == JobStatus.PENDING.value
+
+
+def test_review_survives_broker_unavailable_enqueue():
+    """Same guarantee on the resume path: a broker hiccup mid-review leaves the
+    job PENDING for the reconciler, not a 500 with the job stranded."""
+    job_def = _base_job_def(gates=[_gate()])
+    client, executor, compute = _make_app([job_def])
+    record = _wire_pending_review(executor, job_def, "GateNode")
+    compute.enqueue.side_effect = RuntimeError("redis unreachable")
+
+    resp = client.post(
+        f"/jobs/{record.spec.job_id}/review",
+        json={"approved": True, "notes": "ok"},
+    )
+    assert resp.status_code == 200, resp.text
+    # Review payload still parked + status flipped to PENDING despite the push.
+    persisted = executor.repo.put.call_args.args[0]
+    assert persisted.state.status == JobStatus.PENDING
+
+
 # ---------------------------------------------------------------------------
 # Cancel / recovery endpoint (#48)
 # ---------------------------------------------------------------------------

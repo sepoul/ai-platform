@@ -30,7 +30,15 @@ OPENAI_API_KEY=sk-…
 WORKER_INTERVAL=5
 # Reclaim a RUNNING job whose worker died mid-job (no heartbeat for this many
 # seconds) → PENDING for re-claim. Empty = off. See hetzner-deploy runbook.
+# Honoured by the poll worker and, under COMPUTE=celery, the beat sweep.
 WORKER_JOB_LEASE_TTL_S=900
+
+# Celery durability net (issue #67) — only used with COMPUTE=celery + a beat
+# scheduler (`celery … worker -B`). The sweep re-enqueues jobs stuck PENDING
+# (a push lost while Redis was down/restarting) and runs the lease reaper.
+# Defaults shown; uncomment to override.
+# CELERY_RECONCILE_INTERVAL_S=60
+# CELERY_PENDING_RECONCILE_AGE_S=120
 
 # NOTE: do NOT set UI_TOOL_API_URL here. On the box, math-ui runs as a
 # container and the compose default (http://math-ui:7860) is correct. The
