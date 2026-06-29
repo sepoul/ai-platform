@@ -11,6 +11,30 @@ for tracking.
 
 ## Recent landings
 
+- **#68 — Celery: prod (Hetzner) enablement, rehearsed flip + rollback** ✅
+  (closes epic #64). The last child: turn `COMPUTE=celery` on prod from a
+  doc paragraph into a *rehearsed, reversible* procedure. After #72/#73
+  cleared the local compose smoke gate, the operator deployed `main`@d30f4aa
+  to `mathapp-prod` (poll first) and rehearsed the flip + rollback on the box
+  on 2026-06-29 — **PASS**: default `math_qa` picked up ~1.8 s → SUCCEEDED via
+  the broker on both the submit *and* review enqueue paths; crewai
+  `math_conversation` ~1.2 s → SUCCEEDED on `runtime.crewai` with the default
+  consumer seeing it 0 times (per-runtime isolation); redis up `appendonly
+  yes` with no host port (Hetzner FW blocks 6379 too); the #73 install-once
+  fix held (no `google/_upb` boot race); rollback clean (`api` back to
+  `compute=poll`, poll workers reconnected, no stray containers). This change
+  is docs/env-only — no code logic. `docs/operations/hetzner-deploy.md` §6
+  flips its status banner from "not yet exercised on the box" to "validated
+  2026-06-29" and folds in the exact flip recipe (`COMPUTE=celery` +
+  broker/concurrency/reaper vars → `PROFILES="ui celery" redeploy.sh` →
+  `stop worker worker-crewai`, with the caveat that a reduced-profile `up`
+  leaves the poll workers running) and rollback (`COMPUTE` unset →
+  `redeploy.sh` → `rm -fs` the two celery consumers + redis; keep the no-op
+  vars). `.prodenv.example` now documents `COMPUTE` / `CELERY_BROKER_URL` /
+  `CELERY_CONCURRENCY` (poll stays the prod default); `.env.example` already
+  carried all four. **Out of scope** (and not done): defaulting prod to
+  celery — this is flip-on-when-we-want-it.
+
 - **#72 — Celery: API can now enqueue from the split api image** ✅ (epic #64).
   In real celery mode on compose, every `math_qa` job hung PENDING and
   `runtime.default` stayed empty: the api container logged

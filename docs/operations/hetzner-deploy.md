@@ -16,8 +16,10 @@ zero-downtime story; that's a different document.
 > Step 6's Celery wiring is implemented — including per-runtime queue
 > routing (default vs crewai, issue #66) — and runs as a clean local
 > mode (`scripts/compose-celery.sh up -d`, no poll/celery race) with a
-> committed broker round-trip test (`scripts/test-celery.sh`); not yet
-> exercised on the box. The manual
+> committed broker round-trip test (`scripts/test-celery.sh`). The prod
+> flip + rollback was **rehearsed on the box (`mathapp-prod`) 2026-06-29
+> and passed** (issue #68) — see §6 for the validated recipe. `poll`
+> remains the prod default. The manual
 > provisioning steps below are now the *reference* — the day-to-day
 > path is `terraform apply` then `redeploy.sh`. See
 > [infra/hetzner/README.md](../infra/hetzner/README.md).
@@ -422,6 +424,27 @@ runtime later is one more queue + one more consumer, no producer change.
 
 ### Status
 
+> **Validated on the box (`mathapp-prod`) 2026-06-29 — PASS ✅** (issue #68).
+> The flip + rollback below were rehearsed end-to-end against
+> `main`@d30f4aa (which also ships the #62 hang-fix: pool keepalives +
+> `WORKER_JOB_LEASE_TTL_S=900`). Evidence captured on the box:
+>
+> - **default `math_qa`:** picked up ~1.8 s after submit → RUNNING → review
+>   gate → approved → SUCCEEDED — i.e. **both** the submit *and* the review
+>   enqueue paths went through the broker.
+> - **crewai `math_conversation`:** picked up ~1.2 s → SUCCEEDED, routed to
+>   `runtime.crewai`; the **default consumer saw it 0 times** (per-runtime
+>   isolation confirmed).
+> - **redis:** `appendonly yes`, no `ports:` mapping (internal-only); the
+>   Hetzner Cloud Firewall blocks 6379 too.
+> - **install-once (#73)** held on the box — both prefork children of each
+>   consumer served the full runtime set, no `google/_upb` boot race.
+> - **rollback was clean:** `api` back to `compute=poll`, the poll workers
+>   reconnected, and no stray celery/redis containers were left behind.
+>
+> `COMPUTE=poll` stays the prod default; this is a *flip-on-when-we-want-it*
+> capability, not a new default.
+
 Wiring is in place as of 2026-05-12 and per-runtime routing landed with
 issue #66: `celery[redis]>=5.4` is in `packages/core/pyproject.toml`,
 `packages/worker/src/ai_platform/entrypoints/celery_app.py` defines the
@@ -553,34 +576,74 @@ The poll `worker`/`worker-crewai` sit behind the `poll`/`crewai`
 profiles and the broker pair + both per-runtime consumers behind
 `celery`, so the modes are selected by profile — a fresh bring-up of
 one never includes the other. Flipping a box that's *already* running
-the poll workers is the subject of the rehearsed flip + rollback in
-#68; the shape is:
+the poll workers is the **rehearsed, reversible** procedure below —
+validated on `mathapp-prod` 2026-06-29 (PASS; timings + evidence under
+[§6 Status](#status)).
+
+#### Flip: poll → celery
+
+Add the celery toggles to the box `.env`. `COMPUTE=celery` is the only
+*behavioural* change; the broker/concurrency/reaper vars are harmless
+no-ops under poll, so it's fine for them to already be present:
 
 ```bash
-# .env on the box gets two new lines:
+# /srv/mathapp/.env on the box:
 COMPUTE=celery
-CELERY_CONCURRENCY=2   # bump to taste
-
-# Roll the stack onto the celery profile: redis + BOTH per-runtime
-# consumers (celery-worker + celery-worker-crewai), and NOT the poll
-# workers. redeploy.sh maps PROFILES → --profile flags and pulls the
-# GHCR images (no build on the box).
-PROFILES="ui celery" ./infra/hetzner/scripts/redeploy.sh
-
-# The previous deploy started the poll workers (default PROFILES is
-# "ui crewai poll"); `up` with the reduced set leaves them running, so
-# stop BOTH runtimes' poll workers explicitly — neither's poll loop
-# should race a consumer.
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  stop worker worker-crewai
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  rm -f worker worker-crewai
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_CONCURRENCY=2            # prefork children per consumer; bump to taste
+WORKER_JOB_LEASE_TTL_S=900      # reaper TTL; also honoured by the celery beat sweep
 ```
 
-To roll back: drop `COMPUTE=celery` and redeploy with the default
-profiles (`./redeploy.sh`, which is `ui crewai poll`) to bring the poll
-workers back, then take down the celery services. The repo is the
-durable store either way; both backends see the same Supabase rows.
+```bash
+# 1. Roll the stack onto the celery profile: redis + BOTH per-runtime
+#    consumers (celery-worker [default] + celery-worker-crewai [crewai]),
+#    and NOT the poll workers. redeploy.sh maps PROFILES → --profile flags
+#    and pulls the GHCR images (no build on the box).
+PROFILES="ui celery" infra/hetzner/scripts/redeploy.sh
+
+# 2. CAVEAT — stop the poll workers explicitly. The previous deploy started
+#    them (default PROFILES is "ui crewai poll"), and a reduced-profile `up`
+#    LEAVES THEM RUNNING: compose never stops a service just because its
+#    profile dropped out of this invocation. Both runtimes' poll loops must
+#    be down so neither races a consumer for the same job. (`stop`, not
+#    `rm` — rollback restarts these same containers.)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  stop worker worker-crewai
+```
+
+After the flip: `api` reports `compute=celery`; redis is up (`appendonly
+yes`, no `ports:` mapping → reachable only inside the compose network, and
+the Hetzner FW blocks 6379 regardless); and jobs **route by runtime** — a
+`math_qa` / `math_notes` submit lands on `celery-worker`, a
+`math_conversation` submit on `celery-worker-crewai`, picked up sub-second.
+(2026-06-29 rehearsal: ~1.8 s default / ~1.2 s crewai submit→pickup; the
+default consumer never touched the crewai job.)
+
+#### Rollback: celery → poll
+
+Drop the one behavioural toggle and redeploy on the default profiles. Keep
+the broker/concurrency/reaper vars — they're no-ops once `COMPUTE` is back
+to poll, and keeping them makes the next flip a one-line edit:
+
+```bash
+# 1. Remove (or comment out) COMPUTE=celery in /srv/mathapp/.env. Leave
+#    CELERY_BROKER_URL / CELERY_CONCURRENCY / WORKER_JOB_LEASE_TTL_S in place.
+
+# 2. Redeploy on the default profiles ("ui crewai poll") to bring BOTH poll
+#    workers back (this `up -d` restarts the containers `stop`ped above):
+infra/hetzner/scripts/redeploy.sh
+
+# 3. Force-remove the celery services — the two per-runtime consumers and
+#    redis. They're not in the poll profile set, so the redeploy above won't
+#    touch them; remove them so nothing celery is left running.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  rm -fs celery-worker celery-worker-crewai redis
+```
+
+The repo is the durable store either way; both backends see the same
+Supabase rows, so no job is lost across a flip or a rollback. (2026-06-29
+rollback was clean: `api` back to `compute=poll`, poll workers reconnected,
+no stray celery/redis containers, queue quiescent.)
 
 ### Operational notes
 

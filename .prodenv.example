@@ -27,6 +27,16 @@ LOGFIRE_TOKEN=pylf_…
 # OpenAI provider helpers (audio/vision/openai_agent). Empty is fine until used.
 OPENAI_API_KEY=sk-…
 
+# Compute backend the API + workers use. `poll` (default) SELECT-polls the repo;
+# `celery` enqueues to redis for sub-second pickup. PROD DEFAULTS TO POLL — set
+# this to `celery` only when flipping the box onto the broker (rehearsed flip +
+# rollback in docs/operations/hetzner-deploy.md §6, validated 2026-06-29). The
+# broker/concurrency vars below are read only when COMPUTE=celery and are
+# harmless no-ops under poll, so leave them set across a rollback.
+COMPUTE=poll
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_CONCURRENCY=2            # prefork children per per-runtime consumer
+
 WORKER_INTERVAL=5
 # Reclaim a RUNNING job whose worker died mid-job (no heartbeat for this many
 # seconds) → PENDING for re-claim. Empty = off. See hetzner-deploy runbook.
