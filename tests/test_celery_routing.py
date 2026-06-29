@@ -120,3 +120,70 @@ def test_resolver_failure_falls_back_to_default_queue(routed_queues):
     )
     backend.enqueue("j")
     assert routed_queues == ["runtime.default"]
+
+
+# ---------------------------------------------------------------------------
+# Composition with the #67 durability net: the reconciler must re-push through
+# the SAME per-runtime routing as submit, scoped to this pool's own runtime.
+# ---------------------------------------------------------------------------
+
+def test_reconciler_reenqueues_through_per_runtime_queue(monkeypatch):
+    """`reconcile_jobs` (issue #67) re-drives stuck-PENDING jobs. It must route
+    each re-push through THIS pool's per-runtime queue — explicit
+    `apply_async(queue=...)`, mirroring the producer — not a bare `delay` onto a
+    shared/default queue. So a re-driven crewai job returns to the crewai
+    consumer, never the default one."""
+    monkeypatch.setenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    import importlib
+
+    celery_app = importlib.import_module("ai_platform.entrypoints.celery_app")
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        celery_app.run_job,
+        "apply_async",
+        lambda *a, **k: captured.update(args=k.get("args"), queue=k.get("queue")),
+    )
+
+    celery_app._reenqueue_for_runtime("job-123")
+
+    # Routes via apply_async to an explicit per-runtime queue matching this
+    # pool's runtime — not a None/default queue and not a bare delay.
+    assert captured["args"] == ["job-123"]
+    assert captured["queue"] == celery_app.celery_queue_for_runtime(celery_app.RUNTIME)
+    assert captured["queue"].startswith("runtime.")
+
+
+def test_reconciler_is_scoped_to_this_pools_runtime_job_types(tmp_path, monkeypatch):
+    """The sweep re-enqueues only THIS pool's runtime job_types (runtime-scoped
+    `_domains`), leaving other runtimes' PENDING jobs for their own pool — so
+    the default pool never re-pushes a crewai job and vice versa."""
+    from datetime import timedelta
+
+    from ai_platform.jobs.graph_execution import GraphJobExecutor
+    from ai_platform.utilities.time import utc_now
+    from ai_platform.workspace.storage.structured.job_repository import (
+        LocalJobRepository,
+    )
+    from ai_platform.workspace.storage.structured.local import LocalRepositoryConfig
+
+    repo = LocalJobRepository(
+        LocalRepositoryConfig(root_dir=str(tmp_path), prefix="jobs")
+    )
+    ex = GraphJobExecutor(repo)
+    # Two stuck-PENDING jobs, one per runtime; age them past any grace window.
+    for jt in ("math_qa", "math_conversation"):
+        rec = ex.submit_graph_job(
+            job_type=jt, graph_ref="g", initial_state={}, deps_payload={}
+        )
+        rec.state.updated_at = utc_now() - timedelta(seconds=10_000)
+        repo.put(rec)
+
+    pushed: list[str] = []
+    # A default-runtime pool only serves (and so only reconciles) math_qa.
+    ex.reconcile_pending_jobs(
+        lambda jid: pushed.append(ex.repo.get(jid).spec.job_type),
+        min_age_s=1.0,
+        job_types=["math_qa"],
+    )
+    assert pushed == ["math_qa"]  # the crewai job is left for the crewai pool

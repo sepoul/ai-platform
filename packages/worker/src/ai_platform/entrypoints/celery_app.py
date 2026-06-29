@@ -29,7 +29,8 @@ so a lost worker self-heals on the next `SELECT`. Celery gives that up —
 lost (broker down at submit, redis restart before an AOF flush, or #62's
 lease reaper releasing a RUNNING job back to PENDING). The `reconcile_jobs`
 beat task below restores the safety net: each tick it reaps expired leases
-(RUNNING→PENDING) and re-`delay`s jobs stuck PENDING past a grace window.
+(RUNNING→PENDING) and re-enqueues jobs stuck PENDING past a grace window —
+through this pool's per-runtime queue, scoped to its own runtime (issue #66).
 It only fires when a beat scheduler runs — embed it with `celery … worker
 -B` or run a dedicated `celery … beat`; the reaper half additionally needs
 `WORKER_JOB_LEASE_TTL_S`. See docs/reference/compute-backends.md.
@@ -181,6 +182,22 @@ PENDING_RECONCILE_AGE_S = _env_float("CELERY_PENDING_RECONCILE_AGE_S", 120.0)
 JOB_LEASE_TTL_S = _env_float("WORKER_JOB_LEASE_TTL_S")
 
 
+def _reenqueue_for_runtime(job_id: str) -> None:
+    """Re-push a stuck-PENDING job through the SAME per-runtime routing the API
+    producer uses (issue #66), mirroring `CeleryComputeBackend.enqueue`.
+
+    This pool only reconciles its own runtime's job_types (`reconcile_jobs`
+    passes `job_types=served`), so a re-driven job always belongs on THIS
+    runtime's queue. Route there explicitly with `apply_async(queue=...)`
+    rather than leaning on the implicit `task_default_queue` — same as the
+    producer, and robust if the default queue ever changes. The crewai pool's
+    reconciler therefore re-pushes only crewai jobs onto `runtime.crewai`, the
+    default pool only default jobs onto `runtime.default`; neither re-drives
+    the other's jobs, so cross-runtime jobs are never misrouted.
+    """
+    run_job.apply_async(args=[job_id], queue=celery_queue_for_runtime(RUNTIME))
+
+
 @app.task(name="reconcile_jobs")
 def reconcile_jobs() -> None:
     """Beat-scheduled durability sweep — the celery analogue of the poll
@@ -190,10 +207,11 @@ def reconcile_jobs() -> None:
     1. Reap expired leases (RUNNING→PENDING for re-claim, or FAILED once
        `max_attempts` is used) — the same `reclaim_expired_leases` the poll
        worker runs, but celery has no poll loop to host it.
-    2. Reconcile PENDING jobs — re-`delay` any stuck PENDING past the grace
+    2. Reconcile PENDING jobs — re-enqueue any stuck PENDING past the grace
        window (lost push at submit, redis restart, or a job the reaper just
-       released). `run_job`'s PENDING-gated claim makes the re-delivery
-       idempotent.
+       released) through this pool's per-runtime queue
+       (`_reenqueue_for_runtime`). `run_job`'s PENDING-gated claim makes the
+       re-delivery idempotent.
 
     Reap first so a freshly-reclaimed job is PENDING for a *later* tick to
     re-enqueue (it won't be re-pushed this tick — its `updated_at` was just
@@ -218,9 +236,12 @@ def reconcile_jobs() -> None:
             logger.exception("Reconciler: lease reap pass failed; continuing")
 
     try:
+        # Scope the sweep to THIS pool's runtime job_types (runtime-scoped
+        # `_domains`, issue #66) and re-push through this runtime's queue.
+        # Other runtimes' PENDING jobs are left for their own pool's reconciler.
         served = list(_domains.job_executions.keys())
         n = executor.reconcile_pending_jobs(
-            run_job.delay, PENDING_RECONCILE_AGE_S, job_types=served,
+            _reenqueue_for_runtime, PENDING_RECONCILE_AGE_S, job_types=served,
         )
         if n:
             logger.info("Reconciler: re-enqueued %d stuck-PENDING job(s)", n)
