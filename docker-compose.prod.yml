@@ -38,7 +38,15 @@ services:
     image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
     mem_limit: 1500m
 
+  # Both celery consumers run the virgin aiplatform-worker image — same as
+  # the poll workers. `celery-worker` vs `celery-worker-crewai` is purely a
+  # runtime-stack split (WORKER_RUNTIME env → registered domains + consumed
+  # queue), so prod runs both to cover every runtime under COMPUTE=celery.
   celery-worker:
+    image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
+    mem_limit: 1500m
+
+  celery-worker-crewai:
     image: ghcr.io/sepoul/aiplatform-worker:${IMAGE_TAG:-latest}
     mem_limit: 1500m
 

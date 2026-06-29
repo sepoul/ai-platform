@@ -7,6 +7,16 @@ The task body mirrors `ai_platform.jobs.worker_loop._run_one_job` but
 skips `claim_next_pending` — the broker already routed this specific
 `job_id` to us, so we just mark it RUNNING and drive its graph.
 
+**Per-runtime scope (issue #66).** Like the poll worker
+(`entrypoints/worker.py`), this pool serves exactly one runtime
+(`WORKER_RUNTIME`, default "default"): it registers only that runtime's
+domains and consumes only that runtime's queue
+(`celery_queue_for_runtime`). The API producer routes each job to its
+runtime's queue, so a slim env (e.g. the `crewai` pool, missing the
+pydantic_ai stack) never receives a job it can't import. Deploy one
+consumer per runtime (`celery-worker` / `celery-worker-crewai`), each
+with the matching `WORKER_RUNTIME`.
+
 Bootstrap runs in `worker_process_init`, NOT at module import. Celery's
 prefork pool would otherwise inherit the master's psycopg connections
 across the fork; those file descriptors aren't safe to share, and the
@@ -19,7 +29,8 @@ so a lost worker self-heals on the next `SELECT`. Celery gives that up —
 lost (broker down at submit, redis restart before an AOF flush, or #62's
 lease reaper releasing a RUNNING job back to PENDING). The `reconcile_jobs`
 beat task below restores the safety net: each tick it reaps expired leases
-(RUNNING→PENDING) and re-`delay`s jobs stuck PENDING past a grace window.
+(RUNNING→PENDING) and re-enqueues jobs stuck PENDING past a grace window —
+through this pool's per-runtime queue, scoped to its own runtime (issue #66).
 It only fires when a beat scheduler runs — embed it with `celery … worker
 -B` or run a dedicated `celery … beat`; the reaper half additionally needs
 `WORKER_JOB_LEASE_TTL_S`. See docs/reference/compute-backends.md.
@@ -34,10 +45,16 @@ import traceback
 from celery import Celery
 from celery.signals import worker_process_init
 
+from ai_platform.compute.celery import celery_queue_for_runtime
 from ai_platform.jobs.bootstrap import register_execution_domains
+from ai_platform.jobs.code_package_install import install_packages_for_runtime
 from ai_platform.jobs.job_runner import run_graph_job
+from ai_platform.jobs.runtimes import current_worker_runtime
 from ai_platform.workspace.bootstrap import bootstrap_workspace
-from ai_platform.composition_root import execution_registers_all
+from ai_platform.composition_root import (
+    execution_registers_for_runtime,
+    execution_registers_from_catalog,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +67,13 @@ app = Celery("mathapp", broker=os.environ["CELERY_BROKER_URL"])
 # Results live in Postgres via `JobRecord.state`; no Celery result_backend
 # on top of that — see deployment_hetzner.md §6 "What not to do".
 
+# This pool serves exactly one runtime and consumes only its queue. A worker
+# started without an explicit `-Q` consumes `task_default_queue`, so deriving
+# it from `WORKER_RUNTIME` is all it takes to scope consumption — the API
+# producer routes with an explicit `queue=` regardless (CeleryComputeBackend).
+RUNTIME = current_worker_runtime()
+app.conf.task_default_queue = celery_queue_for_runtime(RUNTIME)
+
 _workspace = None
 _domains = None
 WORKER_ID = "celery-unbootstrapped"
@@ -59,12 +83,31 @@ WORKER_ID = "celery-unbootstrapped"
 def _init_worker(**_kwargs) -> None:
     global _workspace, _domains, WORKER_ID
     _workspace = bootstrap_workspace()
-    # Single Celery pool registers all domains today. Per-runtime Celery
-    # routing (a queue + worker pool per runtime) is future work — until
-    # then this pool must run on an env that satisfies every runtime.
-    _domains = register_execution_domains(execution_registers_all(), _workspace)
+
+    # Scope registration to this pool's runtime, exactly like the poll worker
+    # (entrypoints/worker.py): install any CodePackages deployed for the
+    # runtime, then discover its domains from the JobDefinition catalog
+    # (hardcoded `_DOMAINS` fallback for cold boot). The pool registers ONLY
+    # its runtime's domains; the broker only ever hands it that runtime's
+    # queue. The install pass runs per forked child — best-effort + idempotent
+    # (already-installed wheels short-circuit before any pip call).
+    installed = install_packages_for_runtime(RUNTIME, _workspace.code_package_service)
+    if installed:
+        logger.info("Installed %d CodePackage(s) at boot: %s", len(installed), installed)
+
+    registers = execution_registers_from_catalog(
+        _workspace.job_definition_service, RUNTIME
+    )
+    if not registers:
+        registers = execution_registers_for_runtime(RUNTIME)
+
+    _domains = register_execution_domains(registers, _workspace)
     WORKER_ID = f"celery-{os.getpid()}"
-    logger.info("Celery worker process %s bootstrapped", WORKER_ID)
+    logger.info(
+        "Celery worker process %s bootstrapped (runtime=%s, queue=%s) serving: %s",
+        WORKER_ID, RUNTIME, app.conf.task_default_queue,
+        sorted(_domains.job_executions.keys()) or "(none)",
+    )
 
 
 @app.task(name="run_job")
@@ -139,6 +182,22 @@ PENDING_RECONCILE_AGE_S = _env_float("CELERY_PENDING_RECONCILE_AGE_S", 120.0)
 JOB_LEASE_TTL_S = _env_float("WORKER_JOB_LEASE_TTL_S")
 
 
+def _reenqueue_for_runtime(job_id: str) -> None:
+    """Re-push a stuck-PENDING job through the SAME per-runtime routing the API
+    producer uses (issue #66), mirroring `CeleryComputeBackend.enqueue`.
+
+    This pool only reconciles its own runtime's job_types (`reconcile_jobs`
+    passes `job_types=served`), so a re-driven job always belongs on THIS
+    runtime's queue. Route there explicitly with `apply_async(queue=...)`
+    rather than leaning on the implicit `task_default_queue` — same as the
+    producer, and robust if the default queue ever changes. The crewai pool's
+    reconciler therefore re-pushes only crewai jobs onto `runtime.crewai`, the
+    default pool only default jobs onto `runtime.default`; neither re-drives
+    the other's jobs, so cross-runtime jobs are never misrouted.
+    """
+    run_job.apply_async(args=[job_id], queue=celery_queue_for_runtime(RUNTIME))
+
+
 @app.task(name="reconcile_jobs")
 def reconcile_jobs() -> None:
     """Beat-scheduled durability sweep — the celery analogue of the poll
@@ -148,10 +207,11 @@ def reconcile_jobs() -> None:
     1. Reap expired leases (RUNNING→PENDING for re-claim, or FAILED once
        `max_attempts` is used) — the same `reclaim_expired_leases` the poll
        worker runs, but celery has no poll loop to host it.
-    2. Reconcile PENDING jobs — re-`delay` any stuck PENDING past the grace
+    2. Reconcile PENDING jobs — re-enqueue any stuck PENDING past the grace
        window (lost push at submit, redis restart, or a job the reaper just
-       released). `run_job`'s PENDING-gated claim makes the re-delivery
-       idempotent.
+       released) through this pool's per-runtime queue
+       (`_reenqueue_for_runtime`). `run_job`'s PENDING-gated claim makes the
+       re-delivery idempotent.
 
     Reap first so a freshly-reclaimed job is PENDING for a *later* tick to
     re-enqueue (it won't be re-pushed this tick — its `updated_at` was just
@@ -176,9 +236,12 @@ def reconcile_jobs() -> None:
             logger.exception("Reconciler: lease reap pass failed; continuing")
 
     try:
+        # Scope the sweep to THIS pool's runtime job_types (runtime-scoped
+        # `_domains`, issue #66) and re-push through this runtime's queue.
+        # Other runtimes' PENDING jobs are left for their own pool's reconciler.
         served = list(_domains.job_executions.keys())
         n = executor.reconcile_pending_jobs(
-            run_job.delay, PENDING_RECONCILE_AGE_S, job_types=served,
+            _reenqueue_for_runtime, PENDING_RECONCILE_AGE_S, job_types=served,
         )
         if n:
             logger.info("Reconciler: re-enqueued %d stuck-PENDING job(s)", n)

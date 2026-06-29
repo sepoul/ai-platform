@@ -81,7 +81,9 @@ Tradeoffs:
 
 ## `COMPUTE=celery` — broker-backed (being made flip-ready, epic #64)
 
-Wired, not yet the prod default. `enqueue` is `run_job.delay(job_id)`
+Wired, not yet the prod default. `enqueue` routes `run_job` to a
+**per-runtime queue** — `apply_async(queue=runtime.<runtime>)`, keyed off
+the job's `runtime_selector`
 ([`compute/celery.py`](../../packages/core/src/ai_platform/compute/celery.py));
 the consumer is its own CLI, so `start_worker` stays
 `NotImplementedError` and redirects operators to it:
@@ -96,6 +98,19 @@ bootstraps per worker-child (`worker_process_init`, not at import — a
 forked prefork pool can't share the master's psycopg FDs), then claims
 the broker-routed `job_id` and drives its graph. No Celery result
 backend — job state lives in Postgres on `JobRecord.state`.
+
+### Per-runtime routing (issue #66)
+
+Prod splits runtimes across worker pools with disjoint dependency stacks
+(`default` = pydantic_ai; `crewai` = CrewAI — they can't share one
+interpreter). So a single celery pool can't serve every runtime. Instead
+there is **one queue + one consumer per runtime**
+(`celery_queue_for_runtime(runtime)` → `runtime.<runtime>`): the API
+producer routes each job to its runtime's queue, and each consumer
+(`WORKER_RUNTIME`) registers only its runtime's domains and consumes only
+its own queue — mirroring the poll `worker` / `worker-crewai` split. Run
+`celery-worker` (default) and `celery-worker-crewai` (crewai). See
+[`hetzner-deploy.md` §6](../operations/hetzner-deploy.md).
 
 ### Durability net (issue #67)
 
@@ -116,11 +131,15 @@ re-pushes it under celery). Two pieces restore the net:
 
 2. **Beat sweep.** `reconcile_jobs`, a celery-beat task, runs two passes
    each tick: reclaim expired leases (RUNNING→PENDING, the reaper poll
-   has no loop to host under celery) and re-`delay` any job stuck PENDING
-   past a grace window. Idempotent with live deliveries: only PENDING
-   rows older than `CELERY_PENDING_RECONCILE_AGE_S` are re-pushed, and
-   `run_job` claims via `claim_job_for_run` (PENDING-gated), so a
-   re-push that races the original message no-ops on the second.
+   has no loop to host under celery) and re-enqueue any job stuck PENDING
+   past a grace window. The re-enqueue goes through the **same per-runtime
+   routing** as submit (issue #66): each pool's reconciler is scoped to its
+   own runtime's job_types and re-pushes onto its own runtime queue, so a
+   re-driven crewai job lands back on the crewai consumer, never the
+   default one. Idempotent with live deliveries: only PENDING rows older
+   than `CELERY_PENDING_RECONCILE_AGE_S` are re-pushed, and `run_job`
+   claims via `claim_job_for_run` (PENDING-gated), so a re-push that races
+   the original message no-ops on the second.
 
 The sweep only fires when a beat scheduler runs — embed it with
 `celery … worker -B`, or run a dedicated `celery … beat`. Knobs:
