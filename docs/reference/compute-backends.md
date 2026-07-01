@@ -155,6 +155,51 @@ The sweep only fires when a beat scheduler runs — embed it with
 - `WORKER_JOB_LEASE_TTL_S` — shared with the poll reaper; unset = no
   lease reap in the sweep.
 
+### Prod celery cutover (issue #79)
+
+Moving prod to `COMPUTE=celery` gives prefork's >1-child isolation (one
+wedged job no longer downs the whole runtime) and runs the reaper
+out-of-band on beat instead of on a possibly-frozen thread. For that to
+actually hold, each per-runtime consumer runs with the wedge guards
+(baked into the `celery` command in
+[`docker-compose.yml`](../../docker-compose.yml)):
+
+- `-B` — embed beat so `reconcile_jobs` (reap + re-enqueue) fires; without
+  it there is **no reaper under celery** and a job stranded RUNNING by a
+  dead child never recovers.
+- `--time-limit=900 --soft-time-limit=840` — the **hard** limit SIGKILLs +
+  recycles a child wedged in the C-level psycopg wait; a soft limit alone
+  can't (the exception can't fire while the thread is blocked in C).
+- `--prefetch-multiplier=1` — a wedged child can't hold prefetched jobs
+  hostage behind it.
+
+`celery_app.py` also sets these as `app.conf` defaults (`task_time_limit`,
+`task_soft_time_limit`, `worker_prefetch_multiplier=1`, `task_acks_late`)
+for any non-compose launch. **The compose flags take effect at the cutover
+on the existing image; the `app.conf` defaults only arrive on the next
+image rebuild** — so at cutover it is the compose `command:` that matters.
+
+Cutover (from `/srv/mathapp` on the box, after `git pull` — plain
+`docker compose` with the prod overlay, **not** `scripts/compose-celery.sh`,
+which is local-only: it runs bare `docker compose` with no
+`-f docker-compose.prod.yml` and `:local` images):
+
+```bash
+# cutover:
+COMPOSE_PROFILES=celery COMPUTE=celery \
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  up -d redis celery-worker celery-worker-crewai api
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  stop worker worker-crewai
+# rollback: COMPUTE=poll + up -d worker worker-crewai ; stop celery-* + redis
+```
+
+The `stop worker worker-crewai` is required: a reduced-profile `up` never
+stops a service just because its profile dropped out, so the poll loops
+would otherwise keep racing the consumers for the same jobs. See
+[`hetzner-deploy.md` §6](../operations/hetzner-deploy.md) for the
+rehearsed, evidence-backed flip/rollback procedure via `redeploy.sh`.
+
 ## Adding another backend
 
 Drop a file in `src/ai_platform/compute/` that implements the

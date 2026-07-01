@@ -232,6 +232,50 @@ def test_reaper_reclaim_is_re_enqueued_under_celery(tmp_path: Path):
     assert sink.calls == [str(rec.spec.job_id)]
 
 
+# ---------------------------------------------------------------------------
+# Reaper contract under the celery beat (issue #79)
+# ---------------------------------------------------------------------------
+
+def test_beat_reaper_reclaims_stale_lease_and_spares_fresh(tmp_path: Path):
+    """#79 cutover contract for `reconcile_jobs`'s reap pass, exercised at the
+    executor seam with NO live redis/broker.
+
+    The COMPUTE=celery flip relies on `celery … worker -B` firing
+    `reconcile_jobs` out-of-band: its first pass (`reclaim_expired_leases`)
+    must flip a STALE-lease RUNNING job (worker wedged past the lease TTL) back
+    to PENDING while leaving a FRESH-lease RUNNING job (a live worker still
+    heartbeating) untouched — otherwise a slow-but-healthy job would be reaped
+    out from under a working child. Its second pass then re-enqueues the
+    reclaimed job through the (mocked) per-runtime callback; the still-RUNNING
+    fresh job is never re-driven.
+    """
+    ex = _executor(tmp_path)
+
+    # Wedged worker: RUNNING with a heartbeat aged well past the TTL.
+    stale = _submit(ex)
+    stale.mark_running(worker_id="w-wedged")
+    stale.state.heartbeat_at = utc_now() - timedelta(seconds=600)
+    ex.repo.put(stale)
+
+    # Live worker: RUNNING with a recent heartbeat, inside the TTL.
+    fresh = _submit(ex)
+    fresh.mark_running(worker_id="w-live")
+    fresh.state.heartbeat_at = utc_now() - timedelta(seconds=10)
+    ex.repo.put(fresh)
+
+    # Pass 1 — reap. Only the stale lease is reclaimed; the fresh one is spared.
+    assert ex.reclaim_expired_leases(lease_ttl_s=300) == 1
+    assert ex.repo.get(stale.spec.job_id).state.status == JobStatus.PENDING
+    assert ex.repo.get(fresh.spec.job_id).state.status == JobStatus.RUNNING
+
+    # Pass 2 — reconcile. Once the reclaimed job ages past the grace window it
+    # is re-enqueued via the mocked callback; the RUNNING fresh job is skipped.
+    _age_pending(ex, stale, age_s=300)
+    sink = _Sink()
+    assert ex.reconcile_pending_jobs(sink, min_age_s=120) == 1
+    assert sink.calls == [str(stale.spec.job_id)]
+
+
 def test_reconcile_then_double_delivery_runs_once(tmp_path: Path):
     """End-to-end idempotency: the sweep re-enqueues a stuck job; the first
     delivery claims it; a second (duplicate) delivery is dropped."""

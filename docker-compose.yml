@@ -237,10 +237,23 @@ services:
   # it consumes — see celery_app.py.
   celery-worker:
     image: aiplatform-worker:local
+    # Wedge guards for the COMPUTE=celery cutover (issue #79): -B embeds beat
+    # so `reconcile_jobs` (out-of-band reap + re-enqueue) actually fires — no
+    # -B means no reaper under celery. --time-limit hard-SIGKILLs + recycles a
+    # child wedged in the C-level psycopg wait (a soft limit raises a Python
+    # exception that can't fire while the thread is blocked there); the lower
+    # --soft-time-limit is the graceful warning; --prefetch-multiplier=1 stops
+    # a wedged child holding prefetched jobs hostage behind it. These compose
+    # flags win at the prod cutover on the CURRENT image; the matching
+    # celery_app.py app.conf defaults land on the next image rebuild.
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
+      -B
+      --time-limit=900
+      --soft-time-limit=840
+      --prefetch-multiplier=1
     environment:
       WORKER_RUNTIME: default
       BACKEND: ${BACKEND:-local}
@@ -280,10 +293,19 @@ services:
   # prod (both runtimes served).
   celery-worker-crewai:
     image: aiplatform-worker:local
+    # Same wedge guards as `celery-worker` (issue #79): embedded beat for the
+    # out-of-band reaper, hard/soft time limits to kill+recycle a child wedged
+    # in the psycopg wait, and prefetch=1. Its beat runs the reap globally too
+    # (idempotent) so a stranded default-runtime job still recovers if the
+    # default consumer's own beat is down.
     command: >
       celery -A ai_platform.entrypoints.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_CONCURRENCY:-2}
+      -B
+      --time-limit=900
+      --soft-time-limit=840
+      --prefetch-multiplier=1
     environment:
       WORKER_RUNTIME: crewai
       BACKEND: ${BACKEND:-local}
