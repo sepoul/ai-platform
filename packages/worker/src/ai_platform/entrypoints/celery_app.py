@@ -240,6 +240,29 @@ PENDING_RECONCILE_AGE_S = _env_float("CELERY_PENDING_RECONCILE_AGE_S", 120.0)
 JOB_LEASE_TTL_S = _env_float("WORKER_JOB_LEASE_TTL_S")
 
 
+# ---------------------------------------------------------------------------
+# Wedge guards (issue #79) — defense-in-depth for a non-compose launch.
+# ---------------------------------------------------------------------------
+# These mirror the docker-compose `command:` flags (-B --time-limit
+# --soft-time-limit --prefetch-multiplier). Prod's deployed image PREDATES
+# these, so at the COMPUTE=celery cutover the **compose flags** are what take
+# effect; these app.conf defaults land on the next image rebuild (they only
+# matter for a bare `celery … worker` with no CLI flags).
+#
+# A soft limit raises a Python exception that CANNOT fire while a thread is
+# blocked in the C-level psycopg wait (the exact stale-pooler wedge #79
+# addresses); only the hard `task_time_limit` (SIGKILL + child recycle)
+# interrupts it. Tuning: `task_time_limit` must exceed the longest *legitimate
+# total* job runtime — the 900s lease TTL covers per-step gaps, not the whole
+# job — so raise both if a real job can legitimately run longer.
+app.conf.task_time_limit = _env_float("CELERY_TASK_TIME_LIMIT_S", 900)
+app.conf.task_soft_time_limit = _env_float("CELERY_TASK_SOFT_TIME_LIMIT_S", 840)
+# A wedged prefork child must not sit on prefetched jobs behind it, and a job
+# killed by the hard limit (or a died child) must redeliver, not vanish.
+app.conf.worker_prefetch_multiplier = 1
+app.conf.task_acks_late = True
+
+
 def _reenqueue_for_runtime(job_id: str) -> None:
     """Re-push a stuck-PENDING job through the SAME per-runtime routing the API
     producer uses (issue #66), mirroring `CeleryComputeBackend.enqueue`.
