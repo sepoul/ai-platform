@@ -10,6 +10,10 @@ magic, since a factory and its module share a name):
         transcribe_audio,    # bytes / path / file-like -> text
         AudioInterpreter,    # media-first-class: storage_ref -> text
     )
+    from ai_platform.ai.providers.embeddings import (
+        embed_text,             # text -> vector
+        EmbeddingsInterpreter,  # media-first-class: storage_ref -> vector
+    )
 
 Where the deps live:
 
