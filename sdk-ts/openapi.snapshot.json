@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -1560,9 +1560,6 @@
                         "$ref": "#/components/schemas/BookRetrievalArtifact"
                       },
                       {
-                        "$ref": "#/components/schemas/MathConversationArtifact"
-                      },
-                      {
                         "$ref": "#/components/schemas/MathQuestionArtifact"
                       },
                       {
@@ -1576,6 +1573,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/FigureArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
                       }
                     ],
                     "discriminator": {
@@ -1587,12 +1587,12 @@
                         "book_structure": "#/components/schemas/BookStructureArtifact",
                         "book_index": "#/components/schemas/BookIndexArtifact",
                         "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
-                        "math_conversation": "#/components/schemas/MathConversationArtifact",
                         "math_question": "#/components/schemas/MathQuestionArtifact",
                         "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                         "user_comment": "#/components/schemas/UserCommentArtifact",
                         "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                        "figure": "#/components/schemas/FigureArtifact"
+                        "figure": "#/components/schemas/FigureArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact"
                       }
                     }
                   },
@@ -1660,9 +1660,6 @@
                       "$ref": "#/components/schemas/BookRetrievalArtifact"
                     },
                     {
-                      "$ref": "#/components/schemas/MathConversationArtifact"
-                    },
-                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1676,6 +1673,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/FigureArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
                     }
                   ],
                   "discriminator": {
@@ -1687,12 +1687,12 @@
                       "book_structure": "#/components/schemas/BookStructureArtifact",
                       "book_index": "#/components/schemas/BookIndexArtifact",
                       "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
-                      "math_conversation": "#/components/schemas/MathConversationArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
                       "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                      "figure": "#/components/schemas/FigureArtifact"
+                      "figure": "#/components/schemas/FigureArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact"
                     }
                   },
                   "title": "Response Get Artifact Artifacts  Artifact Id  Get"
@@ -3052,6 +3052,144 @@
         "title": "CodePackageRecord",
         "description": "Metadata pointer to an installable code blob.\n\n`blob_id` is the FileRepository logical name (filename within the\n`code_packages` prefix) \u2014 fetching the bytes goes through the\nfile repository, not this record."
       },
+      "ConstellationAnchor": {
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "title": "Node Id",
+            "description": "Real book-graph node id."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Human label (e.g. 'Thm 23.1')."
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "description": "Chapter/section trail to the node."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "Book page, if the node carries one."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Node kind (theorem|proposition|example|\u2026).",
+            "default": ""
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "'seed' | 'gravity'.",
+            "default": "gravity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "node_id",
+          "label"
+        ],
+        "title": "ConstellationAnchor",
+        "description": "One source-grounded point of a constellation \u2014 a real book-graph node.\n\nMirrors `book.constellation.Anchor`: `role` is `\"seed\"` for a note-derived\nseed node and `\"gravity\"` for a node the walk pulled in for its pull on the\nseeds. Never a fabricated coordinate \u2014 every anchor is a real graph node."
+      },
+      "ConstellationEdge": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source node_id."
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Target node_id."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Edge kind (depends_on|references|\u2026).",
+            "default": ""
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Edge confidence in [0, 1].",
+            "default": 1.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "ConstellationEdge",
+        "description": "One edge of the gravity skeleton binding the anchors together \u2014 mirrors\n`book.constellation.ConnectingEdge`."
+      },
+      "ConstellationPayload": {
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/ConstellationAnchor"
+            },
+            "type": "array",
+            "title": "Anchors",
+            "description": "The constellation's source-grounded anchors."
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/ConstellationEdge"
+            },
+            "type": "array",
+            "title": "Edges",
+            "description": "The connecting edges (the gravity skeleton)."
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Aggregate gravity score of the constellation.",
+            "default": 0.0
+          },
+          "seed_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Seed Node Ids",
+            "description": "The seed node_ids the constellation grew from."
+          },
+          "story": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story",
+            "description": "ONE short grounded narrative binding the anchors (None if unwritten)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ConstellationPayload",
+        "description": "The retrieval product persisted on a mentor card \u2014 the anchors, the edges\nthat connect them, the aggregate gravity `score`, the `seed_node_ids` it grew\nfrom, and the grounded `story` narrated over it.\n\nMirrors `book.constellation.Constellation` field-for-field so S1's dataclass\nround-trips cleanly through the artifact. `from_constellation` does the\ndataclass \u2192 model convert by reading attributes only (never importing S1's\nengine), so it works against the pinned S1 contract."
+      },
       "ConversationTurn": {
         "properties": {
           "turn_index": {
@@ -3570,9 +3708,6 @@
                   "$ref": "#/components/schemas/BookRetrievalArtifact"
                 },
                 {
-                  "$ref": "#/components/schemas/MathConversationArtifact"
-                },
-                {
                   "$ref": "#/components/schemas/MathQuestionArtifact"
                 },
                 {
@@ -3586,6 +3721,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/FigureArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
                 }
               ],
               "discriminator": {
@@ -3948,10 +4086,10 @@
                     "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   }
                 ],
                 "discriminator": {
@@ -4070,10 +4208,10 @@
                     "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   }
                 ],
                 "discriminator": {
@@ -4997,67 +5135,143 @@
             "title": "Storage Url"
           },
           "flavor": {
-            "type": "string",
-            "enum": [
-              "abandonment",
-              "unverified_proof"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "abandonment",
+                  "unverified_proof"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Flavor",
-            "description": "Repair flavor: abandonment | unverified_proof."
+            "description": "Repair flavor: abandonment | unverified_proof (None on a constellation card)."
           },
           "catch": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Catch",
-            "description": "The learner's verbatim quote (== decision.quote)."
+            "description": "The learner's verbatim quote (== decision.quote); repair card."
           },
           "why_it_matters": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Why It Matters",
-            "description": "One line: why this is the crux, not bookkeeping."
+            "description": "One line: why this is the crux, not bookkeeping (repair card)."
           },
           "move": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Move",
-            "description": "Exactly one book-anchored directive (contains the citation), one sitting, never the answer."
+            "description": "Exactly one book-anchored directive (contains the citation), one sitting (repair card)."
           },
           "close": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Close",
-            "description": "A concrete WHEN ('I'll ask you about it on Sunday')."
+            "description": "A concrete WHEN ('I'll ask you about it on Sunday'); repair card."
           },
           "on_his_side": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "On His Side",
-            "description": "One SPECIFIC REAL win pulled from the same note (not generic praise)."
+            "description": "One SPECIFIC REAL win pulled from the same note (not generic praise); repair card."
           },
           "citation": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Citation",
-            "description": "Trust-aware citation (label + book + page) rendered only from the anchor."
+            "description": "Trust-aware citation (label + book + page) rendered only from the anchor; repair card."
           },
           "anchor": {
-            "$ref": "#/components/schemas/GroundedAnchor",
-            "description": "The GroundedAnchor the card is rooted in (book coordinate + provenance)."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroundedAnchor"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The GroundedAnchor a repair card is rooted in (book coordinate + provenance)."
           },
           "trust_level": {
-            "type": "string",
-            "enum": [
-              "grounded",
-              "section-grounded",
-              "ungrounded"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "grounded",
+                  "section-grounded",
+                  "ungrounded"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Trust Level",
-            "description": "The anchor's trust level \u2014 grounded | section-grounded."
+            "description": "A repair anchor's trust level \u2014 grounded | section-grounded."
+          },
+          "constellation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConstellationPayload"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The grounded constellation (anchors+edges+score+seeds+story); None on a repair card."
           },
           "source_note_date": {
             "type": "string",
             "title": "Source Note Date",
-            "description": "Date (YYYY-MM-DD) of the note this card repairs."
+            "description": "Date (YYYY-MM-DD) of the note this card is rooted in.",
+            "default": ""
           },
           "text": {
             "type": "string",
             "title": "Text",
-            "description": "The rendered ~4-line card (readable in ~10s)."
+            "description": "The rendered card the learner reads (repair ~4-line, or the constellation story).",
+            "default": ""
           },
           "created_by": {
             "anyOf": [
@@ -5070,25 +5284,19 @@
             ],
             "title": "Created By",
             "description": "The learner this card is for."
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "description": "Card shape version (1=repair-only, 2=+constellation).",
+            "default": 1
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "flavor",
-          "catch",
-          "why_it_matters",
-          "move",
-          "close",
-          "on_his_side",
-          "citation",
-          "anchor",
-          "trust_level",
-          "source_note_date",
-          "text"
-        ],
         "title": "MentorCardArtifact",
-        "description": "One minted **mentor repair card** \u2014 the persisted form of the card the\nmentor brain composes (``mathai.math_notes.mentor.repair_card.compose_repair_card``).\n\nThe mentor loop reads a trailing window of `DailyNoteArtifact`s, and when a\nrepair candidate fires it composes exactly one card and mints it as this\nartifact. The field set **mirrors `compose_repair_card`'s output verbatim** \u2014\nthe five anatomy parts (``catch`` / ``why_it_matters`` / ``move`` / ``close``\n/ ``on_his_side``), the trust-aware ``citation`` rendered only from the\nanchor, the ``flavor``, the assembled ~4-line ``text`` \u2014 and additionally\ncarries the full `GroundedAnchor` (source-traceable book coordinate) and its\ndenormalized ``trust_level`` so a reader can re-render the citation or link\nback to the book without re-retrieval.\n\nTwo flavors of one shape: ``abandonment`` (a dropped crux) and\n``unverified_proof`` (a proof he never checked). A repair card is only ever\nminted from a ``grounded`` or ``section-grounded`` anchor \u2014 never\n``ungrounded`` (that is a #70 contract violation, refused before compose), so\n``trust_level`` here is always one of the two grounded levels."
+        "description": "One minted **mentor card** \u2014 a *repair card* OR a *constellation card*.\n\nThe mentor loop reads a trailing window of `DailyNoteArtifact`s and, with\nrestraint, mints **at most one** card per run. There are two shapes of the one\nartifact:\n\n* **Constellation card** (S3, #96 \u2014 the current production shape). The run\n  derives seeds from the note's extracted concepts, retrieves a\n  `Constellation` (far-apart-yet-connected book places, grounded ONLY in the\n  book graph), narrates ONE grounded ``story`` over it, and persists that on\n  ``constellation`` (with ``text`` == the story). The repair anatomy is unset.\n* **Repair card** (the original shape). The field set mirrors\n  ``mathai.math_notes.mentor.repair_card.compose_repair_card``'s output\n  verbatim \u2014 the five anatomy parts (``catch`` / ``why_it_matters`` / ``move``\n  / ``close`` / ``on_his_side``), the trust-aware ``citation`` rendered only\n  from the anchor, the ``flavor``, the assembled ~4-line ``text`` \u2014 plus the\n  full source-traceable `GroundedAnchor` and its denormalized ``trust_level``.\n\nThe repair anatomy fields are OPTIONAL so the same artifact type carries both\nshapes; a reader distinguishes them by which of ``constellation`` / ``flavor``\nis set. Whatever the shape, the card is grounded ONLY in real book\ncoordinates \u2014 never a fabricated one. ``schema_version`` (see\n``MENTOR_CARD_SCHEMA_VERSION``) marks the shape: 1 = repair-only, 2 = carries\nthe constellation payload."
       },
       "NoteFlair": {
         "type": "string",
@@ -5932,7 +6140,7 @@
         "title": "RetrievedHit",
         "description": "One ranked, source-traceable hit stored on a `BookRetrievalArtifact`.\n\nMirrors `models.BookRetrievalHit` (the job-result shape) but defined here so\nthe artifact layer carries no import from `models` (models \u2192 artifacts is the\none-directional dependency). `node_id`/`label`/`page`/`heading_path` are the\nsource-traceability fields the design requires."
       },
-      "RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/MathNotesInput"
@@ -5947,13 +6155,13 @@
             "$ref": "#/components/schemas/MathMentorInput"
           },
           {
-            "$ref": "#/components/schemas/MathConversationInput"
+            "$ref": "#/components/schemas/MathQAInput"
           },
           {
-            "$ref": "#/components/schemas/MathQAInput"
+            "$ref": "#/components/schemas/MathConversationInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {

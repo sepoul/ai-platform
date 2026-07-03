@@ -1278,6 +1278,116 @@ export interface components {
             deployed_at?: string;
         };
         /**
+         * ConstellationAnchor
+         * @description One source-grounded point of a constellation — a real book-graph node.
+         *
+         *     Mirrors `book.constellation.Anchor`: `role` is `"seed"` for a note-derived
+         *     seed node and `"gravity"` for a node the walk pulled in for its pull on the
+         *     seeds. Never a fabricated coordinate — every anchor is a real graph node.
+         */
+        ConstellationAnchor: {
+            /**
+             * Node Id
+             * @description Real book-graph node id.
+             */
+            node_id: string;
+            /**
+             * Label
+             * @description Human label (e.g. 'Thm 23.1').
+             */
+            label: string;
+            /**
+             * Heading Path
+             * @description Chapter/section trail to the node.
+             */
+            heading_path?: string[];
+            /**
+             * Page
+             * @description Book page, if the node carries one.
+             */
+            page?: number | null;
+            /**
+             * Kind
+             * @description Node kind (theorem|proposition|example|…).
+             * @default
+             */
+            kind: string;
+            /**
+             * Role
+             * @description 'seed' | 'gravity'.
+             * @default gravity
+             */
+            role: string;
+        };
+        /**
+         * ConstellationEdge
+         * @description One edge of the gravity skeleton binding the anchors together — mirrors
+         *     `book.constellation.ConnectingEdge`.
+         */
+        ConstellationEdge: {
+            /**
+             * Source
+             * @description Source node_id.
+             */
+            source: string;
+            /**
+             * Target
+             * @description Target node_id.
+             */
+            target: string;
+            /**
+             * Kind
+             * @description Edge kind (depends_on|references|…).
+             * @default
+             */
+            kind: string;
+            /**
+             * Confidence
+             * @description Edge confidence in [0, 1].
+             * @default 1
+             */
+            confidence: number;
+        };
+        /**
+         * ConstellationPayload
+         * @description The retrieval product persisted on a mentor card — the anchors, the edges
+         *     that connect them, the aggregate gravity `score`, the `seed_node_ids` it grew
+         *     from, and the grounded `story` narrated over it.
+         *
+         *     Mirrors `book.constellation.Constellation` field-for-field so S1's dataclass
+         *     round-trips cleanly through the artifact. `from_constellation` does the
+         *     dataclass → model convert by reading attributes only (never importing S1's
+         *     engine), so it works against the pinned S1 contract.
+         */
+        ConstellationPayload: {
+            /**
+             * Anchors
+             * @description The constellation's source-grounded anchors.
+             */
+            anchors?: components["schemas"]["ConstellationAnchor"][];
+            /**
+             * Edges
+             * @description The connecting edges (the gravity skeleton).
+             */
+            edges?: components["schemas"]["ConstellationEdge"][];
+            /**
+             * Score
+             * @description Aggregate gravity score of the constellation.
+             * @default 0
+             */
+            score: number;
+            /**
+             * Seed Node Ids
+             * @description The seed node_ids the constellation grew from.
+             */
+            seed_node_ids?: string[];
+            /**
+             * Story
+             * @description ONE short grounded narrative binding the anchors (None if unwritten).
+             */
+            story?: string | null;
+        };
+        /**
          * ConversationTurn
          * @description A single agent move in the conversation.
          *
@@ -1499,7 +1609,7 @@ export interface components {
         /** FullArtifactListResponse */
         FullArtifactListResponse: {
             /** Artifacts */
-            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
+            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
             /** Total */
             total: number;
         };
@@ -1665,7 +1775,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -1691,7 +1801,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -2090,24 +2200,30 @@ export interface components {
         };
         /**
          * MentorCardArtifact
-         * @description One minted **mentor repair card** — the persisted form of the card the
-         *     mentor brain composes (``mathai.math_notes.mentor.repair_card.compose_repair_card``).
+         * @description One minted **mentor card** — a *repair card* OR a *constellation card*.
          *
-         *     The mentor loop reads a trailing window of `DailyNoteArtifact`s, and when a
-         *     repair candidate fires it composes exactly one card and mints it as this
-         *     artifact. The field set **mirrors `compose_repair_card`'s output verbatim** —
-         *     the five anatomy parts (``catch`` / ``why_it_matters`` / ``move`` / ``close``
-         *     / ``on_his_side``), the trust-aware ``citation`` rendered only from the
-         *     anchor, the ``flavor``, the assembled ~4-line ``text`` — and additionally
-         *     carries the full `GroundedAnchor` (source-traceable book coordinate) and its
-         *     denormalized ``trust_level`` so a reader can re-render the citation or link
-         *     back to the book without re-retrieval.
+         *     The mentor loop reads a trailing window of `DailyNoteArtifact`s and, with
+         *     restraint, mints **at most one** card per run. There are two shapes of the one
+         *     artifact:
          *
-         *     Two flavors of one shape: ``abandonment`` (a dropped crux) and
-         *     ``unverified_proof`` (a proof he never checked). A repair card is only ever
-         *     minted from a ``grounded`` or ``section-grounded`` anchor — never
-         *     ``ungrounded`` (that is a #70 contract violation, refused before compose), so
-         *     ``trust_level`` here is always one of the two grounded levels.
+         *     * **Constellation card** (S3, #96 — the current production shape). The run
+         *       derives seeds from the note's extracted concepts, retrieves a
+         *       `Constellation` (far-apart-yet-connected book places, grounded ONLY in the
+         *       book graph), narrates ONE grounded ``story`` over it, and persists that on
+         *       ``constellation`` (with ``text`` == the story). The repair anatomy is unset.
+         *     * **Repair card** (the original shape). The field set mirrors
+         *       ``mathai.math_notes.mentor.repair_card.compose_repair_card``'s output
+         *       verbatim — the five anatomy parts (``catch`` / ``why_it_matters`` / ``move``
+         *       / ``close`` / ``on_his_side``), the trust-aware ``citation`` rendered only
+         *       from the anchor, the ``flavor``, the assembled ~4-line ``text`` — plus the
+         *       full source-traceable `GroundedAnchor` and its denormalized ``trust_level``.
+         *
+         *     The repair anatomy fields are OPTIONAL so the same artifact type carries both
+         *     shapes; a reader distinguishes them by which of ``constellation`` / ``flavor``
+         *     is set. Whatever the shape, the card is grounded ONLY in real book
+         *     coordinates — never a fabricated one. ``schema_version`` (see
+         *     ``MENTOR_CARD_SCHEMA_VERSION``) marks the shape: 1 = repair-only, 2 = carries
+         *     the constellation payload.
          */
         MentorCardArtifact: {
             /**
@@ -2137,56 +2253,58 @@ export interface components {
             storage_url?: string | null;
             /**
              * Flavor
-             * @description Repair flavor: abandonment | unverified_proof.
-             * @enum {string}
+             * @description Repair flavor: abandonment | unverified_proof (None on a constellation card).
              */
-            flavor: "abandonment" | "unverified_proof";
+            flavor?: ("abandonment" | "unverified_proof") | null;
             /**
              * Catch
-             * @description The learner's verbatim quote (== decision.quote).
+             * @description The learner's verbatim quote (== decision.quote); repair card.
              */
-            catch: string;
+            catch?: string | null;
             /**
              * Why It Matters
-             * @description One line: why this is the crux, not bookkeeping.
+             * @description One line: why this is the crux, not bookkeeping (repair card).
              */
-            why_it_matters: string;
+            why_it_matters?: string | null;
             /**
              * Move
-             * @description Exactly one book-anchored directive (contains the citation), one sitting, never the answer.
+             * @description Exactly one book-anchored directive (contains the citation), one sitting (repair card).
              */
-            move: string;
+            move?: string | null;
             /**
              * Close
-             * @description A concrete WHEN ('I'll ask you about it on Sunday').
+             * @description A concrete WHEN ('I'll ask you about it on Sunday'); repair card.
              */
-            close: string;
+            close?: string | null;
             /**
              * On His Side
-             * @description One SPECIFIC REAL win pulled from the same note (not generic praise).
+             * @description One SPECIFIC REAL win pulled from the same note (not generic praise); repair card.
              */
-            on_his_side: string;
+            on_his_side?: string | null;
             /**
              * Citation
-             * @description Trust-aware citation (label + book + page) rendered only from the anchor.
+             * @description Trust-aware citation (label + book + page) rendered only from the anchor; repair card.
              */
-            citation: string;
-            /** @description The GroundedAnchor the card is rooted in (book coordinate + provenance). */
-            anchor: components["schemas"]["GroundedAnchor"];
+            citation?: string | null;
+            /** @description The GroundedAnchor a repair card is rooted in (book coordinate + provenance). */
+            anchor?: components["schemas"]["GroundedAnchor"] | null;
             /**
              * Trust Level
-             * @description The anchor's trust level — grounded | section-grounded.
-             * @enum {string}
+             * @description A repair anchor's trust level — grounded | section-grounded.
              */
-            trust_level: "grounded" | "section-grounded" | "ungrounded";
+            trust_level?: ("grounded" | "section-grounded" | "ungrounded") | null;
+            /** @description The grounded constellation (anchors+edges+score+seeds+story); None on a repair card. */
+            constellation?: components["schemas"]["ConstellationPayload"] | null;
             /**
              * Source Note Date
-             * @description Date (YYYY-MM-DD) of the note this card repairs.
+             * @description Date (YYYY-MM-DD) of the note this card is rooted in.
+             * @default
              */
             source_note_date: string;
             /**
              * Text
-             * @description The rendered ~4-line card (readable in ~10s).
+             * @description The rendered card the learner reads (repair ~4-line, or the constellation story).
+             * @default
              */
             text: string;
             /**
@@ -2194,6 +2312,12 @@ export interface components {
              * @description The learner this card is for.
              */
             created_by?: string | null;
+            /**
+             * Schema Version
+             * @description Card shape version (1=repair-only, 2=+constellation).
+             * @default 1
+             */
+            schema_version: number;
         };
         /**
          * NoteFlair
@@ -2682,8 +2806,8 @@ export interface components {
              */
             score: number;
         };
-        /** RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["BookIndexInput"] | components["schemas"]["BookRetrieveInput"] | components["schemas"]["MathMentorInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["BookIndexInput"] | components["schemas"]["BookRetrieveInput"] | components["schemas"]["MathMentorInput"] | components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -2905,6 +3029,9 @@ export type SchemaBookRetrievalResult = components['schemas']['BookRetrievalResu
 export type SchemaBookRetrieveInput = components['schemas']['BookRetrieveInput'];
 export type SchemaBookStructureArtifact = components['schemas']['BookStructureArtifact'];
 export type SchemaCodePackageRecord = components['schemas']['CodePackageRecord'];
+export type SchemaConstellationAnchor = components['schemas']['ConstellationAnchor'];
+export type SchemaConstellationEdge = components['schemas']['ConstellationEdge'];
+export type SchemaConstellationPayload = components['schemas']['ConstellationPayload'];
 export type SchemaConversationTurn = components['schemas']['ConversationTurn'];
 export type SchemaCrewChatEvent = components['schemas']['CrewChatEvent'];
 export type SchemaDailyNoteArtifact = components['schemas']['DailyNoteArtifact'];
@@ -2948,7 +3075,7 @@ export type SchemaPromptListResponse = components['schemas']['PromptListResponse
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
 export type SchemaRetrievedHit = components['schemas']['RetrievedHit'];
-export type SchemaRootModelAnnotatedUnionMathNotesInputBookIndexInputBookRetrieveInputMathMentorInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputBookIndexInputBookRetrieveInputMathMentorInputMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -3071,7 +3198,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -3989,7 +4116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
+                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
                 };
             };
             /** @description Validation Error */
@@ -4020,7 +4147,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
                 };
             };
             /** @description Validation Error */
