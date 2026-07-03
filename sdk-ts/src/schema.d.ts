@@ -1318,6 +1318,12 @@ export interface components {
              * @default gravity
              */
             role: string;
+            /**
+             * Text
+             * @description The node's real book body — or, for a container section/subsection, its descendant leaf bodies stitched together. The actual content the map drills into (empty if the node carries no extractable text).
+             * @default
+             */
+            text: string;
         };
         /**
          * ConstellationEdge
@@ -1609,7 +1615,7 @@ export interface components {
         /** FullArtifactListResponse */
         FullArtifactListResponse: {
             /** Artifacts */
-            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
+            artifacts: (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
             /** Total */
             total: number;
         };
@@ -1775,7 +1781,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /** JobStatusResponse */
         JobStatusResponse: {
@@ -1801,7 +1807,7 @@ export interface components {
             /** Error Message */
             error_message?: string | null;
             /** Result */
-            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathQAResult"] | components["schemas"]["MathConversationResult"]) | null;
+            result?: (components["schemas"]["MathNotesResult"] | components["schemas"]["BookIndexResult"] | components["schemas"]["BookRetrievalResult"] | components["schemas"]["MathMentorResult"] | components["schemas"]["MathConversationResult"] | components["schemas"]["MathQAResult"]) | null;
         };
         /**
          * LatexAnswerArtifact
@@ -2806,8 +2812,8 @@ export interface components {
              */
             score: number;
         };
-        /** RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
-        RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["BookIndexInput"] | components["schemas"]["BookRetrieveInput"] | components["schemas"]["MathMentorInput"] | components["schemas"]["MathQAInput"] | components["schemas"]["MathConversationInput"];
+        /** RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]] */
+        RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____: components["schemas"]["MathNotesInput"] | components["schemas"]["BookIndexInput"] | components["schemas"]["BookRetrieveInput"] | components["schemas"]["MathMentorInput"] | components["schemas"]["MathConversationInput"] | components["schemas"]["MathQAInput"];
         /** RunSubmitResponse */
         RunSubmitResponse: {
             /** Job Id */
@@ -3075,7 +3081,7 @@ export type SchemaPromptListResponse = components['schemas']['PromptListResponse
 export type SchemaPromptResponse = components['schemas']['PromptResponse'];
 export type SchemaPromptUpdateRequest = components['schemas']['PromptUpdateRequest'];
 export type SchemaRetrievedHit = components['schemas']['RetrievedHit'];
-export type SchemaRootModelAnnotatedUnionMathNotesInputBookIndexInputBookRetrieveInputMathMentorInputMathQaInputMathConversationInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
+export type SchemaRootModelAnnotatedUnionMathNotesInputBookIndexInputBookRetrieveInputMathMentorInputMathConversationInputMathQaInputFieldInfoAnnotationNoneTypeRequiredTrueDiscriminatorJobType = components['schemas']['RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____'];
 export type SchemaRunSubmitResponse = components['schemas']['RunSubmitResponse'];
 export type SchemaStageResponse = components['schemas']['StageResponse'];
 export type SchemaToolCallRecord = components['schemas']['ToolCallRecord'];
@@ -3198,7 +3204,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
+                "application/json": components["schemas"]["RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"];
             };
         };
         responses: {
@@ -4116,7 +4122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"])[];
+                    "application/json": (components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"])[];
                 };
             };
             /** @description Validation Error */
@@ -4147,7 +4153,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"] | components["schemas"]["MathConversationArtifact"];
+                    "application/json": components["schemas"]["DailyNoteArtifact"] | components["schemas"]["NotePageArtifact"] | components["schemas"]["MentorCardArtifact"] | components["schemas"]["BookStructureArtifact"] | components["schemas"]["BookIndexArtifact"] | components["schemas"]["BookRetrievalArtifact"] | components["schemas"]["MathConversationArtifact"] | components["schemas"]["MathQuestionArtifact"] | components["schemas"]["GeneratedAnswerArtifact"] | components["schemas"]["UserCommentArtifact"] | components["schemas"]["LatexAnswerArtifact"] | components["schemas"]["FigureArtifact"];
                 };
             };
             /** @description Validation Error */

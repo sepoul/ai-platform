@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -1560,6 +1560,9 @@
                         "$ref": "#/components/schemas/BookRetrievalArtifact"
                       },
                       {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
+                      },
+                      {
                         "$ref": "#/components/schemas/MathQuestionArtifact"
                       },
                       {
@@ -1573,9 +1576,6 @@
                       },
                       {
                         "$ref": "#/components/schemas/FigureArtifact"
-                      },
-                      {
-                        "$ref": "#/components/schemas/MathConversationArtifact"
                       }
                     ],
                     "discriminator": {
@@ -1587,12 +1587,12 @@
                         "book_structure": "#/components/schemas/BookStructureArtifact",
                         "book_index": "#/components/schemas/BookIndexArtifact",
                         "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact",
                         "math_question": "#/components/schemas/MathQuestionArtifact",
                         "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                         "user_comment": "#/components/schemas/UserCommentArtifact",
                         "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                        "figure": "#/components/schemas/FigureArtifact",
-                        "math_conversation": "#/components/schemas/MathConversationArtifact"
+                        "figure": "#/components/schemas/FigureArtifact"
                       }
                     }
                   },
@@ -1660,6 +1660,9 @@
                       "$ref": "#/components/schemas/BookRetrievalArtifact"
                     },
                     {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
+                    },
+                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1673,9 +1676,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/FigureArtifact"
-                    },
-                    {
-                      "$ref": "#/components/schemas/MathConversationArtifact"
                     }
                   ],
                   "discriminator": {
@@ -1687,12 +1687,12 @@
                       "book_structure": "#/components/schemas/BookStructureArtifact",
                       "book_index": "#/components/schemas/BookIndexArtifact",
                       "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
                       "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                      "figure": "#/components/schemas/FigureArtifact",
-                      "math_conversation": "#/components/schemas/MathConversationArtifact"
+                      "figure": "#/components/schemas/FigureArtifact"
                     }
                   },
                   "title": "Response Get Artifact Artifacts  Artifact Id  Get"
@@ -3095,6 +3095,12 @@
             "title": "Role",
             "description": "'seed' | 'gravity'.",
             "default": "gravity"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The node's real book body \u2014 or, for a container section/subsection, its descendant leaf bodies stitched together. The actual content the map drills into (empty if the node carries no extractable text).",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -3708,6 +3714,9 @@
                   "$ref": "#/components/schemas/BookRetrievalArtifact"
                 },
                 {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
+                },
+                {
                   "$ref": "#/components/schemas/MathQuestionArtifact"
                 },
                 {
@@ -3721,9 +3730,6 @@
                 },
                 {
                   "$ref": "#/components/schemas/FigureArtifact"
-                },
-                {
-                  "$ref": "#/components/schemas/MathConversationArtifact"
                 }
               ],
               "discriminator": {
@@ -4086,10 +4092,10 @@
                     "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
@@ -4208,10 +4214,10 @@
                     "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/MathConversationResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathConversationResult"
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
@@ -6140,7 +6146,7 @@
         "title": "RetrievedHit",
         "description": "One ranked, source-traceable hit stored on a `BookRetrievalArtifact`.\n\nMirrors `models.BookRetrievalHit` (the job-result shape) but defined here so\nthe artifact layer carries no import from `models` (models \u2192 artifacts is the\none-directional dependency). `node_id`/`label`/`page`/`heading_path` are the\nsource-traceability fields the design requires."
       },
-      "RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/MathNotesInput"
@@ -6155,13 +6161,13 @@
             "$ref": "#/components/schemas/MathMentorInput"
           },
           {
-            "$ref": "#/components/schemas/MathQAInput"
+            "$ref": "#/components/schemas/MathConversationInput"
           },
           {
-            "$ref": "#/components/schemas/MathConversationInput"
+            "$ref": "#/components/schemas/MathQAInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {
