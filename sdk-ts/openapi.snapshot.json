@@ -226,7 +226,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____"
               }
             }
           },
@@ -364,7 +364,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobDefinitionRecord-Input"
+                "$ref": "#/components/schemas/JobDefinitionRecord"
               }
             }
           }
@@ -375,7 +375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                  "$ref": "#/components/schemas/JobDefinitionRecord"
                 }
               }
             }
@@ -424,7 +424,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                    "$ref": "#/components/schemas/JobDefinitionRecord"
                   },
                   "title": "Response List Job Definitions Job Definitions Get"
                 }
@@ -468,7 +468,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                  "$ref": "#/components/schemas/JobDefinitionRecord"
                 }
               }
             }
@@ -510,7 +510,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobDefinitionRecord-Output"
+                  "$ref": "#/components/schemas/JobDefinitionRecord"
                 }
               }
             }
@@ -1024,6 +1024,46 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Platform / Workflows"
+        ],
+        "summary": "Push Workflows",
+        "description": "Merge-upsert workflow descriptors into the blob the GET endpoints serve.\n\nThis is the deploy-flow seam for #56: a domain-side `export-workflows`\n(engine context) emits the descriptors as JSON, and the standalone CLI\nPOSTs them here. **Merge**, not replace \u2014 posted job types are upserted\nand existing ones preserved \u2014 so each runtime can push only the job\ntypes it can see (`default`, `crewai`, \u2026) and they accumulate into the\nsingle blob. Idempotent: re-pushing the same descriptors is a no-op.",
+        "operationId": "push_workflows_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowsPushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowsPushResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/workflows/{job_type}": {
@@ -1121,7 +1161,7 @@
           "Platform / Prompts"
         ],
         "summary": "Create Prompt",
-        "description": "Deploy a prompt \u2014 the domain-facing write path, mirroring\n`POST /artifact-types`. Get-or-create / idempotent on `name`: an\nexisting prompt is returned untouched (re-deploys are safe); use\n`PUT /prompts/{name}` to change instructions on an existing one.",
+        "description": "Deploy a prompt \u2014 the domain-facing write path, mirroring\n`POST /artifact-types`. **Upsert by content** (issue #59): a new name is\ncreated, an edited one is stored as a version-bumped copy, and an\nunchanged one is a no-op. The `action` field reports which, so a deploy\ntool can show created/updated/unchanged. Re-deploys stay safe and\nidempotent; identical content never churns the version.",
         "operationId": "create_prompt_prompts_post",
         "requestBody": {
           "required": true,
@@ -1139,7 +1179,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PromptResponse"
+                  "$ref": "#/components/schemas/PromptDeployResponse"
                 }
               }
             }
@@ -1508,6 +1548,21 @@
                         "$ref": "#/components/schemas/NotePageArtifact"
                       },
                       {
+                        "$ref": "#/components/schemas/MentorCardArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BookStructureArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BookIndexArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BookRetrievalArtifact"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MathConversationArtifact"
+                      },
+                      {
                         "$ref": "#/components/schemas/MathQuestionArtifact"
                       },
                       {
@@ -1521,9 +1576,6 @@
                       },
                       {
                         "$ref": "#/components/schemas/FigureArtifact"
-                      },
-                      {
-                        "$ref": "#/components/schemas/MathConversationArtifact"
                       }
                     ],
                     "discriminator": {
@@ -1531,12 +1583,16 @@
                       "mapping": {
                         "daily_note": "#/components/schemas/DailyNoteArtifact",
                         "note_page": "#/components/schemas/NotePageArtifact",
+                        "mentor_card": "#/components/schemas/MentorCardArtifact",
+                        "book_structure": "#/components/schemas/BookStructureArtifact",
+                        "book_index": "#/components/schemas/BookIndexArtifact",
+                        "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
+                        "math_conversation": "#/components/schemas/MathConversationArtifact",
                         "math_question": "#/components/schemas/MathQuestionArtifact",
                         "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                         "user_comment": "#/components/schemas/UserCommentArtifact",
                         "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                        "figure": "#/components/schemas/FigureArtifact",
-                        "math_conversation": "#/components/schemas/MathConversationArtifact"
+                        "figure": "#/components/schemas/FigureArtifact"
                       }
                     }
                   },
@@ -1592,6 +1648,21 @@
                       "$ref": "#/components/schemas/NotePageArtifact"
                     },
                     {
+                      "$ref": "#/components/schemas/MentorCardArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BookStructureArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BookIndexArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BookRetrievalArtifact"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MathConversationArtifact"
+                    },
+                    {
                       "$ref": "#/components/schemas/MathQuestionArtifact"
                     },
                     {
@@ -1605,9 +1676,6 @@
                     },
                     {
                       "$ref": "#/components/schemas/FigureArtifact"
-                    },
-                    {
-                      "$ref": "#/components/schemas/MathConversationArtifact"
                     }
                   ],
                   "discriminator": {
@@ -1615,12 +1683,16 @@
                     "mapping": {
                       "daily_note": "#/components/schemas/DailyNoteArtifact",
                       "note_page": "#/components/schemas/NotePageArtifact",
+                      "mentor_card": "#/components/schemas/MentorCardArtifact",
+                      "book_structure": "#/components/schemas/BookStructureArtifact",
+                      "book_index": "#/components/schemas/BookIndexArtifact",
+                      "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
+                      "math_conversation": "#/components/schemas/MathConversationArtifact",
                       "math_question": "#/components/schemas/MathQuestionArtifact",
                       "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
                       "user_comment": "#/components/schemas/UserCommentArtifact",
                       "latex_answer": "#/components/schemas/LatexAnswerArtifact",
-                      "figure": "#/components/schemas/FigureArtifact",
-                      "math_conversation": "#/components/schemas/MathConversationArtifact"
+                      "figure": "#/components/schemas/FigureArtifact"
                     }
                   },
                   "title": "Response Get Artifact Artifacts  Artifact Id  Get"
@@ -1990,6 +2062,940 @@
           "file"
         ],
         "title": "Body_upload_media_media_post"
+      },
+      "BookChunkRef": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id",
+            "description": "Id of the chunk in the domain vector table."
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Structural node the chunk belongs to."
+          },
+          "token_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Count",
+            "description": "Approximate token length of the chunk."
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model",
+            "description": "Embedding model used (e.g. text-embedding-3-small)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chunk_id"
+        ],
+        "title": "BookChunkRef",
+        "description": "A manifest entry for one embedded chunk \u2014 a nested child of the\n`BookIndexArtifact`.\n\nThe chunk *body* + its vector live in the domain pgvector table\n(`math_book_chunks`, keyed by `book_id` + `chunk_id`); this is only the\ncatalog entry (id, owning node, embedding model) so a reader can enumerate\nwhat was indexed without hitting the table. Never carries the raw vector."
+      },
+      "BookEdge": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source node_id."
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "Target node_id."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "contains",
+              "parent_of",
+              "next",
+              "previous",
+              "proven_by",
+              "references",
+              "referenced_by",
+              "has_equation",
+              "depends_on",
+              "depended_on_by",
+              "related_to"
+            ],
+            "title": "Kind",
+            "description": "Relation kind."
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Edge confidence (retrieval expansion floors on it)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "kind"
+        ],
+        "title": "BookEdge",
+        "description": "One directed relation between two `BookNode`s \u2014 a nested child of the\n`BookStructureArtifact`.\n\n`source`/`target` are `BookNode.node_id`s. `kind` says what the relation is\n(`contains`/`parent_of` for structure; `next`/`previous` reading order;\n`proven_by` proof linkage; `references`/`referenced_by` the resolved\ncitations retrieval expands along; `has_equation` math regions). `confidence`\nis ported from the spike's `Edge.confidence` \u2014 `expand()` (#64) drops edges\nbelow a floor."
+      },
+      "BookIndexArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "book_index",
+            "title": "Artifact Type",
+            "default": "book_index"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Id of the book this index covers."
+          },
+          "chunk_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Chunk Count",
+            "description": "Number of chunks embedded.",
+            "default": 0
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model",
+            "description": "Embedding model used across the chunks."
+          },
+          "vector_table": {
+            "type": "string",
+            "title": "Vector Table",
+            "description": "Domain pgvector table the chunks/vectors were persisted to.",
+            "default": "math_book_chunks"
+          },
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/BookChunkRef"
+            },
+            "type": "array",
+            "title": "Chunks",
+            "description": "Per-chunk manifest entries (no raw vectors)."
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "description": "Artifact shape version (1 = initial scaffold contract).",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "book_id"
+        ],
+        "title": "BookIndexArtifact",
+        "description": "The chunk/index manifest for one indexed book.\n\nMinted by the `book_index` job after chunk+embed (platform\n`EmbeddingsInterpreter`) \u2192 persist into the domain pgvector table. Records\n*what* was indexed (`chunks`, `chunk_count`, `embedding_model`, the vector\ntable name) so a reader knows the book is retrievable and how; the vectors\nthemselves stay in the domain table (\u00a713). Populating this is #63."
+      },
+      "BookIndexInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "book_index",
+            "title": "Job Type",
+            "default": "book_index"
+          },
+          "pdf_ref": {
+            "type": "string",
+            "title": "Pdf Ref",
+            "description": "storage_ref of the uploaded book PDF (POST /media)."
+          },
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Stable id namespacing this book's chunks/nodes/edges."
+          },
+          "page_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional inclusive page window; omit to index the whole book."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pdf_ref",
+          "book_id"
+        ],
+        "title": "BookIndexInput",
+        "description": "Submit input for a `book_index` job.\n\n`pdf_ref` is the uploaded book PDF (a `storage_ref` from the `POST /media`\nresponse). `book_id` namespaces every chunk/node/edge this job produces \u2014\nthe domain pgvector table and the artifacts are all keyed on it, so a\nre-index of the same `book_id` supersedes the prior one. `page_range` is an\noptional slice; omit to index the whole book."
+      },
+      "BookIndexResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "book_index",
+            "title": "Job Type",
+            "default": "book_index"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id",
+            "description": "The indexed book's id."
+          },
+          "node_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Node Count",
+            "description": "Structural skeleton nodes extracted.",
+            "default": 0
+          },
+          "edge_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Edge Count",
+            "description": "Skeleton edges (references/relations).",
+            "default": 0
+          },
+          "chunk_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Chunk Count",
+            "description": "Chunks embedded into the vector table.",
+            "default": 0
+          },
+          "structure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookStructureArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The minted skeleton artifact (by value, hydrated)."
+          },
+          "index": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BookIndexArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The minted chunk/index manifest artifact (hydrated)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BookIndexResult",
+        "description": "Typed result for a `book_index` job \u2014 the minted artifacts, by ref, plus\na compact summary of what got indexed.\n\nThe canonical artifacts (`BookStructureArtifact`, `BookIndexArtifact`) are\nresolved by ref; the scalar counts here are a cheap at-a-glance summary so a\ncaller needn't hydrate the artifacts to know the index ran."
+      },
+      "BookNode": {
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "title": "Node Id",
+            "description": "Stable id within the book."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "book",
+              "chapter",
+              "section",
+              "subsection",
+              "exposition",
+              "definition",
+              "theorem",
+              "proposition",
+              "lemma",
+              "corollary",
+              "proof",
+              "example",
+              "remark",
+              "exercise"
+            ],
+            "title": "Kind",
+            "description": "Structural kind of this node."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "node_id of the containing node (structural tree)."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Citation stub (e.g. 'Theorem 7.7', '\u00a77', '7.1')."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Node title/heading text."
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "description": "Breadcrumb from the book root (chapter \u203a \u00a7section \u203a subsection)."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based source page where the node starts."
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End",
+            "description": "1-based source page where the node ends."
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "Faithful (normalized) body text of the node."
+          },
+          "proves": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proves",
+            "description": "For a proof node: node_id of the theorem-like node it proves."
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Extraction confidence (Track A typography/pattern evidence)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "node_id",
+          "kind"
+        ],
+        "title": "BookNode",
+        "description": "One structural node in a book's skeleton \u2014 a nested child of the\n`BookStructureArtifact` (never an artifact of its own).\n\n`node_id` is stable within a `book_id` (the retrieval job's graph expansion\nand every `BookRetrievalHit.node_id` reference it). `label` is the\nhuman-readable citation stub (e.g. `Theorem 7.7`, `\u00a77`).\n\nFields beyond `node_id`/`kind`/`label`/`title`/`page` are ported from the\nspike's Track-A `Node`\n(`origin/spike/extraction-skeleton:spikes/book-rag/_shared/schema.py`) \u2014 the\ngrounding graph (Track B) + contextualized chunking (Track C) rely on\n`parent_id`, `heading_path`, `proves`, and the page span. All optional with\ndefaults, so this stays additive vs the #60 scaffold shape."
+      },
+      "BookRetrievalArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "book_retrieval",
+            "title": "Artifact Type",
+            "default": "book_retrieval"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Id of the book retrieved over."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The query, echoed back."
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent",
+            "description": "Intent used to steer retrieval, if any."
+          },
+          "reranked": {
+            "type": "boolean",
+            "title": "Reranked",
+            "description": "Whether a Claude rerank pass ran.",
+            "default": false
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedHit"
+            },
+            "type": "array",
+            "title": "Hits",
+            "description": "Ranked, source-traceable hits (best first)."
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "description": "Artifact shape version (1 = initial scaffold contract).",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "book_id",
+          "query"
+        ],
+        "title": "BookRetrievalArtifact",
+        "description": "The result of one `book_retrieve` job \u2014 the ranked, source-traceable hits.\n\nMinted by the retrieve job so a run's answer is ref-resolvable like every\nother job's output (`GET /artifacts/{id}`). Small by design: the hits (with\nnode_id + label + page + heading_path for traceability), the echoed query,\nand the retrieval config used."
+      },
+      "BookRetrievalHit": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id",
+            "description": "Id of the retrieved chunk."
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Structural node the chunk belongs to."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The chunk body."
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Final (post-rerank) rank score."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Citation label (e.g. 'Theorem 7.7')."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based source page, if known."
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "description": "Breadcrumb from the book root."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Pre-rendered human-readable citation (heading path + label + page)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "text",
+          "score"
+        ],
+        "title": "BookRetrievalHit",
+        "description": "One ranked, source-traceable retrieval hit.\n\n`chunk_id` / `node_id` tie the hit back to the indexed corpus (source\ntraceability was the spike's headline metric); `text` is the chunk body;\n`score` is the final (post-rerank) rank score. The traceability fields\n(`label` / `page` / `heading_path`) are the structured citation the design\nrequires; `source` is the same, pre-rendered as one human-readable string the\nUI can show directly."
+      },
+      "BookRetrievalResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "book_retrieve",
+            "title": "Job Type",
+            "default": "book_retrieve"
+          },
+          "book_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Id",
+            "description": "The book retrieved over."
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query",
+            "description": "The query, echoed back."
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/BookRetrievalHit"
+            },
+            "type": "array",
+            "title": "Hits",
+            "description": "Ranked, source-traceable hits (best first)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "BookRetrievalResult",
+        "description": "Typed result for a `book_retrieve` job \u2014 the ranked hits (+ echoed query)."
+      },
+      "BookRetrieveInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "book_retrieve",
+            "title": "Job Type",
+            "default": "book_retrieve"
+          },
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "The indexed book to retrieve over."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Natural-language retrieval query."
+          },
+          "k": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "K",
+            "description": "Number of ranked hits to return.",
+            "default": 8
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "definition",
+                  "theorem",
+                  "proof",
+                  "example",
+                  "general"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent",
+            "description": "Optional intent steering the hybrid mix / graph expansion."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "book_id",
+          "query"
+        ],
+        "title": "BookRetrieveInput",
+        "description": "Submit input for a `book_retrieve` job.\n\nRetrieves over the book previously indexed under `book_id`. `query` is the\nnatural-language question; `k` is the number of ranked hits to return.\n`intent` optionally steers the hybrid mix / graph expansion (spike Track C)."
+      },
+      "BookStructureArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "book_structure",
+            "title": "Artifact Type",
+            "default": "book_structure"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "Id of the book this skeleton belongs to."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Book title, if extracted."
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/BookNode"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "Structural skeleton nodes."
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/BookEdge"
+            },
+            "type": "array",
+            "title": "Edges",
+            "description": "Skeleton edges (structure + grounding relations)."
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "description": "Artifact shape version (1 = initial scaffold contract).",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "book_id"
+        ],
+        "title": "BookStructureArtifact",
+        "description": "The structural skeleton of one indexed book \u2014 nodes + edges.\n\nMinted by the `book_index` job (extraction \u2190 spike Track A, graph \u2190 Track B).\n`book_id` namespaces it; `nodes`/`edges` carry the skeleton. Populating them\nis #63; this scaffold fixes the shape so retrieval (#64) can rely on it."
       },
       "CodePackageRecord": {
         "properties": {
@@ -2552,6 +3558,21 @@
                   "$ref": "#/components/schemas/NotePageArtifact"
                 },
                 {
+                  "$ref": "#/components/schemas/MentorCardArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/BookStructureArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/BookIndexArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/BookRetrievalArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/MathConversationArtifact"
+                },
+                {
                   "$ref": "#/components/schemas/MathQuestionArtifact"
                 },
                 {
@@ -2565,20 +3586,21 @@
                 },
                 {
                   "$ref": "#/components/schemas/FigureArtifact"
-                },
-                {
-                  "$ref": "#/components/schemas/MathConversationArtifact"
                 }
               ],
               "discriminator": {
                 "propertyName": "artifact_type",
                 "mapping": {
                   "ai_answer": "#/components/schemas/GeneratedAnswerArtifact",
+                  "book_index": "#/components/schemas/BookIndexArtifact",
+                  "book_retrieval": "#/components/schemas/BookRetrievalArtifact",
+                  "book_structure": "#/components/schemas/BookStructureArtifact",
                   "daily_note": "#/components/schemas/DailyNoteArtifact",
                   "figure": "#/components/schemas/FigureArtifact",
                   "latex_answer": "#/components/schemas/LatexAnswerArtifact",
                   "math_conversation": "#/components/schemas/MathConversationArtifact",
                   "math_question": "#/components/schemas/MathQuestionArtifact",
+                  "mentor_card": "#/components/schemas/MentorCardArtifact",
                   "note_page": "#/components/schemas/NotePageArtifact",
                   "user_comment": "#/components/schemas/UserCommentArtifact"
                 }
@@ -2598,32 +3620,6 @@
           "total"
         ],
         "title": "FullArtifactListResponse"
-      },
-      "GateSpec-Input": {
-        "properties": {
-          "node_name": {
-            "type": "string",
-            "title": "Node Name"
-          },
-          "review_type_name": {
-            "type": "string",
-            "title": "Review Type Name"
-          },
-          "review_schema": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Review Schema"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "node_name",
-          "review_type_name",
-          "review_schema"
-        ],
-        "title": "GateSpec",
-        "description": "A single human-review gate carried by a JobDefinition.\n\n`review_schema` is the pydantic `model_json_schema()` of the review\nbody \u2014 the API uses it to validate `POST /jobs/{id}/review` once the\ncatalog drives routing. For now it's recorded for completeness."
       },
       "GeneratedAnswerArtifact": {
         "properties": {
@@ -2735,6 +3731,113 @@
         ],
         "title": "GeneratedAnswerArtifact"
       },
+      "GroundedAnchor": {
+        "properties": {
+          "book_id": {
+            "type": "string",
+            "title": "Book Id",
+            "description": "The book this anchor points into (namespacing)."
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Structural node id \u2014 copied from a hit ONLY on a coordinate match."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Citation label (e.g. 'Problem 2.16') \u2014 copied from a hit ONLY on a coordinate match."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based source page, if the grounding hit carried one."
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "description": "Breadcrumb from the book root (grounding hit's section)."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Pre-rendered human-readable citation from the grounding hit."
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score",
+            "description": "Score of the grounding hit, if any."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The query used for retrieval (coordinate if given, else topic)."
+          },
+          "trust_level": {
+            "type": "string",
+            "enum": [
+              "grounded",
+              "section-grounded",
+              "ungrounded"
+            ],
+            "title": "Trust Level",
+            "description": "grounded | section-grounded | ungrounded \u2014 how much to trust this anchor."
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched",
+            "description": "True iff trust_level != 'ungrounded' (something usable was found)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "book_id",
+          "query",
+          "trust_level",
+          "matched"
+        ],
+        "title": "GroundedAnchor",
+        "description": "A source-traceable pointer into a book, with an honest trust level.\n\nField set is the authoritative #68 contract \u2014 do not add/rename fields.\n\nInvariant enforced by `resolve_anchor`:\n``matched == (trust_level != \"ungrounded\")``. `label`/`node_id` are only ever\npopulated by copying a returned hit \u2014 never synthesized."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2748,81 +3851,7 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "JobDefinitionRecord-Input": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version",
-            "default": "1.0.0"
-          },
-          "runtime_selector": {
-            "type": "string",
-            "title": "Runtime Selector"
-          },
-          "code_entrypoint": {
-            "type": "string",
-            "title": "Code Entrypoint"
-          },
-          "control_entrypoint": {
-            "type": "string",
-            "title": "Control Entrypoint",
-            "default": ""
-          },
-          "label": {
-            "type": "string",
-            "title": "Label",
-            "default": ""
-          },
-          "input_schema": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Input Schema"
-          },
-          "result_schema": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Result Schema"
-          },
-          "output_artifact_type_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Output Artifact Type Refs"
-          },
-          "gates": {
-            "items": {
-              "$ref": "#/components/schemas/GateSpec-Input"
-            },
-            "type": "array",
-            "title": "Gates"
-          },
-          "deployed_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Deployed At"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "runtime_selector",
-          "code_entrypoint"
-        ],
-        "title": "JobDefinitionRecord",
-        "description": "Plain-data record of a job's control plane.\n\nKeyed `(name, version)`. The id is the derived `\"{name}@{version}\"`\nstring; downstream callers reference it by `id` (versioned) or by\n`name` (latest) depending on the path."
-      },
-      "JobDefinitionRecord-Output": {
+      "JobDefinitionRecord": {
         "properties": {
           "id": {
             "type": "string",
@@ -2910,16 +3939,28 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/BookIndexResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BookRetrievalResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
                     "$ref": "#/components/schemas/MathConversationResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
                   "propertyName": "job_type",
                   "mapping": {
+                    "book_index": "#/components/schemas/BookIndexResult",
+                    "book_retrieve": "#/components/schemas/BookRetrievalResult",
                     "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_mentor": "#/components/schemas/MathMentorResult",
                     "math_notes": "#/components/schemas/MathNotesResult",
                     "math_qa": "#/components/schemas/MathQAResult"
                   }
@@ -3020,16 +4061,28 @@
                     "$ref": "#/components/schemas/MathNotesResult"
                   },
                   {
-                    "$ref": "#/components/schemas/MathQAResult"
+                    "$ref": "#/components/schemas/BookIndexResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BookRetrievalResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathMentorResult"
                   },
                   {
                     "$ref": "#/components/schemas/MathConversationResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MathQAResult"
                   }
                 ],
                 "discriminator": {
                   "propertyName": "job_type",
                   "mapping": {
+                    "book_index": "#/components/schemas/BookIndexResult",
+                    "book_retrieve": "#/components/schemas/BookRetrievalResult",
                     "math_conversation": "#/components/schemas/MathConversationResult",
+                    "math_mentor": "#/components/schemas/MathMentorResult",
                     "math_notes": "#/components/schemas/MathNotesResult",
                     "math_qa": "#/components/schemas/MathQAResult"
                   }
@@ -3417,6 +4470,105 @@
         "title": "MathConversationResult",
         "description": "Typed result \u2014 a variant of the platform result union.\n\nThe single `conversation` artifact is resolved from `artifact_refs`\nby the result endpoint's hydrator."
       },
+      "MathMentorInput": {
+        "properties": {
+          "job_type": {
+            "type": "string",
+            "const": "math_mentor",
+            "title": "Job Type",
+            "default": "math_mentor"
+          },
+          "note_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Id",
+            "description": "Trailing-edge DailyNoteArtifact id to anchor the window (the just-captured note)."
+          },
+          "note_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Date",
+            "description": "Reference study day the trailing window ends at; defaults to today."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "The learner whose daily notes to read (scopes the window)."
+          },
+          "window_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Days",
+            "description": "How many trailing days of notes to read; None = execution default."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathMentorInput",
+        "description": "Submit input for a `math_mentor` job \u2014 locate the trailing daily-note window.\n\nThe mentor loop reads a learner's recent `daily_note` artifacts ending at a\nreference day. `created_by` scopes retrieval to one learner; `note_id` /\n`note_date` pin the window's trailing edge (the just-captured note, or the\nday to look back from); `window_days` bounds how far back to read. All are\noptional so the job can be triggered either by a specific note (`note_id`) or\nfor a learner+date, with the execution node resolving sensible defaults."
+      },
+      "MathMentorResult": {
+        "properties": {
+          "artifact_refs": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "job_type": {
+            "type": "string",
+            "const": "math_mentor",
+            "title": "Job Type",
+            "default": "math_mentor"
+          },
+          "card_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Ref",
+            "description": "Id of the minted MentorCardArtifact, or None if the mentor stayed silent."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MathMentorResult",
+        "description": "Typed result for a `math_mentor` job \u2014 the minted card, by ref (if any).\n\nThe mentor brain is restraint-first: most runs mint nothing. `card_ref` is\nthe id of the `MentorCardArtifact` that fired, or `None` when the mentor\nstayed silent for this window."
+      },
       "MathNotesInput": {
         "properties": {
           "job_type": {
@@ -3770,6 +4922,173 @@
         ],
         "title": "MediaRef",
         "description": "Handle for an uploaded blob \u2014 what `POST /media` returns and what\na domain stamps onto a `storage_ref`-backed `BaseArtifact`."
+      },
+      "MentorCardArtifact": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "const": "mentor_card",
+            "title": "Artifact Type",
+            "default": "mentor_card"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "byte_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Byte Size"
+          },
+          "storage_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Url"
+          },
+          "flavor": {
+            "type": "string",
+            "enum": [
+              "abandonment",
+              "unverified_proof"
+            ],
+            "title": "Flavor",
+            "description": "Repair flavor: abandonment | unverified_proof."
+          },
+          "catch": {
+            "type": "string",
+            "title": "Catch",
+            "description": "The learner's verbatim quote (== decision.quote)."
+          },
+          "why_it_matters": {
+            "type": "string",
+            "title": "Why It Matters",
+            "description": "One line: why this is the crux, not bookkeeping."
+          },
+          "move": {
+            "type": "string",
+            "title": "Move",
+            "description": "Exactly one book-anchored directive (contains the citation), one sitting, never the answer."
+          },
+          "close": {
+            "type": "string",
+            "title": "Close",
+            "description": "A concrete WHEN ('I'll ask you about it on Sunday')."
+          },
+          "on_his_side": {
+            "type": "string",
+            "title": "On His Side",
+            "description": "One SPECIFIC REAL win pulled from the same note (not generic praise)."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "Trust-aware citation (label + book + page) rendered only from the anchor."
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/GroundedAnchor",
+            "description": "The GroundedAnchor the card is rooted in (book coordinate + provenance)."
+          },
+          "trust_level": {
+            "type": "string",
+            "enum": [
+              "grounded",
+              "section-grounded",
+              "ungrounded"
+            ],
+            "title": "Trust Level",
+            "description": "The anchor's trust level \u2014 grounded | section-grounded."
+          },
+          "source_note_date": {
+            "type": "string",
+            "title": "Source Note Date",
+            "description": "Date (YYYY-MM-DD) of the note this card repairs."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The rendered ~4-line card (readable in ~10s)."
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "The learner this card is for."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "flavor",
+          "catch",
+          "why_it_matters",
+          "move",
+          "close",
+          "on_his_side",
+          "citation",
+          "anchor",
+          "trust_level",
+          "source_note_date",
+          "text"
+        ],
+        "title": "MentorCardArtifact",
+        "description": "One minted **mentor repair card** \u2014 the persisted form of the card the\nmentor brain composes (``mathai.math_notes.mentor.repair_card.compose_repair_card``).\n\nThe mentor loop reads a trailing window of `DailyNoteArtifact`s, and when a\nrepair candidate fires it composes exactly one card and mints it as this\nartifact. The field set **mirrors `compose_repair_card`'s output verbatim** \u2014\nthe five anatomy parts (``catch`` / ``why_it_matters`` / ``move`` / ``close``\n/ ``on_his_side``), the trust-aware ``citation`` rendered only from the\nanchor, the ``flavor``, the assembled ~4-line ``text`` \u2014 and additionally\ncarries the full `GroundedAnchor` (source-traceable book coordinate) and its\ndenormalized ``trust_level`` so a reader can re-render the citation or link\nback to the book without re-retrieval.\n\nTwo flavors of one shape: ``abandonment`` (a dropped crux) and\n``unverified_proof`` (a proof he never checked). A repair card is only ever\nminted from a ``grounded`` or ``section-grounded`` anchor \u2014 never\n``ungrounded`` (that is a #70 contract violation, refused before compose), so\n``trust_level`` here is always one of the two grounded levels."
       },
       "NoteFlair": {
         "type": "string",
@@ -4165,6 +5484,30 @@
         "title": "NoteSynthesis",
         "description": "The note-level synthesis \u2014 one coherent, always-correct view of the math.\n\nProduced by the synthesis pass over the transcript + all page extractions.\n`markdown` is prose with embedded KaTeX-validated LaTeX (document mode);\n`concepts` and `summary` are note-level. Never reproduces an error the\nlearner made \u2014 it reconstructs the intended math silently.\n\nEnriched (epic #14, S5) so a substantial session is more than one flat blob:\n`sections` carries per-topic structure, `depth_tier` marks how deep the\nsynthesis rendered, and `magnitude` embeds the fused density signal the\ndepth was scaled to. All three are additive (optional / default-empty) \u2014 the\nflat `markdown` stays the canonical field for short notes and back-compat,\nand rows written before the enrichment hydrate unchanged."
       },
+      "PageRange": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Start",
+            "description": "First page to index (1-based, inclusive)."
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "End",
+            "description": "Last page to index (1-based, inclusive)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "PageRange",
+        "description": "An inclusive 1-based page window into the source PDF.\n\nOptional on `BookIndexInput`: omit to index the whole book. Lets a caller\nindex a slice (e.g. the spike's representative `Ch1 \u00a71\u2013\u00a73 + Ch7 \u00a77`) without\nparsing the entire PDF."
+      },
       "ParamSpec": {
         "properties": {
           "name": {
@@ -4231,6 +5574,67 @@
         ],
         "title": "PromptCreateRequest",
         "description": "Body for `POST /prompts` \u2014 a domain deploying one of its prompts.\nGet-or-create / idempotent on `name` (mirrors `POST /artifact-types`):\nan existing prompt is left untouched; use `PUT` to change instructions."
+      },
+      "PromptDeployResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "unchanged"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "description",
+          "instructions",
+          "version",
+          "created_at",
+          "updated_at",
+          "action"
+        ],
+        "title": "PromptDeployResponse",
+        "description": "`POST /prompts` result. `action` tells a deploy tool whether the\nrequest created a new prompt, version-bumped an edited one, or was a\nno-op \u2014 so `aip deploy` can report created/updated/unchanged instead of\na blanket \"\u2713\" that hides silently-dropped edits (issue #59)."
       },
       "PromptExecutionListResponse": {
         "properties": {
@@ -4450,23 +5854,113 @@
         "type": "object",
         "title": "PromptUpdateRequest"
       },
-      "RootModel_Annotated_Union_MathNotesInput__MathQAInput__MathConversationInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
+      "RetrievedHit": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id",
+            "description": "Id of the retrieved chunk."
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Structural node the chunk belongs to."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Citation label (e.g. 'Theorem 7.7')."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based source page, if known."
+          },
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "description": "Breadcrumb from the book root."
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "The chunk body."
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Final (post-rerank) rank score."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "score"
+        ],
+        "title": "RetrievedHit",
+        "description": "One ranked, source-traceable hit stored on a `BookRetrievalArtifact`.\n\nMirrors `models.BookRetrievalHit` (the job-result shape) but defined here so\nthe artifact layer carries no import from `models` (models \u2192 artifacts is the\none-directional dependency). `node_id`/`label`/`page`/`heading_path` are the\nsource-traceability fields the design requires."
+      },
+      "RootModel_Annotated_Union_MathNotesInput__BookIndexInput__BookRetrieveInput__MathMentorInput__MathConversationInput__MathQAInput___FieldInfo_annotation_NoneType__required_True__discriminator__job_type____": {
         "oneOf": [
           {
             "$ref": "#/components/schemas/MathNotesInput"
           },
           {
-            "$ref": "#/components/schemas/MathQAInput"
+            "$ref": "#/components/schemas/BookIndexInput"
+          },
+          {
+            "$ref": "#/components/schemas/BookRetrieveInput"
+          },
+          {
+            "$ref": "#/components/schemas/MathMentorInput"
           },
           {
             "$ref": "#/components/schemas/MathConversationInput"
+          },
+          {
+            "$ref": "#/components/schemas/MathQAInput"
           }
         ],
-        "title": "RootModel[Annotated[Union[MathNotesInput, MathQAInput, MathConversationInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
+        "title": "RootModel[Annotated[Union[MathNotesInput, BookIndexInput, BookRetrieveInput, MathMentorInput, MathConversationInput, MathQAInput], FieldInfo(annotation=NoneType, required=True, discriminator='job_type')]]",
         "discriminator": {
           "propertyName": "job_type",
           "mapping": {
+            "book_index": "#/components/schemas/BookIndexInput",
+            "book_retrieve": "#/components/schemas/BookRetrieveInput",
             "math_conversation": "#/components/schemas/MathConversationInput",
+            "math_mentor": "#/components/schemas/MathMentorInput",
             "math_notes": "#/components/schemas/MathNotesInput",
             "math_qa": "#/components/schemas/MathQAInput"
           }
@@ -4837,6 +6331,39 @@
           "edges"
         ],
         "title": "WorkflowSpecResponse"
+      },
+      "WorkflowsPushRequest": {
+        "properties": {
+          "workflows": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/WorkflowSpecResponse"
+            },
+            "type": "object",
+            "title": "Workflows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workflows"
+        ],
+        "title": "WorkflowsPushRequest",
+        "description": "A map of `{job_type: descriptor}` to merge into the workflows blob."
+      },
+      "WorkflowsPushResponse": {
+        "properties": {
+          "job_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Job Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_types"
+        ],
+        "title": "WorkflowsPushResponse"
       },
       "ai_platform__jobs__workflow_schemas__GateSpec": {
         "properties": {
