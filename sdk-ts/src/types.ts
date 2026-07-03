@@ -8,8 +8,8 @@ import type { components, operations } from "./schema.js";
 
 // FastAPI emits separate input/output variants for models with
 // computed/default fields. List endpoints return Output records.
-export type JobDefinitionRecord = components["schemas"]["JobDefinitionRecord-Output"];
-export type JobDefinitionRecordInput = components["schemas"]["JobDefinitionRecord-Input"];
+export type JobDefinitionRecord = components["schemas"]["JobDefinitionRecord"];
+export type JobDefinitionRecordInput = components["schemas"]["JobDefinitionRecord"];
 export type ArtifactTypeRecord = components["schemas"]["ArtifactTypeRecord"];
 export type CodePackageRecord = components["schemas"]["CodePackageRecord"];
 
